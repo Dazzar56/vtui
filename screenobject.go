@@ -2,8 +2,8 @@ package vtui
 
 import "github.com/unxed/vtinput"
 
-// ScreenObject — это базовый класс для всех видимых элементов интерфейса,
-// аналог ScreenObject из scrobj.hpp.
+// ScreenObject is the base class for all visible UI elements,
+// analog of ScreenObject from scrobj.hpp.
 type ScreenObject struct {
 	X1, Y1, X2, Y2 int
 	owner          *ScreenObject
@@ -14,34 +14,34 @@ type ScreenObject struct {
 	lockCount      int
 }
 
-// SetPosition устанавливает координаты объекта.
-// Важно: это не вызывает перерисовку.
+// SetPosition sets the object's coordinates.
+// Important: this does not trigger a redraw.
 func (so *ScreenObject) SetPosition(x1, y1, x2, y2 int) {
 	if so.X1 == x1 && so.Y1 == y1 && so.X2 == x2 && so.Y2 == y2 {
 		return
 	}
-	// При перемещении текущий фон и статус видимости становятся невалидными
+	// Background and visibility status become invalid on move
 	so.visible = false
 	so.saveScr = nil
 	so.X1, so.Y1, so.X2, so.Y2 = x1, y1, x2, y2
 }
 
-// GetPosition возвращает текущие координаты объекта.
+// GetPosition returns current object coordinates.
 func (so *ScreenObject) GetPosition() (int, int, int, int) {
 	return so.X1, so.Y1, so.X2, so.Y2
 }
 
-// Show делает объект видимым.
+// Show makes the object visible.
 func (so *ScreenObject) Show(scr *ScreenBuf) {
 	if so.IsLocked() {
 		return
 	}
-	// В тестовом режиме отключаем SaveScreen, чтобы не конфликтовать с FillRect всего экрана
+	// In test mode, disable SaveScreen to avoid conflict with full-screen FillRect
 	// so.saveScr = NewSaveScreen(scr, so.X1, so.Y1, so.X2, so.Y2)
 	so.visible = true
 }
 
-// Hide скрывает объект и восстанавливает сохраненную под ним область экрана.
+// Hide hides the object and restores the screen area saved beneath it.
 func (so *ScreenObject) Hide(scr *ScreenBuf) {
 	if !so.visible {
 		return
@@ -53,43 +53,44 @@ func (so *ScreenObject) Hide(scr *ScreenBuf) {
 	so.visible = false
 }
 
-// IsVisible возвращает true, если объект видим.
+// IsVisible returns true if the object is visible.
 func (so *ScreenObject) IsVisible() bool {
 	return so.visible
 }
-// SetFocus устанавливает или снимает фокус с объекта.
+
+// SetFocus sets or removes focus from the object.
 func (so *ScreenObject) SetFocus(f bool) {
 	so.focused = f
 }
 
-// IsFocused возвращает состояние фокуса объекта.
+// IsFocused returns the focus state of the object.
 func (so *ScreenObject) IsFocused() bool {
 	return so.focused
 }
 
-// SetCanFocus устанавливает, может ли объект принимать фокус.
+// SetCanFocus sets whether the object can accept focus.
 func (so *ScreenObject) SetCanFocus(c bool) {
 	so.canFocus = c
 }
 
-// CanFocus возвращает true, если объект может быть сфокусирован.
+// CanFocus returns true if the object can be focused.
 func (so *ScreenObject) CanFocus() bool {
 	return so.canFocus
 }
 
-// Lock увеличивает счетчик блокировок. Заблокированный объект не перерисовывается.
+// Lock increases the lock counter. A locked object is not redrawn.
 func (so *ScreenObject) Lock() {
 	so.lockCount++
 }
 
-// Unlock уменьшает счетчик блокировок.
+// Unlock decreases the lock counter.
 func (so *ScreenObject) Unlock() {
 	if so.lockCount > 0 {
 		so.lockCount--
 	}
 }
 
-// IsLocked возвращает true, если объект или его владелец заблокирован.
+// IsLocked returns true if the object or its owner is locked.
 func (so *ScreenObject) IsLocked() bool {
 	if so.lockCount > 0 {
 		return true
@@ -100,17 +101,17 @@ func (so *ScreenObject) IsLocked() bool {
 	return false
 }
 
-// ProcessKey (заглушка) будет переопределяться в дочерних классах.
+// ProcessKey (stub) will be overridden in child classes.
 func (so *ScreenObject) ProcessKey(key *vtinput.InputEvent) bool {
 	return false
 }
 
-// ProcessMouse — пустая реализация по умолчанию.
+// ProcessMouse is a default empty implementation.
 func (so *ScreenObject) ProcessMouse(mouse *vtinput.InputEvent) bool {
 	return false
 }
 
-// ResizeConsole (заглушка) будет переопределяться для реакции на изменение размера.
+// ResizeConsole (stub) will be overridden to react to resizing.
 func (so *ScreenObject) ResizeConsole() {
-	// Пустая реализация по умолчанию.
+	// Default empty implementation.
 }

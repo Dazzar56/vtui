@@ -13,7 +13,7 @@ import (
 )
 
 func main() {
-	// Включаем "продвинутый" режим терминала
+	// Enable advanced terminal mode
 	restore, err := vtinput.Enable()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error enabling raw mode: %v\n", err)
@@ -21,25 +21,25 @@ func main() {
 	}
 	defer restore()
 
-	// Скрываем курсор на время работы
+	// Hide cursor during execution
 	fmt.Print("\x1b[?25l")
 	defer fmt.Print("\x1b[?25h")
 
-	// Получаем начальные размеры терминала
+	// Get initial terminal size
 	width, height, _ := term.GetSize(int(os.Stdin.Fd()))
 
-	// Создаем наши главные объекты
+	// Create main objects
 	scr := vtui.NewScreenBuf()
 	scr.AllocBuf(width, height)
 
-	// Вычисляем координаты для центрирования на старте
+	// Calculate start centering coordinates
 	fWidth, fHeight := 40, 14
 	x1 := (width - fWidth) / 2
 	y1 := (height - fHeight) / 2
-	// Создаем диалог
+	// Create dialog
 	dlg := vtui.NewDialog(x1, y1, x1+fWidth-1, y1+fHeight-1, " Action Dialog ")
 
-	// Создаем меню
+	// Create menu
 	menu := vtui.NewVMenu(" Select Action ")
 	menu.AddItem("Copy File")
 	menu.AddItem("Move File")
@@ -50,25 +50,25 @@ func main() {
 	menu.AddItem("Exit")
 	menu.SetPosition(x1+5, y1+2, x1+30, y1+8)
 
-	// Создаем текст, поле ввода и кнопки
+	// Create text, edit field and buttons
 	label := vtui.NewText(x1+5, y1+1, "Enter task name:", vtui.SetRGBFore(0, 0xFFFFFF))
 	edit := vtui.NewEdit(x1+5, y1+2, 20, "f4 project")
 
-	// Опускаем меню ниже, чтобы не пересекалось с заголовком
+	// Move menu down so it doesn't overlap with the title
 	menu.SetPosition(x1+5, y1+5, x1+30, y1+10)
 
-	// Опускаем кнопки к нижней границе нового высокого диалога
+	// Move buttons to the bottom of the new high dialog
 	btnOk := vtui.NewButton(x1+5, y1+12, "Ok")
 	btnCancel := vtui.NewButton(x1+15, y1+12, "Cancel")
 
-	// Собираем всё в диалог
+	// Assemble everything into the dialog
 	dlg.AddItem(label)
 	dlg.AddItem(edit)
 	dlg.AddItem(menu)
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnCancel)
 
-	// Настраиваем канал для получения событий от vtinput
+	// Configure channel for receiving vtinput events
 	reader := vtinput.NewReader(os.Stdin)
 	eventChan := make(chan *vtinput.InputEvent, 1)
 	go func() {
@@ -85,32 +85,32 @@ func main() {
 		}
 	}()
 
-	// Настраиваем канал для отслеживания изменения размера окна
+	// Configure channel for tracking window resizing
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGWINCH)
 
-	// --- Главный цикл приложения ---
+	// --- Main application loop ---
 	for {
-		// 1. Отрисовка
+		// 1. Rendering
 		scr.FillRect(0, 0, width-1, height-1, ' ', vtui.SetRGBBack(0, 0x0000A0))
 		dlg.Show(scr)
 
-		// Статусбар
+		// Status bar
 		status := fmt.Sprintf(" Size: %dx%d | Tab: Switch Focus | Arrows/ESC ", width, height)
 		scr.Write(0, height-1, strToCharInfo(status, vtui.SetRGBBoth(0, 0, 0x007BA7)))
 		scr.Flush()
 
-		// 2. Ожидание события
+		// 2. Event waiting
 		select {
 		case e, ok := <-eventChan:
 			if !ok { return }
 
-			// Отдаем событие диалогу. Он сам решит, что с ним делать.
+			// Pass the event to the dialog. It will decide what to do with it.
 			if dlg.ProcessKey(e) {
 				continue
 			}
 
-			// Глобальные клавиши (Esc / Ресайз)
+			// Global keys (Esc / Resize)
 			if handleKeyEvent(e, dlg) {
 				return
 			}
@@ -118,7 +118,7 @@ func main() {
 		case <-sigChan:
 			width, height, _ = term.GetSize(int(os.Stdin.Fd()))
 			scr.AllocBuf(width, height)
-			// Перецентрируем диалог с учетом новой высоты
+			// Re-center dialog considering the new height
 			dlgWidth, dlgHeight := 40, 14
 			newX1 := (width - dlgWidth) / 2
 			newY1 := (height - dlgHeight) / 2
@@ -127,8 +127,7 @@ func main() {
 	}
 }
 
-
-// handleKeyEvent обрабатывает события клавиатуры. Возвращает true для выхода.
+// handleKeyEvent handles keyboard events. Returns true for exit.
 func handleKeyEvent(e *vtinput.InputEvent, dlg *vtui.Dialog) bool {
 	if e.Type != vtinput.KeyEventType || !e.KeyDown {
 		return false
@@ -161,7 +160,7 @@ func handleKeyEvent(e *vtinput.InputEvent, dlg *vtui.Dialog) bool {
 	return false
 }
 
-// Вспомогательная функция для быстрой конвертации строки в []CharInfo
+// Helper function for quick string conversion to []CharInfo
 func strToCharInfo(str string, attributes uint64) []vtui.CharInfo {
 	runes := []rune(str)
 	info := make([]vtui.CharInfo, len(runes))

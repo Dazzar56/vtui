@@ -1,6 +1,6 @@
 package vtui
 
-// Text представляет собой простую статическую текстовую надпись.
+// Text represents a simple static text label.
 type Text struct {
 	ScreenObject
 	content string

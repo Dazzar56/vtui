@@ -1,14 +1,14 @@
 package vtui
 
-// SaveScreen хранит копию прямоугольной области из ScreenBuf.
-// Аналог SaveScreen из savescr.cpp.
+// SaveScreen stores a copy of a rectangular area from ScreenBuf.
+// Analog of SaveScreen from savescr.cpp.
 type SaveScreen struct {
 	x1, y1, x2, y2 int
 	width          int
 	data           []CharInfo
 }
 
-// NewSaveScreen создает новый SaveScreen, копируя указанную область из ScreenBuf.
+// NewSaveScreen creates a new SaveScreen, copying the specified area from ScreenBuf.
 func NewSaveScreen(scr *ScreenBuf, x1, y1, x2, y2 int) *SaveScreen {
 	scr.mu.Lock()
 	defer scr.mu.Unlock()
@@ -40,7 +40,7 @@ func NewSaveScreen(scr *ScreenBuf, x1, y1, x2, y2 int) *SaveScreen {
 	return ss
 }
 
-// Restore восстанавливает сохраненную область обратно в ScreenBuf.
+// Restore restores the saved area back to ScreenBuf.
 func (ss *SaveScreen) Restore(scr *ScreenBuf) {
 	if ss == nil || ss.data == nil {
 		return
@@ -52,7 +52,7 @@ func (ss *SaveScreen) Restore(scr *ScreenBuf) {
 	height := ss.y2 - ss.y1 + 1
 
 	for y := 0; y < height; y++ {
-		// Проверяем, что координаты все еще в пределах буфера, на случай ресайза.
+		// Verify that coordinates are still within buffer bounds, in case of a resize.
 		if ss.y1+y >= scr.height || ss.x1 >= scr.width {
 			continue
 		}
@@ -60,7 +60,7 @@ func (ss *SaveScreen) Restore(scr *ScreenBuf) {
 		dstOffset := (ss.y1 + y) * scr.width + ss.x1
 		srcOffset := y * ss.width
 
-		// Определяем, сколько реально можно скопировать
+		// Determine how much can actually be copied
 		copyLen := ss.width
 		if ss.x1+copyLen > scr.width {
 			copyLen = scr.width - ss.x1

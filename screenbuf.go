@@ -7,12 +7,12 @@ import (
 	"sync"
 )
 
-// ScreenBuf является полным аналогом far2l/scrbuf.cpp.
-// Он реализует двойную буферизацию для минимизации операций записи в терминал.
+// ScreenBuf is a complete analog of far2l/scrbuf.cpp.
+// It implements double buffering to minimize terminal write operations.
 type ScreenBuf struct {
 	mu            sync.Mutex
-	buf           []CharInfo // 'buf' - целевое состояние экрана, которое формирует логика UI.
-	shadow        []CharInfo // 'shadow' - состояние, которое было последний раз отрисовано в терминале.
+	buf           []CharInfo // 'buf' is the target screen state formed by UI logic.
+	shadow        []CharInfo // 'shadow' is the state last rendered in the terminal.
 	width, height int
 
 	cursorX, cursorY int
@@ -20,17 +20,17 @@ type ScreenBuf struct {
 	cursorSize       uint32
 
 	lockCount int
-	dirty     bool // Флаг, указывающий на необходимость полной перезаписи при следующем Flush.
+	dirty     bool // Flag indicating that a full rewrite is required during the next Flush.
 }
 
-// NewScreenBuf создает новый экземпляр ScreenBuf.
+// NewScreenBuf creates a new ScreenBuf instance.
 func NewScreenBuf() *ScreenBuf {
 	return &ScreenBuf{
-		dirty: true, // Изначально буфер "грязный"
+		dirty: true, // Initially the buffer is "dirty"
 	}
 }
 
-// AllocBuf выделяет или перераспределяет память для буферов экрана.
+// AllocBuf allocates or reallocates memory for the screen buffers.
 func (s *ScreenBuf) AllocBuf(width, height int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -62,10 +62,10 @@ func (s *ScreenBuf) AllocBuf(width, height int) {
 	s.shadow = newShadow
 	s.width = width
 	s.height = height
-	s.dirty = true // После изменения размера нужна полная перерисовка
+	s.dirty = true // After resizing, a full redraw is needed
 }
 
-// Write записывает срез CharInfo в виртуальный буфер по указанным координатам.
+// Write writes a slice of CharInfo into the virtual buffer at specified coordinates.
 func (s *ScreenBuf) Write(x, y int, text []CharInfo) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -74,7 +74,7 @@ func (s *ScreenBuf) Write(x, y int, text []CharInfo) {
 		return
 	}
 
-	// Отсечение за левой границей
+	// Clipping behind the left boundary
 	if x < 0 {
 		if -x >= len(text) {
 			return
@@ -83,7 +83,7 @@ func (s *ScreenBuf) Write(x, y int, text []CharInfo) {
 		x = 0
 	}
 
-	// Отсечение за правой границей
+	// Clipping behind the right boundary
 	if x+len(text) > s.width {
 		text = text[:s.width-x]
 	}
@@ -94,11 +94,11 @@ func (s *ScreenBuf) Write(x, y int, text []CharInfo) {
 
 	offset := y*s.width + x
 	copy(s.buf[offset:], text)
-	// Примечание: пока не сравниваем с shadow, просто копируем.
-	// Оптимизация сравнения будет в Flush().
+	// Note: not comparing with shadow yet, just copying.
+	// Comparison optimization will happen in Flush().
 }
 
-// ApplyColor применяет указанные атрибуты к прямоугольной области.
+// ApplyColor applies specified attributes to a rectangular area.
 func (s *ScreenBuf) ApplyColor(x1, y1, x2, y2 int, attributes uint64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -107,7 +107,7 @@ func (s *ScreenBuf) ApplyColor(x1, y1, x2, y2 int, attributes uint64) {
 		return
 	}
 
-	// Отсечение по границам экрана
+	// Clipping by screen boundaries
 	if x1 < 0 { x1 = 0 }
 	if y1 < 0 { y1 = 0 }
 	if x2 >= s.width { x2 = s.width - 1 }
@@ -121,7 +121,7 @@ func (s *ScreenBuf) ApplyColor(x1, y1, x2, y2 int, attributes uint64) {
 	}
 }
 
-// FillRect заполняет прямоугольную область указанным символом и атрибутами.
+// FillRect fills a rectangular area with specified character and attributes.
 func (s *ScreenBuf) FillRect(x1, y1, x2, y2 int, char rune, attributes uint64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -163,7 +163,7 @@ func rgb(c uint32) (r, g, b byte) {
 	return byte((c >> 16) & 0xFF), byte((c >> 8) & 0xFF), byte(c & 0xFF)
 }
 
-// attributesToANSI генерирует минимальную ANSI-последовательность для перехода от lastAttr к attr.
+// attributesToANSI generates the minimum ANSI sequence to transition from lastAttr to attr.
 func attributesToANSI(attr, lastAttr uint64) string {
 	if attr == lastAttr {
 		return ""
@@ -230,7 +230,7 @@ func attributesToANSI(attr, lastAttr uint64) string {
 	return "\x1b[" + strings.Join(params, ";") + "m"
 }
 
-// Flush сравнивает `buf` и `shadow` и выводит разницу в терминал.
+// Flush compares `buf` and `shadow` and outputs the difference to the terminal.
 func (s *ScreenBuf) Flush() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -241,38 +241,38 @@ func (s *ScreenBuf) Flush() {
 
 	var builder strings.Builder
 
-	// 1. Скрываем курсор, чтобы избежать мерцания во время отрисовки.
+	// 1. Hide the cursor to avoid flickering during rendering.
 	builder.WriteString("\x1b[?25l")
 
-	lastAttr := ^uint64(0) // Невалидное значение, чтобы первая ячейка всегда устанавливала цвет.
+	lastAttr := ^uint64(0) // Invalid value so the first cell always sets the color.
 	lastX, lastY := -1, -1
 
-	// 2. Основной цикл сравнения и генерации последовательностей.
+	// 2. Main comparison and sequence generation loop.
 	for y := 0; y < s.height; y++ {
 		for x := 0; x < s.width; x++ {
 			offset := y*s.width + x
 
-			// Если ячейка не изменилась, пропускаем.
+			// If cell hasn't changed, skip it.
 			if !s.dirty && s.buf[offset] == s.shadow[offset] {
 				continue
 			}
 
-			// Если есть разрыв, перемещаем курсор.
+			// If there is a gap, move the cursor.
 			if x != lastX+1 || y != lastY {
-				// ANSI-координаты начинаются с 1.
+				// ANSI coordinates start from 1.
 				builder.WriteString(fmt.Sprintf("\x1b[%d;%dH", y+1, x+1))
 			}
 
-			// Устанавливаем цвет, если он изменился.
+			// Set color if changed.
 			attr := s.buf[offset].Attributes
 			builder.WriteString(attributesToANSI(attr, lastAttr))
 			lastAttr = attr
 
-			// Выводим символ.
-			// TODO: Обработка композитных символов (Char > 0xFFFF)
+			// Output symbol.
+			// TODO: Handle composite symbols (Char > 0xFFFF)
 			char := rune(s.buf[offset].Char)
 			if char == 0 {
-				builder.WriteByte(' ') // Нулевой символ рисуем как пробел
+				builder.WriteByte(' ') // Render null character as space
 			} else {
 				builder.WriteRune(char)
 			}
@@ -283,13 +283,13 @@ func (s *ScreenBuf) Flush() {
 	s.dirty = false
 	copy(s.shadow, s.buf)
 
-	// 3. Перемещаем курсор в его финальную позицию и делаем видимым, если нужно.
+	// 3. Move cursor to final position and make visible if needed.
 	builder.WriteString(fmt.Sprintf("\x1b[%d;%dH", s.cursorY+1, s.cursorX+1))
 	if s.cursorVisible {
 		builder.WriteString("\x1b[?25h")
 	}
 
-	// 4. Однократная запись в stdout.
+	// 4. Single write to stdout.
 	if builder.Len() > 0 {
 		os.Stdout.WriteString(builder.String())
 	}

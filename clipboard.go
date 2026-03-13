@@ -5,7 +5,7 @@ import (
 	"os"
 )
 
-// SetClipboard копирует текст в системный буфер обмена через ANSI OSC 52.
+// SetClipboard copies text to the system clipboard via ANSI OSC 52.
 func SetClipboard(text string) {
 	b64 := base64.StdEncoding.EncodeToString([]byte(text))
 	// ANSI OSC 52: \x1b]52;c;<base64>\x07

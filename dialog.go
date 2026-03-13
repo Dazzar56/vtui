@@ -2,7 +2,7 @@ package vtui
 
 import "github.com/unxed/vtinput"
 
-// UIElement — интерфейс, которому должны соответствовать все элементы диалога.
+// UIElement is the interface that all dialog elements must implement.
 type UIElement interface {
 	Show(scr *ScreenBuf)
 	Hide(scr *ScreenBuf)
@@ -13,7 +13,7 @@ type UIElement interface {
 	ProcessMouse(e *vtinput.InputEvent) bool
 }
 
-// Dialog — контейнер для UI-элементов, управляющий фокусом и событиями.
+// Dialog is a container for UI elements that manages focus and events.
 type Dialog struct {
 	ScreenObject
 	items    []UIElement
@@ -31,17 +31,17 @@ func NewDialog(x1, y1, x2, y2 int, title string) *Dialog {
 	return d
 }
 
-// AddItem добавляет элемент в диалог.
+// AddItem adds an element to the dialog.
 func (d *Dialog) AddItem(item UIElement) {
 	d.items = append(d.items, item)
-	// Если это первый фокусируемый элемент, отдаем ему фокус
+	// If this is the first focusable element, give it focus
 	if d.focusIdx == -1 && item.CanFocus() {
 		d.focusIdx = len(d.items) - 1
 		item.SetFocus(true)
 	}
 }
 
-// Show отрисовывает диалог и все его элементы.
+// Show renders the dialog and all its elements.
 func (d *Dialog) Show(scr *ScreenBuf) {
 	d.ScreenObject.Show(scr)
 	d.frame.DisplayObject(scr)
@@ -50,17 +50,17 @@ func (d *Dialog) Show(scr *ScreenBuf) {
 	}
 }
 
-// ProcessKey управляет переключением фокуса и передает события элементам.
+// ProcessKey manages focus switching and passes events to elements.
 func (d *Dialog) ProcessKey(e *vtinput.InputEvent) bool {
 	if !e.KeyDown { return false }
 
-	// 1. Обработка Tab (переключение фокуса)
+	// 1. Handle Tab (focus switching)
 	if e.VirtualKeyCode == vtinput.VK_TAB {
 		d.nextFocus()
 		return true
 	}
 
-	// 2. Передача события активному элементу
+	// 2. Pass the event to the active element
 	if d.focusIdx != -1 {
 		if d.items[d.focusIdx].ProcessKey(e) {
 			return true
@@ -73,12 +73,12 @@ func (d *Dialog) ProcessKey(e *vtinput.InputEvent) bool {
 func (d *Dialog) nextFocus() {
 	if len(d.items) == 0 { return }
 
-	// Снимаем фокус с текущего
+	// Remove focus from the current element
 	if d.focusIdx != -1 {
 		d.items[d.focusIdx].SetFocus(false)
 	}
 
-	// Ищем следующий подходящий элемент
+	// Find the next suitable element
 	startIdx := d.focusIdx
 	for {
 		d.focusIdx = (d.focusIdx + 1) % len(d.items)

@@ -9,13 +9,13 @@ import (
 type Edit struct {
 	ScreenObject
 	text           []rune
-	curPos         int  // Логическая позиция в строке runes
-	leftPos        int  // Визуальное смещение (скроллинг)
-	selStart       int  // -1 если нет выделения
+	curPos         int  // Logical position in the runes string
+	leftPos        int  // Visual offset (scrolling)
+	selStart       int  // -1 if no selection
 	selEnd         int
-	selAnchor      int  // Позиция, с которой началось выделение
+	selAnchor      int  // Position where selection started
 	overtype       bool
-	clearFlag      bool // Если true, первый ввод удалит текст
+	clearFlag      bool // If true, first input will clear the text
 	colorNormal    uint64
 	colorSelected  uint64
 	colorUnchanged uint64
@@ -27,9 +27,9 @@ func NewEdit(x, y, width int, defaultText string) *Edit {
 		selStart:       -1,
 		selAnchor:      -1,
 		clearFlag:      false,
-		colorNormal:    SetRGBBoth(0, 0xFFFFFF, 0x000000), // Белый на черном
-		colorSelected:  SetRGBBoth(0, 0x000000, 0x00AAAA), // Черный на бирюзовом
-		colorUnchanged: SetRGBBoth(0, 0xAAAAAA, 0x000000), // Серый на черном
+		colorNormal:    SetRGBBoth(0, 0xFFFFFF, 0x000000), // White on black
+		colorSelected:  SetRGBBoth(0, 0x000000, 0x00AAAA), // Black on cyan
+		colorUnchanged: SetRGBBoth(0, 0xAAAAAA, 0x000000), // Gray on black
 	}
 	e.canFocus = true
 	e.curPos = len(e.text)
@@ -50,7 +50,7 @@ func (e *Edit) DisplayObject(scr *ScreenBuf) {
 	if !e.IsVisible() { return }
 
 	width := e.X2 - e.X1 + 1
-	// Автоматическая корректировка LeftPos (скроллинг)
+	// Automatic LeftPos adjustment (scrolling)
 	if e.curPos < e.leftPos {
 		e.leftPos = e.curPos
 	} else if e.curPos-e.leftPos >= width {
@@ -68,7 +68,7 @@ func (e *Edit) DisplayObject(scr *ScreenBuf) {
 
 		if strIdx < len(e.text) {
 			char = e.text[strIdx]
-			// Проверка выделения
+			// Check selection
 			if e.selStart != -1 && strIdx >= e.selStart && strIdx < e.selEnd {
 				attr = e.colorSelected
 			}
@@ -80,7 +80,7 @@ func (e *Edit) DisplayObject(scr *ScreenBuf) {
 func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 	if !event.KeyDown { return false }
 
-	// Навигация со сбросом или установкой выделения
+	// Navigation with selection reset or set
 	shift := (event.ControlKeyState & vtinput.ShiftPressed) != 0
 	ctrl := (event.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
 
@@ -184,7 +184,7 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 		return true
 	}
 
-	// Ввод текста
+	// Text input
 	if event.Char != 0 && (unicode.IsGraphic(event.Char) || event.Char == ' ') {
 		if e.clearFlag {
 			e.text = []rune{}
@@ -222,7 +222,7 @@ func (e *Edit) beginSelection() {
 
 func (e *Edit) endSelection() {
 	if e.selAnchor != -1 {
-		// Выделение всегда от якоря до текущей позиции
+		// Selection is always from the anchor to the current position
 		if e.curPos < e.selAnchor {
 			e.selStart = e.curPos
 			e.selEnd = e.selAnchor

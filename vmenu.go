@@ -4,35 +4,35 @@ import (
 	"github.com/unxed/vtinput"
 )
 
-// MenuItem представляет собой один пункт в меню.
+// MenuItem represents a single menu item.
 type MenuItem struct {
 	Text      string
 	UserData  any
 	Separator bool
 }
 
-// VMenu реализует вертикальное меню с поддержкой навигации.
+// VMenu implements a vertical menu with navigation support.
 type VMenu struct {
 	ScreenObject
 	title     string
 	items     []MenuItem
-	selectPos int // Индекс выбранного пункта
-	topPos    int // Индекс первого видимого пункта (для скроллинга)
+	selectPos int // Selected item index
+	topPos    int // Index of the first visible item (for scrolling)
 
-	// Цвета
+	// Colors
 	ColorText       uint64
 	ColorSelected   uint64
 	ColorBorder     uint64
 }
 
-// NewVMenu создает новый экземпляр вертикального меню.
+// NewVMenu creates a new vertical menu instance.
 func NewVMenu(title string) *VMenu {
 	m := &VMenu{
 		title:         title,
 		items:         []MenuItem{},
 		selectPos:     0,
-		ColorText:     SetRGBBoth(0, 0xCCCCCC, 0x0000A0), // Серый на синем
-		ColorSelected: SetRGBBoth(0, 0x000000, 0x00AAAA), // Черный на бирюзовом
+		ColorText:     SetRGBBoth(0, 0xCCCCCC, 0x0000A0), // Gray on blue
+		ColorSelected: SetRGBBoth(0, 0x000000, 0x00AAAA), // Black on cyan
 		ColorBorder:   SetRGBBoth(0, 0xCCCCCC, 0x0000A0),
 	}
 	m.canFocus = true
@@ -52,7 +52,7 @@ func (m *VMenu) AddSeparator() {
 	m.items = append(m.items, MenuItem{Separator: true})
 }
 
-// SetSelectPos устанавливает текущий выбранный пункт и управляет скроллингом.
+// SetSelectPos sets the currently selected item and manages scrolling.
 func (m *VMenu) SetSelectPos(pos int, direct int) {
 	count := len(m.items)
 	if count == 0 { return }
@@ -61,7 +61,7 @@ func (m *VMenu) SetSelectPos(pos int, direct int) {
 	if newPos < 0 { newPos = count - 1 }
 	if newPos >= count { newPos = 0 }
 
-	// Пропуск разделителей
+	// Skip separators
 	if m.items[newPos].Separator {
 		if direct == 0 {
 			direct = 1
@@ -115,31 +115,31 @@ func (m *VMenu) ProcessKey(e *vtinput.InputEvent) bool {
 	return false
 }
 
-// Show подготавливает фон и вызывает отрисовку.
+// Show prepares the background and calls the render method.
 func (m *VMenu) Show(scr *ScreenBuf) {
 	m.ScreenObject.Show(scr)
 	m.DisplayObject(scr)
 }
 
-// DisplayObject отрисовывает рамку и пункты меню.
+// DisplayObject renders the frame and menu items.
 func (m *VMenu) DisplayObject(scr *ScreenBuf) {
 	if !m.IsVisible() {
 		return
 	}
 
-	// 1. Отрисовка рамки
+	// 1. Rendering the frame
 	frame := NewFrame(m.X1, m.Y1, m.X2, m.Y2, DoubleBox, m.title)
 	frame.borderColor = m.ColorBorder
 	frame.DisplayObject(scr)
 
-	// 2. Очистка фона
+	// 2. Clearing the background
 	scr.FillRect(m.X1+1, m.Y1+1, m.X2-1, m.Y2-1, ' ', m.ColorText)
 
 	fullWidth := m.X2 - m.X1 + 1
 	interiorWidth := fullWidth - 2
 	height := m.Y2 - m.Y1 - 1
 
-	// 3. Отрисовка пунктов
+	// 3. Rendering items
 	for i := 0; i < height; i++ {
 		itemIdx := i + m.topPos
 		currY := m.Y1 + 1 + i
@@ -158,7 +158,7 @@ func (m *VMenu) DisplayObject(scr *ScreenBuf) {
 		}
 
 		if item.Separator {
-			// Разделитель: ╟──────╢
+			// Separator: ╟──────╢
 			sepRunes := make([]rune, fullWidth)
 			sepRunes[0] = boxSymbols[22] // ╟
 			for j := 1; j < fullWidth-1; j++ {
@@ -167,7 +167,7 @@ func (m *VMenu) DisplayObject(scr *ScreenBuf) {
 			sepRunes[fullWidth-1] = boxSymbols[23] // ╢
 			scr.Write(m.X1, currY, runesToCharInfo(sepRunes, m.ColorBorder))
 		} else {
-			// Пункт меню с отступами
+			// Padded menu item
 			textRunes := make([]rune, interiorWidth)
 			for j := range textRunes {
 				textRunes[j] = ' '

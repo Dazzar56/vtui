@@ -1,6 +1,6 @@
 package vtui
 
-// Базовые константы цветов и атрибутов (соответствие WinCompat.h)
+// Basic color and attribute constants (matching WinCompat.h)
 const (
 	ForegroundBlue      uint64 = 0x0001 // text color contains blue.
 	ForegroundGreen     uint64 = 0x0002 // text color contains green.
@@ -22,32 +22,32 @@ const (
 	CommonLvbReverse    uint64 = 0x4000 // Reverse fore/back ground attribute.
 	CommonLvbUnderscore uint64 = 0x8000 // Underscore.
 
-	// Маски для базовых 16-цветных атрибутов
+	// Masks for basic 16-color attributes
 	ForegroundRGB = ForegroundRed | ForegroundGreen | ForegroundBlue
 	BackgroundRGB = BackgroundRed | BackgroundGreen | BackgroundBlue
 )
 
-// GetRGBFore извлекает 24-битный RGB цвет текста из атрибутов (биты 16-39).
+// GetRGBFore extracts 24-bit RGB text color from attributes (bits 16-39).
 func GetRGBFore(attr uint64) uint32 {
 	return uint32((attr >> 16) & 0xFFFFFF)
 }
 
-// GetRGBBack извлекает 24-битный RGB цвет фона из атрибутов (биты 40-63).
+// GetRGBBack extracts 24-bit RGB background color from attributes (bits 40-63).
 func GetRGBBack(attr uint64) uint32 {
 	return uint32((attr >> 40) & 0xFFFFFF)
 }
 
-// SetRGBFore устанавливает 24-битный RGB цвет текста в атрибуты, добавляя флаг ForegroundTrueColor.
+// SetRGBFore sets 24-bit RGB text color into attributes, adding ForegroundTrueColor flag.
 func SetRGBFore(attr uint64, rgb uint32) uint64 {
 	return (attr & 0xFFFFFF000000FFFF) | ForegroundTrueColor | ((uint64(rgb) & 0xFFFFFF) << 16)
 }
 
-// SetRGBBack устанавливает 24-битный RGB цвет фона в атрибуты, добавляя флаг BackgroundTrueColor.
+// SetRGBBack sets 24-bit RGB background color into attributes, adding BackgroundTrueColor flag.
 func SetRGBBack(attr uint64, rgb uint32) uint64 {
 	return (attr & 0x000000FFFFFFFFFF) | BackgroundTrueColor | ((uint64(rgb) & 0xFFFFFF) << 40)
 }
 
-// SetRGBBoth устанавливает сразу оба RGB цвета в атрибуты.
+// SetRGBBoth sets both RGB colors into attributes at once.
 func SetRGBBoth(attr uint64, rgbFore uint32, rgbBack uint32) uint64 {
 	return (attr & 0xFFFF) | ForegroundTrueColor | BackgroundTrueColor |
 		((uint64(rgbFore) & 0xFFFFFF) << 16) | ((uint64(rgbBack) & 0xFFFFFF) << 40)

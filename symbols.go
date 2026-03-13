@@ -1,13 +1,13 @@
 package vtui
 
-// BoxType определяет стиль рамки.
+// BoxType defines the frame style.
 const (
 	NoBox = iota
 	SingleBox
 	DoubleBox
 )
 
-// boxSymbols содержит символы для отрисовки рамок.
+// boxSymbols contains symbols for drawing frames.
 var boxSymbols = []rune{
 	// Single Box (0-10)
 	'│', '─', '┌', '┐', '└', '┘', '├', '┤', '┬', '┴', '┼',
@@ -28,7 +28,7 @@ const (
 	bsBR = 5 // Bottom-Right
 )
 
-// getBoxSymbols возвращает срез символов для указанного типа рамки.
+// getBoxSymbols returns a slice of symbols for the specified frame type.
 func getBoxSymbols(boxType int) []rune {
 	if boxType == DoubleBox {
 		return boxSymbols[11:]

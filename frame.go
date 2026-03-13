@@ -4,8 +4,8 @@ import (
 	"strings"
 )
 
-// Frame представляет собой рамочный контейнер, который может иметь заголовок.
-// Он встраивает ScreenObject для управления позицией и видимостью.
+// Frame represents a frame container that can have a title.
+// It embeds ScreenObject for position and visibility management.
 type Frame struct {
 	ScreenObject
 	title      string
@@ -14,12 +14,12 @@ type Frame struct {
 	borderColor uint64
 }
 
-// NewFrame создает новый экземпляр Frame.
+// NewFrame creates a new Frame instance.
 func NewFrame(x1, y1, x2, y2 int, boxType int, title string) *Frame {
 	f := &Frame{
 		title:   title,
 		boxType: boxType,
-		// TODO: цвета пока захардкожены, позже будут браться из палитры
+		// TODO: colors are hardcoded for now, will be taken from palette later
 		titleColor:  SetRGBFore(0, 0xFFFF00),
 		borderColor: SetRGBFore(0, 0x808080),
 	}
@@ -27,21 +27,21 @@ func NewFrame(x1, y1, x2, y2 int, boxType int, title string) *Frame {
 	return f
 }
 
-// SetTitle устанавливает заголовок для рамки.
+// SetTitle sets the title for the frame.
 func (f *Frame) SetTitle(title string) {
 	f.title = title
 }
 
-// Show сохраняет фон и вызывает отрисовку объекта.
+// Show saves the background and calls the object's drawing method.
 func (f *Frame) Show(scr *ScreenBuf) {
 	if f.IsLocked() {
 		return
 	}
-	f.ScreenObject.Show(scr) // Вызов метода встроенной структуры
+	f.ScreenObject.Show(scr) // Call embedded structure method
 	f.DisplayObject(scr)
 }
 
-// DisplayObject отрисовывает рамку и заголовок в ScreenBuf.
+// DisplayObject renders the frame and title into ScreenBuf.
 func (f *Frame) DisplayObject(scr *ScreenBuf) {
 	if f.boxType == NoBox {
 		return
@@ -50,10 +50,10 @@ func (f *Frame) DisplayObject(scr *ScreenBuf) {
 	sym := getBoxSymbols(f.boxType)
 	w := f.X2 - f.X1 + 1
 
-	// Очистка фона внутри рамки (опционально, но полезно)
+	// Clearing background inside the frame (optional but useful)
 	// scr.FillRect(f.X1+1, f.Y1+1, f.X2-1, f.Y2-1, ' ', f.borderColor)
 
-	// Верхняя и нижняя границы
+	// Top and bottom borders
 	var topBorder, bottomBorder strings.Builder
 	topBorder.WriteRune(sym[bsTL])
 	bottomBorder.WriteRune(sym[bsBL])
@@ -64,7 +64,7 @@ func (f *Frame) DisplayObject(scr *ScreenBuf) {
 	topBorder.WriteRune(sym[bsTR])
 	bottomBorder.WriteRune(sym[bsBR])
 
-	// Отрисовка верхней границы с заголовком
+	// Rendering the top border with title
 	topRunes := []rune(topBorder.String())
 	titleRunes := []rune(f.title)
 
@@ -73,21 +73,21 @@ func (f *Frame) DisplayObject(scr *ScreenBuf) {
 			titleRunes = titleRunes[:w-4]
 		}
 		start := (w - len(titleRunes)) / 2
-		// Рисуем рамку и заголовок поверх одной строкой для стабильности координат
+		// Draw frame and title in a single line for coordinate stability
 		titleStr := " " + string(titleRunes) + " "
 		fullTopLine := topRunes
 		copy(fullTopLine[start-1:], []rune(titleStr))
 
-		// Пишем всю линию цветом рамки
+		// Write the entire line with the border color
 		scr.Write(f.X1, f.Y1, runesToCharInfo(fullTopLine, f.borderColor))
-		// Накладываем цвет только на текст заголовка
+		// Overlay the color only on the title text
 		scr.Write(f.X1+start-1, f.Y1, runesToCharInfo([]rune(titleStr), f.titleColor))
 	} else {
 		scr.Write(f.X1, f.Y1, runesToCharInfo(topRunes, f.borderColor))
 	}
 	scr.Write(f.X1, f.Y2, strToCharInfo(bottomBorder.String(), f.borderColor, 0, ""))
 
-	// Вертикальные линии
+	// Vertical lines
 	vertLine := []CharInfo{{Char: uint64(sym[bsV]), Attributes: f.borderColor}}
 	for y := f.Y1 + 1; y < f.Y2; y++ {
 		scr.Write(f.X1, y, vertLine)
@@ -95,7 +95,7 @@ func (f *Frame) DisplayObject(scr *ScreenBuf) {
 	}
 }
 
-// Вспомогательная функция для преобразования строки в []CharInfo с учетом цвета заголовка.
+// Helper function to convert a string to []CharInfo considering the title color.
 func strToCharInfo(str string, borderColor, titleColor uint64, title string) []CharInfo {
 	runes := []rune(str)
 	info := make([]CharInfo, len(runes))
