@@ -4,9 +4,9 @@ import (
 	"strings"
 )
 
-// Frame represents a frame container that can have a title.
+// BorderedFrame represents a frame container that can have a title.
 // It embeds ScreenObject for position and visibility management.
-type Frame struct {
+type BorderedFrame struct {
 	ScreenObject
 	title      string
 	boxType    int
@@ -14,9 +14,9 @@ type Frame struct {
 	borderColor uint64
 }
 
-// NewFrame creates a new Frame instance.
-func NewFrame(x1, y1, x2, y2 int, boxType int, title string) *Frame {
-	f := &Frame{
+// NewBorderedFrame creates a new BorderedFrame instance.
+func NewBorderedFrame(x1, y1, x2, y2 int, boxType int, title string) *BorderedFrame {
+	f := &BorderedFrame{
 		title:   title,
 		boxType: boxType,
 		// TODO: colors are hardcoded for now, will be taken from palette later
@@ -28,12 +28,12 @@ func NewFrame(x1, y1, x2, y2 int, boxType int, title string) *Frame {
 }
 
 // SetTitle sets the title for the frame.
-func (f *Frame) SetTitle(title string) {
+func (f *BorderedFrame) SetTitle(title string) {
 	f.title = title
 }
 
 // Show saves the background and calls the object's drawing method.
-func (f *Frame) Show(scr *ScreenBuf) {
+func (f *BorderedFrame) Show(scr *ScreenBuf) {
 	if f.IsLocked() {
 		return
 	}
@@ -42,7 +42,7 @@ func (f *Frame) Show(scr *ScreenBuf) {
 }
 
 // DisplayObject renders the frame and title into ScreenBuf.
-func (f *Frame) DisplayObject(scr *ScreenBuf) {
+func (f *BorderedFrame) DisplayObject(scr *ScreenBuf) {
 	if f.boxType == NoBox {
 		return
 	}

@@ -186,6 +186,13 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 
 	// Text input
 	if event.Char != 0 && (unicode.IsGraphic(event.Char) || event.Char == ' ') {
+		// Do not process text input if Ctrl or Alt are pressed.
+		// We return false here to let other handlers (like global hotkeys)
+		// or the navigation switch above deal with it.
+		if (event.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed | vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0 {
+			return false
+		}
+
 		if e.clearFlag {
 			e.text = []rune{}
 			e.curPos = 0

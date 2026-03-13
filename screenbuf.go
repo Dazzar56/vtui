@@ -18,6 +18,7 @@ type ScreenBuf struct {
 	cursorX, cursorY int
 	cursorVisible    bool
 	cursorSize       uint32
+	cursorDirty      bool
 
 	lockCount int
 	dirty     bool // Flag indicating that a full rewrite is required during the next Flush.
@@ -142,13 +143,19 @@ func (s *ScreenBuf) FillRect(x1, y1, x2, y2 int, char rune, attributes uint64) {
 func (s *ScreenBuf) SetCursorPos(x, y int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.cursorX, s.cursorY = x, y
+	if s.cursorX != x || s.cursorY != y {
+		s.cursorX, s.cursorY = x, y
+		s.cursorDirty = true
+	}
 }
 
 func (s *ScreenBuf) SetCursorVisible(visible bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.cursorVisible = visible
+	if s.cursorVisible != visible {
+		s.cursorVisible = visible
+		s.cursorDirty = true
+	}
 }
 
 
@@ -244,35 +251,39 @@ func (s *ScreenBuf) Flush() {
 	// 1. Hide the cursor to avoid flickering during rendering.
 	builder.WriteString("\x1b[?25l")
 
-	lastAttr := ^uint64(0) // Invalid value so the first cell always sets the color.
+	lastAttr := ^uint64(0)
 	lastX, lastY := -1, -1
 
+	// Optimization: if nothing is dirty and cursor is in place, do nothing.
+	// (Simplified check for now, can be improved).
+
 	// 2. Main comparison and sequence generation loop.
+	changesCount := 0
 	for y := 0; y < s.height; y++ {
 		for x := 0; x < s.width; x++ {
-			offset := y*s.width + x
+			idx := y*s.width + x
 
-			// If cell hasn't changed, skip it.
-			if !s.dirty && s.buf[offset] == s.shadow[offset] {
+			if !s.dirty && s.buf[idx] == s.shadow[idx] {
 				continue
 			}
 
-			// If there is a gap, move the cursor.
+			if changesCount == 0 {
+				// First change found, prepare the builder
+				builder.WriteString("\x1b[?25l") // Hide cursor
+			}
+			changesCount++
+
 			if x != lastX+1 || y != lastY {
-				// ANSI coordinates start from 1.
 				builder.WriteString(fmt.Sprintf("\x1b[%d;%dH", y+1, x+1))
 			}
 
-			// Set color if changed.
-			attr := s.buf[offset].Attributes
+			attr := s.buf[idx].Attributes
 			builder.WriteString(attributesToANSI(attr, lastAttr))
 			lastAttr = attr
 
-			// Output symbol.
-			// TODO: Handle composite symbols (Char > 0xFFFF)
-			char := rune(s.buf[offset].Char)
+			char := rune(s.buf[idx].Char)
 			if char == 0 {
-				builder.WriteByte(' ') // Render null character as space
+				builder.WriteByte(' ')
 			} else {
 				builder.WriteRune(char)
 			}
@@ -280,17 +291,21 @@ func (s *ScreenBuf) Flush() {
 			lastX, lastY = x, y
 		}
 	}
-	s.dirty = false
-	copy(s.shadow, s.buf)
 
-	// 3. Move cursor to final position and make visible if needed.
-	builder.WriteString(fmt.Sprintf("\x1b[%d;%dH", s.cursorY+1, s.cursorX+1))
-	if s.cursorVisible {
-		builder.WriteString("\x1b[?25h")
-	}
+	if changesCount > 0 || s.dirty || s.cursorDirty {
+		s.dirty = false
+		s.cursorDirty = false
+		copy(s.shadow, s.buf)
 
-	// 4. Single write to stdout.
-	if builder.Len() > 0 {
-		os.Stdout.WriteString(builder.String())
+		// 3. Move cursor to final position and make visible if needed.
+		builder.WriteString(fmt.Sprintf("\x1b[%d;%dH", s.cursorY+1, s.cursorX+1))
+		if s.cursorVisible {
+			builder.WriteString("\x1b[?25h")
+		}
+
+		// 4. Single write to stdout.
+		if builder.Len() > 0 {
+			os.Stdout.WriteString(builder.String())
+		}
 	}
 }

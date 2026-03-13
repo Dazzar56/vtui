@@ -80,7 +80,7 @@ func TestFrame_Rendering(t *testing.T) {
 	t.Run("SingleBox", func(t *testing.T) {
 		scr := NewScreenBuf()
 		scr.AllocBuf(20, 10)
-		frame := NewFrame(1, 1, 18, 8, SingleBox, "")
+		frame := NewBorderedFrame(1, 1, 18, 8, SingleBox, "")
 		frame.DisplayObject(scr)
 
 		checkCell(t, scr, 1, 1, '┌', borderColor)
@@ -94,7 +94,7 @@ func TestFrame_Rendering(t *testing.T) {
 	t.Run("DoubleBox", func(t *testing.T) {
 		scr := NewScreenBuf()
 		scr.AllocBuf(20, 10)
-		frame := NewFrame(1, 1, 18, 8, DoubleBox, "")
+		frame := NewBorderedFrame(1, 1, 18, 8, DoubleBox, "")
 		frame.DisplayObject(scr)
 
 		checkCell(t, scr, 1, 1, '╔', borderColor)
@@ -110,7 +110,7 @@ func TestFrame_Rendering(t *testing.T) {
 		scr := NewScreenBuf()
 		scr.AllocBuf(30, 10)
 		// Frame width is 22 (from 4 to 25)
-		frame := NewFrame(4, 2, 25, 8, DoubleBox, title)
+		frame := NewBorderedFrame(4, 2, 25, 8, DoubleBox, title)
 		frame.DisplayObject(scr)
 
 		// Title is " Title ", length 6. Start pos = 4 + (22 - 6)/2 - 1 = 4 + 8 - 1 = 11

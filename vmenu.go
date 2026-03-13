@@ -16,6 +16,8 @@ type VMenu struct {
 	ScreenObject
 	title     string
 	items     []MenuItem
+	done      bool
+	exitCode  int
 	selectPos int // Selected item index
 	topPos    int // Index of the first visible item (for scrolling)
 
@@ -99,6 +101,12 @@ func (m *VMenu) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 
 	switch e.VirtualKeyCode {
+	case vtinput.VK_ESCAPE:
+		m.SetExitCode(-1)
+		return true
+	case vtinput.VK_RETURN:
+		m.SetExitCode(m.selectPos)
+		return true
 	case vtinput.VK_UP:
 		m.SetSelectPos(m.selectPos-1, -1)
 		return true
@@ -113,6 +121,22 @@ func (m *VMenu) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	}
 	return false
+}
+func (m *VMenu) ResizeConsole() {
+	// Future: Recalculate positions if the menu is centered or relative-sized
+}
+
+func (m *VMenu) GetType() FrameType {
+	return TypeMenu
+}
+
+func (m *VMenu) SetExitCode(code int) {
+	m.done = true
+	m.exitCode = code
+}
+
+func (m *VMenu) IsDone() bool {
+	return m.done
 }
 
 // ProcessMouse handles mouse wheel scrolling and menu item clicks.
@@ -138,8 +162,7 @@ func (m *VMenu) ProcessMouse(e *vtinput.InputEvent) bool {
 		if mx >= m.X1 && mx <= m.X2 && my >= m.Y1 && my <= m.Y2 {
 			// Calculation of the index taking into account the presence/absence of a frame
 			offset := 1
-			// if m.BoxType == NoBox { offset = 0 }
-
+			// TODO: detect NoBox mode properly
 			clickedIdx := m.topPos + (my - m.Y1 - offset)
 			if clickedIdx >= 0 && clickedIdx < len(m.items) && !m.items[clickedIdx].Separator {
 				m.SetSelectPos(clickedIdx, 1)
@@ -164,7 +187,7 @@ func (m *VMenu) DisplayObject(scr *ScreenBuf) {
 	}
 
 	// 1. Rendering the frame
-	frame := NewFrame(m.X1, m.Y1, m.X2, m.Y2, DoubleBox, m.title)
+	frame := NewBorderedFrame(m.X1, m.Y1, m.X2, m.Y2, DoubleBox, m.title)
 	frame.borderColor = m.ColorBorder
 	frame.DisplayObject(scr)
 

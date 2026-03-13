@@ -19,14 +19,16 @@ type Dialog struct {
 	ScreenObject
 	items    []UIElement
 	focusIdx int
-	frame    *Frame
+	frame    *BorderedFrame
+	done     bool
+	exitCode int
 }
 
 func NewDialog(x1, y1, x2, y2 int, title string) *Dialog {
 	d := &Dialog{
 		items:    []UIElement{},
 		focusIdx: -1,
-		frame:    NewFrame(x1, y1, x2, y2, DoubleBox, title),
+		frame:    NewBorderedFrame(x1, y1, x2, y2, DoubleBox, title),
 	}
 	d.SetPosition(x1, y1, x2, y2)
 	return d
@@ -53,22 +55,45 @@ func (d *Dialog) Show(scr *ScreenBuf) {
 
 // ProcessKey manages focus switching and passes events to elements.
 func (d *Dialog) ProcessKey(e *vtinput.InputEvent) bool {
-	if !e.KeyDown { return false }
 
-	// 1. Handle Tab (focus switching)
-	if e.VirtualKeyCode == vtinput.VK_TAB {
-		d.nextFocus()
-		return true
-	}
-
-	// 2. Pass the event to the active element
+	// 1. Pass the event to the active element first (allows elements to override Tab/Esc if needed)
+	// We don't filter KeyDown here, as elements might want to handle KeyUp.
 	if d.focusIdx != -1 {
 		if d.items[d.focusIdx].ProcessKey(e) {
 			return true
 		}
 	}
 
+	// 2. Handle global dialog keys
+	if !e.KeyDown { return false }
+
+	switch e.VirtualKeyCode {
+	case vtinput.VK_ESCAPE, vtinput.VK_F10:
+		d.SetExitCode(-1)
+		return true
+	case vtinput.VK_TAB:
+		d.nextFocus()
+		return true
+	}
+
 	return false
+}
+
+func (d *Dialog) ResizeConsole() {
+	// Future: Recalculate positions if the dialog is centered or relative-sized
+}
+
+func (d *Dialog) GetType() FrameType {
+	return TypeDialog
+}
+
+func (d *Dialog) SetExitCode(code int) {
+	d.done = true
+	d.exitCode = code
+}
+
+func (d *Dialog) IsDone() bool {
+	return d.done
 }
 
 func (d *Dialog) nextFocus() {
