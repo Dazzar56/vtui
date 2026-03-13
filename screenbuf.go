@@ -157,9 +157,9 @@ var (
 	ansiBg = []string{"40", "44", "42", "46", "41", "45", "43", "47"}
 )
 
-// rgb извлекает R, G, B компоненты из 24-битного цвета.
+// rgb извлекает R, G, B компоненты из 24-битного цвета (формат 0xRRGGBB).
 func rgb(c uint32) (r, g, b byte) {
-	return byte(c & 0xFF), byte((c >> 8) & 0xFF), byte((c >> 16) & 0xFF)
+	return byte((c >> 16) & 0xFF), byte((c >> 8) & 0xFF), byte(c & 0xFF)
 }
 
 // attributesToANSI генерирует минимальную ANSI-последовательность для перехода от lastAttr к attr.
