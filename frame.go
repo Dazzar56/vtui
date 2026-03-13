@@ -79,11 +79,11 @@ func (f *BorderedFrame) DisplayObject(scr *ScreenBuf) {
 		copy(fullTopLine[start-1:], []rune(titleStr))
 
 		// Write the entire line with the border color
-		scr.Write(f.X1, f.Y1, runesToCharInfo(fullTopLine, f.borderColor))
+		scr.Write(f.X1, f.Y1, RunesToCharInfo(fullTopLine, f.borderColor))
 		// Overlay the color only on the title text
-		scr.Write(f.X1+start-1, f.Y1, runesToCharInfo([]rune(titleStr), f.titleColor))
+		scr.Write(f.X1+start-1, f.Y1, RunesToCharInfo([]rune(titleStr), f.titleColor))
 	} else {
-		scr.Write(f.X1, f.Y1, runesToCharInfo(topRunes, f.borderColor))
+		scr.Write(f.X1, f.Y1, RunesToCharInfo(topRunes, f.borderColor))
 	}
 	scr.Write(f.X1, f.Y2, strToCharInfo(bottomBorder.String(), f.borderColor, 0, ""))
 

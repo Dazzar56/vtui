@@ -20,7 +20,7 @@ func (d *Desktop) Show(scr *ScreenBuf) {
 	scr.FillRect(0, 0, width-1, height-1, ' ', SetRGBBack(0, 0x0000A0))
 	// Add a little hint that the app is alive
 	msg := " f4 project - Press Ctrl+Q to exit "
-	scr.Write((width-len(msg))/2, height-1, stringToCharInfo(msg, SetRGBBoth(0, 0xAAAAAA, 0x0000A0)))
+	scr.Write((width-len(msg))/2, height-1, StringToCharInfo(msg, SetRGBBoth(0, 0xAAAAAA, 0x0000A0)))
 }
 
 // Desktop doesn't handle any specific keys, but could handle global hotkeys in the future.

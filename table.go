@@ -127,7 +127,7 @@ func (t *Table) drawRow(scr *ScreenBuf, y int, rowIdx int, attr uint64) {
 
 		// Prepare cell text with alignment
 		cellText := t.formatCell(text, col.Width, col.Alignment)
-		scr.Write(currX, y, stringToCharInfo(cellText, attr))
+		scr.Write(currX, y, StringToCharInfo(cellText, attr))
 		currX += col.Width
 
 		// Skip separator space if not the last column

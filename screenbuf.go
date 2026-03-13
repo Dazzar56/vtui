@@ -158,6 +158,13 @@ func (s *ScreenBuf) SetCursorVisible(visible bool) {
 	}
 }
 
+func (s *ScreenBuf) Width() int {
+	return s.width
+}
+
+func (s *ScreenBuf) Height() int {
+	return s.height
+}
 
 // Tables for quickly converting palettes to ANSI codes.
 var (

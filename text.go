@@ -20,5 +20,5 @@ func (t *Text) Show(scr *ScreenBuf) {
 
 func (t *Text) DisplayObject(scr *ScreenBuf) {
 	if !t.IsVisible() { return }
-	scr.Write(t.X1, t.Y1, stringToCharInfo(t.content, t.color))
+	scr.Write(t.X1, t.Y1, StringToCharInfo(t.content, t.color))
 }

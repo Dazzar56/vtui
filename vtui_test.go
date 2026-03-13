@@ -27,7 +27,7 @@ func TestScreenBuf_Write(t *testing.T) {
 	scr.AllocBuf(10, 5)
 	attr := uint64(123)
 
-	text := stringToCharInfo("hello", attr)
+	text := StringToCharInfo("hello", attr)
 	scr.Write(2, 2, text)
 
 	// Check written text
@@ -38,7 +38,7 @@ func TestScreenBuf_Write(t *testing.T) {
 	checkCell(t, scr, 7, 2, 0, 0)
 
 	// Test clipping
-	longText := stringToCharInfo("1234567890", attr)
+	longText := StringToCharInfo("1234567890", attr)
 	scr.Write(5, 3, longText)
 	checkCell(t, scr, 5, 3, '1', attr)
 	checkCell(t, scr, 9, 3, '5', attr)

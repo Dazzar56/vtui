@@ -36,7 +36,7 @@ func (b *Button) DisplayObject(scr *ScreenBuf) {
 	if b.IsFocused() {
 		attr = b.colorFocused
 	}
-	scr.Write(b.X1, b.Y1, stringToCharInfo(b.text, attr))
+	scr.Write(b.X1, b.Y1, StringToCharInfo(b.text, attr))
 }
 
 func (b *Button) SetFocus(f bool) {

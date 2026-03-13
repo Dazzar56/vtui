@@ -224,7 +224,7 @@ func (m *VMenu) DisplayObject(scr *ScreenBuf) {
 				sepRunes[j] = boxSymbols[1] // ─
 			}
 			sepRunes[fullWidth-1] = boxSymbols[23] // ╢
-			scr.Write(m.X1, currY, runesToCharInfo(sepRunes, m.ColorBorder))
+			scr.Write(m.X1, currY, RunesToCharInfo(sepRunes, m.ColorBorder))
 		} else {
 			// Padded menu item
 			textRunes := make([]rune, interiorWidth)
@@ -238,7 +238,7 @@ func (m *VMenu) DisplayObject(scr *ScreenBuf) {
 			}
 			copy(textRunes[1:], contentRunes)
 
-			scr.Write(m.X1+1, currY, runesToCharInfo(textRunes, attr))
+			scr.Write(m.X1+1, currY, RunesToCharInfo(textRunes, attr))
 		}
 	}
 }
@@ -248,7 +248,7 @@ func (m *VMenu) SetFocus(f bool) {
 	m.focused = f
 }
 
-func runesToCharInfo(runes []rune, attr uint64) []CharInfo {
+func RunesToCharInfo(runes []rune, attr uint64) []CharInfo {
 	res := make([]CharInfo, len(runes))
 	for i, r := range runes {
 		res[i] = CharInfo{Char: uint64(r), Attributes: attr}
@@ -256,6 +256,6 @@ func runesToCharInfo(runes []rune, attr uint64) []CharInfo {
 	return res
 }
 
-func stringToCharInfo(s string, attr uint64) []CharInfo {
-	return runesToCharInfo([]rune(s), attr)
+func StringToCharInfo(s string, attr uint64) []CharInfo {
+	return RunesToCharInfo([]rune(s), attr)
 }
