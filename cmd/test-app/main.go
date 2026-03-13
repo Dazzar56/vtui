@@ -36,7 +36,23 @@ func main() {
 	fWidth, fHeight := 40, 10
 	x1 := (width - fWidth) / 2
 	y1 := (height - fHeight) / 2
-	frame := vtui.NewFrame(x1, y1, x1+fWidth-1, y1+fHeight-1, vtui.DoubleBox, "Test Frame")
+	frame := vtui.NewFrame(x1, y1, x1+fWidth-1, y1+fHeight-1, vtui.DoubleBox, "Background Frame")
+
+	// Создаем меню
+	menu := vtui.NewVMenu(" Select Action ")
+	menu.AddItem("Copy File")
+	menu.AddItem("Move File")
+	menu.AddSeparator()
+	menu.AddItem("Delete File")
+	menu.AddItem("Attributes")
+	menu.AddSeparator()
+	menu.AddItem("Exit")
+
+	// Явно устанавливаем выбор на первый пункт
+	menu.SetSelectPos(0, 1)
+
+	// Устанавливаем фиксированную позицию меню для стабильности теста
+	menu.SetPosition(x1+5, y1+2, x1+30, y1+10)
 
 	// Настраиваем канал для получения событий от vtinput
 	reader := vtinput.NewReader(os.Stdin)
@@ -62,13 +78,17 @@ func main() {
 	// --- Главный цикл приложения ---
 	for {
 		// 1. Отрисовка
-		drawUI(scr, frame, width, height)
+		drawUI(scr, frame, menu, width, height)
 
 		// 2. Ожидание события (клавиатура или ресайз)
 		select {
 		case e, ok := <-eventChan:
 			if !ok { // Канал закрыт, выходим
 				return
+			}
+			// Сначала даем обработать клавишу меню
+			if menu.ProcessKey(e) {
+				continue
 			}
 			if handleKeyEvent(e, frame) { // handleKeyEvent вернет true, если надо выйти
 				return
@@ -87,13 +107,16 @@ func main() {
 }
 
 // drawUI отвечает за отрисовку всего интерфейса на ScreenBuf и вызов Flush.
-func drawUI(scr *vtui.ScreenBuf, frame *vtui.Frame, width, height int) {
+func drawUI(scr *vtui.ScreenBuf, frame *vtui.Frame, menu *vtui.VMenu, width, height int) {
 	// Очищаем буфер синим цветом (Far-style: 0x000080 или чуть светлее)
 	farBlue := vtui.SetRGBBack(0, 0x0000A0)
 	scr.FillRect(0, 0, width-1, height-1, ' ', farBlue)
 
-	// Показываем наш Frame (он сохранит под собой фон и отрисует себя)
+	// Показываем наш Frame
 	frame.Show(scr)
+
+	// Показываем меню
+	menu.Show(scr)
 
 	// Рисуем строку состояния внизу
 	status := fmt.Sprintf(" Size: %dx%d | Use Arrows to move, ESC to quit ", width, height)

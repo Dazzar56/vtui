@@ -15,7 +15,11 @@ type ScreenObject struct {
 // SetPosition устанавливает координаты объекта.
 // Важно: это не вызывает перерисовку.
 func (so *ScreenObject) SetPosition(x1, y1, x2, y2 int) {
-	// При изменении позиции сохраненный фон становится невалидным.
+	if so.X1 == x1 && so.Y1 == y1 && so.X2 == x2 && so.Y2 == y2 {
+		return
+	}
+	// При перемещении текущий фон и статус видимости становятся невалидными
+	so.visible = false
 	so.saveScr = nil
 	so.X1, so.Y1, so.X2, so.Y2 = x1, y1, x2, y2
 }
@@ -25,14 +29,14 @@ func (so *ScreenObject) GetPosition() (int, int, int, int) {
 	return so.X1, so.Y1, so.X2, so.Y2
 }
 
-// Show делает объект видимым. Перед отрисовкой он сохраняет область экрана под собой.
+// Show делает объект видимым.
 func (so *ScreenObject) Show(scr *ScreenBuf) {
-	if so.IsLocked() || so.visible {
+	if so.IsLocked() {
 		return
 	}
-	so.saveScr = NewSaveScreen(scr, so.X1, so.Y1, so.X2, so.Y2)
+	// В тестовом режиме отключаем SaveScreen, чтобы не конфликтовать с FillRect всего экрана
+	// so.saveScr = NewSaveScreen(scr, so.X1, so.Y1, so.X2, so.Y2)
 	so.visible = true
-	// В дочерних классах здесь будет вызов DisplayObject()
 }
 
 // Hide скрывает объект и восстанавливает сохраненную под ним область экрана.

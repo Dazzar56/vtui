@@ -43,7 +43,7 @@ func (f *Frame) Show(scr *ScreenBuf) {
 
 // DisplayObject отрисовывает рамку и заголовок в ScreenBuf.
 func (f *Frame) DisplayObject(scr *ScreenBuf) {
-	if f.boxType == NoBox || !f.IsVisible() {
+	if f.boxType == NoBox {
 		return
 	}
 
@@ -64,23 +64,27 @@ func (f *Frame) DisplayObject(scr *ScreenBuf) {
 	topBorder.WriteRune(sym[bsTR])
 	bottomBorder.WriteRune(sym[bsBR])
 
-	// Вставка заголовка в верхнюю рамку
-	topStr := topBorder.String()
-	if f.title != "" {
-		// Простое усечение, позже можно сделать более умным
-		titleLen := len([]rune(f.title))
-		if titleLen > w-4 {
-			titleLen = w - 4
-		}
-		startPos := (w - titleLen) / 2
-		// Формируем строку с заголовком
-		tempTop := []rune(topStr)
-		copy(tempTop[startPos-1:], []rune(" "+f.title+" "))
-		topStr = string(tempTop)
-	}
+	// Отрисовка верхней границы с заголовком
+	topRunes := []rune(topBorder.String())
+	titleRunes := []rune(f.title)
 
-	// Отрисовка
-	scr.Write(f.X1, f.Y1, strToCharInfo(topStr, f.borderColor, f.titleColor, f.title))
+	if len(titleRunes) > 0 {
+		if len(titleRunes) > w-4 {
+			titleRunes = titleRunes[:w-4]
+		}
+		start := (w - len(titleRunes)) / 2
+		// Рисуем рамку и заголовок поверх одной строкой для стабильности координат
+		titleStr := " " + string(titleRunes) + " "
+		fullTopLine := topRunes
+		copy(fullTopLine[start-1:], []rune(titleStr))
+
+		// Пишем всю линию цветом рамки
+		scr.Write(f.X1, f.Y1, runesToCharInfo(fullTopLine, f.borderColor))
+		// Накладываем цвет только на текст заголовка
+		scr.Write(f.X1+start-1, f.Y1, runesToCharInfo([]rune(titleStr), f.titleColor))
+	} else {
+		scr.Write(f.X1, f.Y1, runesToCharInfo(topRunes, f.borderColor))
+	}
 	scr.Write(f.X1, f.Y2, strToCharInfo(bottomBorder.String(), f.borderColor, 0, ""))
 
 	// Вертикальные линии

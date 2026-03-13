@@ -170,48 +170,54 @@ func attributesToANSI(attr, lastAttr uint64) string {
 
 	var params []string
 
-	// Атрибуты текста (яркость, подчеркивание и т.д.)
-	// Для простоты и надежности, если эти флаги изменились, делаем сброс.
+	// 1. Проверка изменения флагов (подчеркивание, инверсия)
 	const simpleFlags = CommonLvbUnderscore | CommonLvbReverse
 	if (attr & simpleFlags) != (lastAttr & simpleFlags) {
-		params = append(params, "0") // Сброс, чтобы надежно убрать атрибуты.
-		if attr&CommonLvbUnderscore != 0 {
-			params = append(params, "4")
-		}
-		if attr&CommonLvbReverse != 0 {
-			params = append(params, "7")
-		}
+		params = append(params, "0")
+		if attr&CommonLvbUnderscore != 0 { params = append(params, "4") }
+		if attr&CommonLvbReverse != 0 { params = append(params, "7") }
 	}
 
-	// Цвет текста
-	if (attr&ForegroundTrueColor) != (lastAttr&ForegroundTrueColor) ||
-		(attr&(ForegroundRGB|ForegroundIntensity)) != (lastAttr&(ForegroundRGB|ForegroundIntensity)) {
+	// 2. Цвет текста (Foreground)
+	fgChanged := false
+	if (attr & ForegroundTrueColor) != (lastAttr & ForegroundTrueColor) {
+		fgChanged = true
+	} else if attr&ForegroundTrueColor != 0 {
+		if GetRGBFore(attr) != GetRGBFore(lastAttr) { fgChanged = true }
+	} else if (attr & (ForegroundRGB | ForegroundIntensity)) != (lastAttr & (ForegroundRGB | ForegroundIntensity)) {
+		fgChanged = true
+	}
+
+	if fgChanged {
 		if attr&ForegroundTrueColor != 0 {
 			r, g, b := rgb(GetRGBFore(attr))
 			params = append(params, fmt.Sprintf("38;2;%d;%d;%d", r, g, b))
 		} else {
 			fg := attr & 0b1111
 			if fg&ForegroundIntensity != 0 {
-				params = append(params, "1") // Яркость
-				params = append(params, ansiFg[fg&0b0111])
+				params = append(params, "1", ansiFg[fg&0b0111])
 			} else {
-				if lastAttr&ForegroundIntensity != 0 { // Если яркость была, а теперь нет, сбрасываем
-					params = append(params, "22")
-				}
-				params = append(params, ansiFg[fg])
+				params = append(params, "22", ansiFg[fg])
 			}
 		}
 	}
 
-	// Цвет фона
-	if (attr&BackgroundTrueColor) != (lastAttr&BackgroundTrueColor) ||
-		(attr&(BackgroundRGB|BackgroundIntensity)) != (lastAttr&(BackgroundRGB|BackgroundIntensity)) {
+	// 3. Цвет фона (Background)
+	bgChanged := false
+	if (attr & BackgroundTrueColor) != (lastAttr & BackgroundTrueColor) {
+		bgChanged = true
+	} else if attr&BackgroundTrueColor != 0 {
+		if GetRGBBack(attr) != GetRGBBack(lastAttr) { bgChanged = true }
+	} else if (attr & (BackgroundRGB | BackgroundIntensity)) != (lastAttr & (BackgroundRGB | BackgroundIntensity)) {
+		bgChanged = true
+	}
+
+	if bgChanged {
 		if attr&BackgroundTrueColor != 0 {
 			r, g, b := rgb(GetRGBBack(attr))
 			params = append(params, fmt.Sprintf("48;2;%d;%d;%d", r, g, b))
 		} else {
 			bg := (attr >> 4) & 0b1111
-			// TODO: Bright background (100-107). Пока не используется в far2l.
 			params = append(params, ansiBg[bg&0b0111])
 		}
 	}
