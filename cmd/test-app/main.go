@@ -33,7 +33,7 @@ func main() {
 	scr.AllocBuf(width, height)
 
 	// Вычисляем координаты для центрирования на старте
-	fWidth, fHeight := 40, 10
+	fWidth, fHeight := 40, 14
 	x1 := (width - fWidth) / 2
 	y1 := (height - fHeight) / 2
 	// Создаем диалог
@@ -52,13 +52,14 @@ func main() {
 
 	// Создаем текст, поле ввода и кнопки
 	label := vtui.NewText(x1+5, y1+1, "Enter task name:", vtui.SetRGBFore(0, 0xFFFFFF))
-	edit := vtui.NewEdit(x1+5, y1+2, 20, "Far2Go implementation")
-	
-	// Сдвигаем меню чуть ниже
-	menu.SetPosition(x1+5, y1+4, x1+30, y1+9)
+	edit := vtui.NewEdit(x1+5, y1+2, 20, "f4 project")
 
-	btnOk := vtui.NewButton(x1+5, y1+10, "Ok")
-	btnCancel := vtui.NewButton(x1+15, y1+10, "Cancel")
+	// Опускаем меню ниже, чтобы не пересекалось с заголовком
+	menu.SetPosition(x1+5, y1+5, x1+30, y1+10)
+
+	// Опускаем кнопки к нижней границе нового высокого диалога
+	btnOk := vtui.NewButton(x1+5, y1+12, "Ok")
+	btnCancel := vtui.NewButton(x1+15, y1+12, "Cancel")
 
 	// Собираем всё в диалог
 	dlg.AddItem(label)
@@ -117,8 +118,8 @@ func main() {
 		case <-sigChan:
 			width, height, _ = term.GetSize(int(os.Stdin.Fd()))
 			scr.AllocBuf(width, height)
-			// Перецентрируем диалог
-			dlgWidth, dlgHeight := 40, 10
+			// Перецентрируем диалог с учетом новой высоты
+			dlgWidth, dlgHeight := 40, 14
 			newX1 := (width - dlgWidth) / 2
 			newY1 := (height - dlgHeight) / 2
 			dlg.SetPosition(newX1, newY1, newX1+dlgWidth-1, newY1+dlgHeight-1)
