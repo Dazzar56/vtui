@@ -12,6 +12,7 @@ type Edit struct {
 	leftPos        int  // Визуальное смещение (скроллинг)
 	selStart       int  // -1 если нет выделения
 	selEnd         int
+	selAnchor      int  // Позиция, с которой началось выделение
 	overtype       bool
 	clearFlag      bool // Если true, первый ввод удалит текст
 	colorNormal    uint64
@@ -23,6 +24,7 @@ func NewEdit(x, y, width int, defaultText string) *Edit {
 	e := &Edit{
 		text:           []rune(defaultText),
 		selStart:       -1,
+		selAnchor:      -1,
 		clearFlag:      true,
 		colorNormal:    SetRGBBoth(0, 0xFFFFFF, 0x000000), // Белый на черном
 		colorSelected:  SetRGBBoth(0, 0x000000, 0x00AAAA), // Черный на бирюзовом
@@ -82,28 +84,28 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 
 	switch event.VirtualKeyCode {
 	case vtinput.VK_LEFT:
-		if shift { e.beginSelection() } else { e.selStart = -1 }
+		if shift { e.beginSelection() } else { e.selStart = -1; e.selAnchor = -1 }
 		if e.curPos > 0 { e.curPos-- }
 		if shift { e.endSelection() }
 		e.clearFlag = false
 		return true
 
 	case vtinput.VK_RIGHT:
-		if shift { e.beginSelection() } else { e.selStart = -1 }
+		if shift { e.beginSelection() } else { e.selStart = -1; e.selAnchor = -1 }
 		if e.curPos < len(e.text) { e.curPos++ }
 		if shift { e.endSelection() }
 		e.clearFlag = false
 		return true
 
 	case vtinput.VK_HOME:
-		if shift { e.beginSelection() } else { e.selStart = -1 }
+		if shift { e.beginSelection() } else { e.selStart = -1; e.selAnchor = -1 }
 		e.curPos = 0
 		if shift { e.endSelection() }
 		e.clearFlag = false
 		return true
 
 	case vtinput.VK_END:
-		if shift { e.beginSelection() } else { e.selStart = -1 }
+		if shift { e.beginSelection() } else { e.selStart = -1; e.selAnchor = -1 }
 		e.curPos = len(e.text)
 		if shift { e.endSelection() }
 		e.clearFlag = false
@@ -163,22 +165,26 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 
 func (e *Edit) beginSelection() {
 	if e.selStart == -1 {
+		e.selAnchor = e.curPos
 		e.selStart = e.curPos
 		e.selEnd = e.curPos
 	}
 }
 
 func (e *Edit) endSelection() {
-	if e.selStart != -1 {
-		// Всегда храним selStart < selEnd
-		start, end := e.selStart, e.curPos
-		if start > end {
-			e.selStart, e.selEnd = end, start
+	if e.selAnchor != -1 {
+		// Выделение всегда от якоря до текущей позиции
+		if e.curPos < e.selAnchor {
+			e.selStart = e.curPos
+			e.selEnd = e.selAnchor
 		} else {
-			e.selStart, e.selEnd = start, end
+			e.selStart = e.selAnchor
+			e.selEnd = e.curPos
 		}
+
 		if e.selStart == e.selEnd {
 			e.selStart = -1
+			e.selAnchor = -1
 		}
 	}
 }
@@ -188,5 +194,6 @@ func (e *Edit) DeleteBlock() {
 		e.text = append(e.text[:e.selStart], e.text[e.selEnd:]...)
 		e.curPos = e.selStart
 		e.selStart = -1
+		e.selAnchor = -1
 	}
 }
