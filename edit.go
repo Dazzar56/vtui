@@ -81,18 +81,37 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 
 	// Навигация со сбросом или установкой выделения
 	shift := (event.ControlKeyState & vtinput.ShiftPressed) != 0
+	ctrl := (event.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
 
 	switch event.VirtualKeyCode {
 	case vtinput.VK_LEFT:
 		if shift { e.beginSelection() } else { e.selStart = -1; e.selAnchor = -1 }
-		if e.curPos > 0 { e.curPos-- }
+		if ctrl {
+			for e.curPos > 0 && unicode.IsSpace(e.text[e.curPos-1]) {
+				e.curPos--
+			}
+			for e.curPos > 0 && !unicode.IsSpace(e.text[e.curPos-1]) {
+				e.curPos--
+			}
+		} else {
+			if e.curPos > 0 { e.curPos-- }
+		}
 		if shift { e.endSelection() }
 		e.clearFlag = false
 		return true
 
 	case vtinput.VK_RIGHT:
 		if shift { e.beginSelection() } else { e.selStart = -1; e.selAnchor = -1 }
-		if e.curPos < len(e.text) { e.curPos++ }
+		if ctrl {
+			for e.curPos < len(e.text) && !unicode.IsSpace(e.text[e.curPos]) {
+				e.curPos++
+			}
+			for e.curPos < len(e.text) && unicode.IsSpace(e.text[e.curPos]) {
+				e.curPos++
+			}
+		} else {
+			if e.curPos < len(e.text) { e.curPos++ }
+		}
 		if shift { e.endSelection() }
 		e.clearFlag = false
 		return true
