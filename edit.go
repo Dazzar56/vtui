@@ -26,7 +26,7 @@ func NewEdit(x, y, width int, defaultText string) *Edit {
 		text:           []rune(defaultText),
 		selStart:       -1,
 		selAnchor:      -1,
-		clearFlag:      true,
+		clearFlag:      false,
 		colorNormal:    SetRGBBoth(0, 0xFFFFFF, 0x000000), // Белый на черном
 		colorSelected:  SetRGBBoth(0, 0x000000, 0x00AAAA), // Черный на бирюзовом
 		colorUnchanged: SetRGBBoth(0, 0xAAAAAA, 0x000000), // Серый на черном
