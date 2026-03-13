@@ -1,8 +1,6 @@
 package vtui
 
 import (
-	"encoding/base64"
-	"os"
 	"unicode"
 
 	"github.com/unxed/vtinput"
@@ -241,8 +239,5 @@ func (e *Edit) copySelection() {
 	if e.selStart == -1 {
 		return
 	}
-	selectedText := string(e.text[e.selStart:e.selEnd])
-	b64 := base64.StdEncoding.EncodeToString([]byte(selectedText))
-	// ANSI OSC 52: \x1b]52;c;<base64>\x07
-	os.Stdout.WriteString("\x1b]52;c;" + b64 + "\x07")
+	SetClipboard(string(e.text[e.selStart:e.selEnd]))
 }
