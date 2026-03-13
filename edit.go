@@ -86,12 +86,24 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 
 	if ctrl && !shift {
 		switch event.VirtualKeyCode {
-		case vtinput.VK_C:
+		case vtinput.VK_C, vtinput.VK_INSERT:
 			if e.selStart != -1 {
 				e.copySelection()
 				return true
 			}
 		case vtinput.VK_X:
+			if e.selStart != -1 {
+				e.copySelection()
+				e.DeleteBlock()
+				e.clearFlag = false
+				return true
+			}
+		}
+	}
+
+	if shift && !ctrl {
+		switch event.VirtualKeyCode {
+		case vtinput.VK_DELETE:
 			if e.selStart != -1 {
 				e.copySelection()
 				e.DeleteBlock()
