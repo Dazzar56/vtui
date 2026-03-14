@@ -181,31 +181,33 @@ func (t *Table) ProcessKey(e *vtinput.InputEvent) bool {
 	case vtinput.VK_UP:
 		if t.SelectPos > 0 {
 			t.SelectPos--
-			t.ensureVisible()
+			t.EnsureVisible()
 			return true
 		}
 	case vtinput.VK_DOWN:
 		if t.SelectPos < len(t.Rows)-1 {
 			t.SelectPos++
-			t.ensureVisible()
+			t.EnsureVisible()
 			return true
 		}
 	case vtinput.VK_HOME:
 		t.SelectPos = 0
-		t.ensureVisible()
+		t.EnsureVisible()
 		return true
 	case vtinput.VK_END:
 		t.SelectPos = len(t.Rows) - 1
-		t.ensureVisible()
+		t.EnsureVisible()
 		return true
 	}
 	return false
 }
 
-func (t *Table) ensureVisible() {
+func (t *Table) EnsureVisible() {
 	headerOffset := 0
 	if t.ShowHeader { headerOffset = 1 }
 	height := (t.Y2 - t.Y1 + 1) - headerOffset
+
+	if height <= 0 { return }
 
 	if t.SelectPos < t.TopPos {
 		t.TopPos = t.SelectPos
