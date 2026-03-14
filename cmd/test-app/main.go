@@ -55,6 +55,7 @@ func main() {
 	x1 := (width - dlgWidth) / 2
 	y1 := (height - dlgHeight) / 2
 	dlg := vtui.NewDialog(x1, y1, x1+dlgWidth-1, y1+dlgHeight-1, " UI Components Test ")
+	dlg.SetHelp("MainDialogTopic")
 
 	// 1. Text and Edit
 	label := vtui.NewText(x1+2, y1+1, "Input field:", vtui.SetRGBFore(0, 0xFFFFFF))
@@ -80,6 +81,7 @@ func main() {
 
 	// 3. VMenu
 	menu := vtui.NewVMenu(" Operations ")
+	menu.SetHelp("MenuOperationsTopic")
 	menu.SetPosition(x1+2, y1+12, x1+30, y1+17)
 	menu.AddItem("Copy File")
 	menu.AddItem("Move File")

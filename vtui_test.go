@@ -136,6 +136,33 @@ func TestFrame_Rendering(t *testing.T) {
 	})
 }
 
+func TestScreenObject_HelpInheritance(t *testing.T) {
+	parent := &ScreenObject{}
+	child := &ScreenObject{owner: parent}
+
+	// 1. По умолчанию справки нет
+	if child.GetHelp() != "" {
+		t.Errorf("Expected empty help, got '%s'", child.GetHelp())
+	}
+
+	// 2. Устанавливаем справку родителю — ребенок должен её "подхватить"
+	parent.SetHelp("ParentTopic")
+	if child.GetHelp() != "ParentTopic" {
+		t.Errorf("Child should inherit parent help. Expected 'ParentTopic', got '%s'", child.GetHelp())
+	}
+
+	// 3. Устанавливаем ребенку свою справку — она должна перекрыть родительскую
+	child.SetHelp("ChildTopic")
+	if child.GetHelp() != "ChildTopic" {
+		t.Errorf("Child should override parent help. Expected 'ChildTopic', got '%s'", child.GetHelp())
+	}
+
+	// 4. Проверяем, что у родителя осталась своя справка
+	if parent.GetHelp() != "ParentTopic" {
+		t.Errorf("Parent help should remain unchanged. Expected 'ParentTopic', got '%s'", parent.GetHelp())
+	}
+}
+
 func TestEdit_Navigation(t *testing.T) {
 	e := NewEdit(0, 0, 20, "hello world")
 	e.curPos = 0 // Override default (which is at the end)

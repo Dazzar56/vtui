@@ -96,6 +96,9 @@ func (m *VMenu) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 
 	switch e.VirtualKeyCode {
+	case vtinput.VK_F1:
+		m.ShowHelp()
+		return true
 	case vtinput.VK_ESCAPE:
 		m.SetExitCode(-1)
 		return true

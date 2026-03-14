@@ -12,6 +12,7 @@ type ScreenObject struct {
 	focused        bool
 	canFocus       bool
 	lockCount      int
+	helpTopic      string
 }
 
 // SetPosition sets the object's coordinates.
@@ -114,4 +115,30 @@ func (so *ScreenObject) ProcessMouse(mouse *vtinput.InputEvent) bool {
 // ResizeConsole (stub) will be overridden to react to resizing.
 func (so *ScreenObject) ResizeConsole() {
 	// Default empty implementation.
+}// SetHelp sets the help topic for this object.
+func (so *ScreenObject) SetHelp(topic string) {
+	so.helpTopic = topic
+}
+
+// GetHelp returns the help topic for this object.
+// If the topic is empty, it searches in the owner object.
+func (so *ScreenObject) GetHelp() string {
+	if so.helpTopic != "" {
+		return so.helpTopic
+	}
+	if so.owner != nil {
+		return so.owner.GetHelp()
+	}
+	return ""
+}
+
+// ShowHelp triggers the help system for this object.
+// For now, it just logs the topic to the debug log.
+func (so *ScreenObject) ShowHelp() {
+	topic := so.GetHelp()
+	if topic == "" {
+		topic = "Contents" // Default topic
+	}
+	DebugLog("HELP SYSTEM: Requested topic '%s'", topic)
+	// In the future, this will push a HelpFrame to FrameManager.
 }

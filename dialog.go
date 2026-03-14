@@ -70,6 +70,9 @@ func (d *Dialog) ProcessKey(e *vtinput.InputEvent) bool {
 	DebugLog("Dialog.ProcessKey: VK=%X Char=%d FocusIdx=%d", e.VirtualKeyCode, e.Char, d.focusIdx)
 
 	switch e.VirtualKeyCode {
+	case vtinput.VK_F1:
+		d.ShowHelp()
+		return true
 	case vtinput.VK_ESCAPE, vtinput.VK_F10:
 		DebugLog("Dialog: Close signal")
 		d.SetExitCode(-1)
