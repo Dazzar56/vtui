@@ -162,6 +162,34 @@ func TestScreenObject_HelpInheritance(t *testing.T) {
 		t.Errorf("Parent help should remain unchanged. Expected 'ParentTopic', got '%s'", parent.GetHelp())
 	}
 }
+func TestKeyBar_Modifiers(t *testing.T) {
+	kb := NewKeyBar()
+	kb.Normal[0] = "Normal1"
+	kb.Shift[0] = "Shift1"
+	kb.Alt[0] = "Alt1"
+	kb.SetVisible(true)
+
+	scr := NewScreenBuf()
+	scr.AllocBuf(40, 1)
+	kb.SetPosition(0, 0, 39, 0)
+	SetDefaultPalette()
+
+	// 1. Test Normal state
+	kb.SetModifiers(false, false, false)
+	kb.Show(scr)
+	// Cell 0 is number '1', Cell 1 start of text 'N'
+	checkCell(t, scr, 1, 0, 'N', Palette[ColKeyBarText])
+
+	// 2. Test Shift state
+	kb.SetModifiers(true, false, false)
+	kb.Show(scr)
+	checkCell(t, scr, 1, 0, 'S', Palette[ColKeyBarText])
+
+	// 3. Test Alt state
+	kb.SetModifiers(false, false, true)
+	kb.Show(scr)
+	checkCell(t, scr, 1, 0, 'A', Palette[ColKeyBarText])
+}
 
 func TestEdit_Navigation(t *testing.T) {
 	e := NewEdit(0, 0, 20, "hello world")
