@@ -93,8 +93,7 @@ func (d *Dialog) ResizeConsole(w, h int) {
 	x1 := (w - dw) / 2
 	y1 := (h - dh) / 2
 	d.SetPosition(x1, y1, x1+dw-1, y1+dh-1)
-	// Important: We'd need to reposition all internal items here too,
-	// but for now we focus on the Panels.
+	// Important: We'd need to reposition all internal items here too.
 }
 
 func (d *Dialog) GetType() FrameType {
