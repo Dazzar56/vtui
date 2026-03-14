@@ -211,7 +211,7 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 			return false
 		}
 
-		DebugLog("    Edit: Typng char %d", event.Char)
+		DebugLog("    Edit: Typing char %d", event.Char)
 		if e.clearFlag {
 			e.text = []rune{}
 			e.curPos = 0

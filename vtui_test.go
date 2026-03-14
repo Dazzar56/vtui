@@ -140,24 +140,24 @@ func TestScreenObject_HelpInheritance(t *testing.T) {
 	parent := &ScreenObject{}
 	child := &ScreenObject{owner: parent}
 
-	// 1. По умолчанию справки нет
+	// 1. No help by default
 	if child.GetHelp() != "" {
 		t.Errorf("Expected empty help, got '%s'", child.GetHelp())
 	}
 
-	// 2. Устанавливаем справку родителю — ребенок должен её "подхватить"
+	// 2. Set help for parent — child should inherit it
 	parent.SetHelp("ParentTopic")
 	if child.GetHelp() != "ParentTopic" {
 		t.Errorf("Child should inherit parent help. Expected 'ParentTopic', got '%s'", child.GetHelp())
 	}
 
-	// 3. Устанавливаем ребенку свою справку — она должна перекрыть родительскую
+	// 3. Set own help for child — it should override parent's
 	child.SetHelp("ChildTopic")
 	if child.GetHelp() != "ChildTopic" {
 		t.Errorf("Child should override parent help. Expected 'ChildTopic', got '%s'", child.GetHelp())
 	}
 
-	// 4. Проверяем, что у родителя осталась своя справка
+	// 4. Check that parent's help remained unchanged
 	if parent.GetHelp() != "ParentTopic" {
 		t.Errorf("Parent help should remain unchanged. Expected 'ParentTopic', got '%s'", parent.GetHelp())
 	}
@@ -304,7 +304,7 @@ func TestEdit_Rendering(t *testing.T) {
 	e.Show(scr)
 	e.DisplayObject(scr)
 
-	// Обязательно инициализируем дефолтную палитру
+	// Must initialize default palette
 	SetDefaultPalette()
 
 	colNorm := Palette[ColDialogEdit]
@@ -338,35 +338,35 @@ func TestEdit_Overtype(t *testing.T) {
 }
 func TestEdit_Unicode_Selection(t *testing.T) {
 	SetDefaultPalette()
-	// "A世B" -> A(1), 世(2), B(1). Всего 4 ячейки.
+	// "A世B" -> A(1), 世(2), B(1). Total 4 cells.
 	e := NewEdit(0, 0, 10, "A世B")
 	e.curPos = 0
 
-	// Выделяем "A" (Shift + Right)
+	// Select "A" (Shift + Right)
 	e.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT, ControlKeyState: vtinput.ShiftPressed})
 	if e.selStart != 0 || e.selEnd != 1 {
 		t.Errorf("Expected selection [0:1], got [%d:%d]", e.selStart, e.selEnd)
 	}
 
-	// Выделяем "A世" (Еще раз Right)
+	// Select "A世" (Right again)
 	e.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT, ControlKeyState: vtinput.ShiftPressed})
 	if e.selStart != 0 || e.selEnd != 2 {
 		t.Errorf("Expected selection [0:2], got [%d:%d]", e.selStart, e.selEnd)
 	}
 
-	// Рендеринг в буфер 4 ячейки
+	// Rendering into 4-cell buffer
 	scr := NewScreenBuf()
 	scr.AllocBuf(4, 1)
 	e.SetPosition(0, 0, 3, 0)
 	e.Show(scr)
 
-	// 'A' (ячейка 0) и '世' (ячейки 1, 2) должны быть в Palette[ColDialogEditSelected]
+	// 'A' (cell 0) and '世' (cells 1, 2) should be in Palette[ColDialogEditSelected]
 	colSel := Palette[ColDialogEditSelected]
 	checkCell(t, scr, 0, 0, 'A', colSel)
 	checkCell(t, scr, 1, 0, '世', colSel)
 	checkCell(t, scr, 2, 0, WideCharFiller, colSel)
 
-	// 'B' (ячейка 3) не выделена
+	// 'B' (cell 3) is not selected
 	checkCell(t, scr, 3, 0, 'B', Palette[ColDialogEdit])
 }
 

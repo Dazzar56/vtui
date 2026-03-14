@@ -258,4 +258,4 @@ func (m *VMenu) SetFocus(f bool) {
 	m.focused = f
 }
 
-// `RunesToCharInfo` и `StringToCharInfo` теперь находятся в `runewidth.go`
+// `RunesToCharInfo` and `StringToCharInfo` are now in `runewidth.go`

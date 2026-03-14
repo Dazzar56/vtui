@@ -139,8 +139,8 @@ func (d *Dialog) nextFocus() {
 func (d *Dialog) ProcessMouse(e *vtinput.InputEvent) bool {
 	mx, my := int(e.MouseX), int(e.MouseY)
 
-	// We check whether the click hit any element of the dialog.
-	// We iterate over the elements in reverse order (Z-order: top first)
+	// Check whether the click hit any element of the dialog.
+	// Iterate over the elements in reverse order (Z-order: top first)
 	for i := len(d.items) - 1; i >= 0; i-- {
 		item := d.items[i]
 		x1, y1, x2, y2 := item.GetPosition()
