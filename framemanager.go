@@ -45,6 +45,8 @@ func (fm *frameManager) Init(scr *ScreenBuf) {
 	fm.scr = scr
 	fm.frames = make([]Frame, 0, 10)
 	SetDefaultPalette()
+	// Hide cursor globally at start
+	fm.scr.SetCursorVisible(false)
 }
 
 // Push adds a new frame to the top of the stack.
@@ -59,8 +61,13 @@ func (fm *frameManager) Pop() {
 	}
 }
 
-// Run starts the main application event loop. It does not return.
+// Run starts the main application event loop.
 func (fm *frameManager) Run() {
+	// Restore cursor visibility on exit
+	defer func() {
+		fm.scr.SetCursorVisible(true)
+		fm.scr.Flush()
+	}()
 	// Configure channel for receiving vtinput events
 	reader := vtinput.NewReader(os.Stdin)
 	eventChan := make(chan *vtinput.InputEvent, 1)
