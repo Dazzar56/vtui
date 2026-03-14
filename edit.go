@@ -97,6 +97,13 @@ func (e *Edit) SetFocus(f bool) {
 func (e *Edit) GetText() string {
 	return string(e.text)
 }
+// SetText replaces the content of the edit control.
+func (e *Edit) SetText(text string) {
+	e.text = []rune(text)
+	e.curPos = len(e.text)
+	e.selStart = -1
+	e.selAnchor = -1
+}
 
 func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 	if !event.KeyDown { return false }
