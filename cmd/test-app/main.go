@@ -69,10 +69,11 @@ func main() {
 	table := vtui.NewTable(x1+2, y1+3, 56, 8, tableCols)
 	table.SetRows([]vtui.TableRow{
 		fileRow{"kernel.go", "4 KB", "2024-03-10"},
-		fileRow{"ui_table.go", "12 KB", "2024-03-11"},
+		fileRow{"🚀 rocket.exe", "12 KB", "2024-03-11"},
+		fileRow{"日本語ファイル.txt", "2 KB", "2024-03-12"},
+		fileRow{"ä_accent_test.txt", "1 KB", "2024-03-01"}, // 'ä' is often a combining char
 		fileRow{"main.go", "2 KB", "2024-03-12"},
 		fileRow{"README.md", "1 KB", "2024-03-01"},
-		fileRow{"go.mod", "128 B", "2024-01-01"},
 		fileRow{"LICENSE", "1 KB", "2024-01-01"},
 		fileRow{"very_long_filename_test.txt", "0 B", "2024-03-13"},
 	})

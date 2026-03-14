@@ -1,6 +1,7 @@
 package vtui
 import (
 	"github.com/unxed/vtinput"
+	"github.com/mattn/go-runewidth"
 )
 
 // Button represents an interactive button.
@@ -17,7 +18,8 @@ func NewButton(x, y int, text string) *Button {
 		text: fullText,
 	}
 	b.canFocus = true
-	b.SetPosition(x, y, x+len([]rune(fullText))-1, y)
+	vLen := runewidth.StringWidth(fullText)
+	b.SetPosition(x, y, x+vLen-1, y)
 	return b
 }
 

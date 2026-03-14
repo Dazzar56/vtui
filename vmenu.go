@@ -2,6 +2,8 @@ package vtui
 
 import (
 	"github.com/unxed/vtinput"
+	"github.com/mattn/go-runewidth"
+	"strings"
 )
 
 // MenuItem represents a single menu item.
@@ -232,13 +234,18 @@ func (m *VMenu) DisplayObject(scr *ScreenBuf) {
 				textRunes[j] = ' '
 			}
 
-			contentRunes := []rune(item.Text)
-			if len(contentRunes) > interiorWidth-2 {
-				contentRunes = contentRunes[:interiorWidth-2]
-			}
-			copy(textRunes[1:], contentRunes)
+			// Use runewidth for proper padding and truncation
+			contentStr := runewidth.Truncate(item.Text, interiorWidth-2, "")
+			vLen := runewidth.StringWidth(contentStr)
 
-			scr.Write(m.X1+1, currY, RunesToCharInfo(textRunes, attr))
+			// Build the string: " " + content + padding
+			padding := interiorWidth - 1 - vLen
+			if padding < 0 {
+				padding = 0
+			}
+
+			finalStr := " " + contentStr + strings.Repeat(" ", padding)
+			scr.Write(m.X1+1, currY, StringToCharInfo(finalStr, attr))
 		}
 	}
 }
@@ -248,14 +255,4 @@ func (m *VMenu) SetFocus(f bool) {
 	m.focused = f
 }
 
-func RunesToCharInfo(runes []rune, attr uint64) []CharInfo {
-	res := make([]CharInfo, len(runes))
-	for i, r := range runes {
-		res[i] = CharInfo{Char: uint64(r), Attributes: attr}
-	}
-	return res
-}
-
-func StringToCharInfo(s string, attr uint64) []CharInfo {
-	return RunesToCharInfo([]rune(s), attr)
-}
+// `RunesToCharInfo` и `StringToCharInfo` теперь находятся в `runewidth.go`

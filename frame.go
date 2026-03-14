@@ -2,13 +2,15 @@ package vtui
 
 import (
 	"strings"
+
+	"github.com/mattn/go-runewidth"
 )
 
 // BorderedFrame represents a frame container that can have a title.
 // It embeds ScreenObject for position and visibility management.
 type BorderedFrame struct {
 	ScreenObject
-	title      string
+	title         string
 	boxType       int
 	ColorBoxIdx   int
 	ColorTitleIdx int
@@ -49,9 +51,6 @@ func (f *BorderedFrame) DisplayObject(scr *ScreenBuf) {
 	sym := getBoxSymbols(f.boxType)
 	w := f.X2 - f.X1 + 1
 
-	// Clearing background inside the frame (optional but useful)
-	// scr.FillRect(f.X1+1, f.Y1+1, f.X2-1, f.Y2-1, ' ', f.borderColor)
-
 	// Top and bottom borders
 	var topBorder, bottomBorder strings.Builder
 	topBorder.WriteRune(sym[bsTL])
@@ -65,29 +64,30 @@ func (f *BorderedFrame) DisplayObject(scr *ScreenBuf) {
 
 	// Rendering the top border with title
 	topRunes := []rune(topBorder.String())
-	titleRunes := []rune(f.title)
-
 	colBox := Palette[f.ColorBoxIdx]
 	colTitle := Palette[f.ColorTitleIdx]
-
-	if len(titleRunes) > 0 {
-		if len(titleRunes) > w-4 {
-			titleRunes = titleRunes[:w-4]
+	
+	vLen := runewidth.StringWidth(f.title)
+	if vLen > 0 {
+		titleStr := f.title
+		if vLen > w-4 {
+			titleStr = runewidth.Truncate(titleStr, w-4, "")
+			vLen = runewidth.StringWidth(titleStr)
 		}
-		start := (w - len(titleRunes)) / 2
-		// Draw frame and title in a single line for coordinate stability
-		titleStr := " " + string(titleRunes) + " "
-		fullTopLine := topRunes
-		copy(fullTopLine[start-1:], []rune(titleStr))
 
-		// Write the entire line with the border color
-		scr.Write(f.X1, f.Y1, RunesToCharInfo(fullTopLine, colBox))
-		// Overlay the color only on the title text
-		scr.Write(f.X1+start-1, f.Y1, RunesToCharInfo([]rune(titleStr), colTitle))
+		titleStr = " " + titleStr + " "
+		vLen += 2 // spaces
+
+		start := (w - vLen) / 2
+
+		// First draw full top border
+		scr.Write(f.X1, f.Y1, RunesToCharInfo(topRunes, colBox))
+		// Then overwrite center with title
+		scr.Write(f.X1+start, f.Y1, StringToCharInfo(titleStr, colTitle))
 	} else {
 		scr.Write(f.X1, f.Y1, RunesToCharInfo(topRunes, colBox))
 	}
-	scr.Write(f.X1, f.Y2, strToCharInfo(bottomBorder.String(), colBox, 0, ""))
+	scr.Write(f.X1, f.Y2, StringToCharInfo(bottomBorder.String(), colBox))
 
 	// Vertical lines
 	vertLine := []CharInfo{{Char: uint64(sym[bsV]), Attributes: colBox}}
@@ -95,26 +95,4 @@ func (f *BorderedFrame) DisplayObject(scr *ScreenBuf) {
 		scr.Write(f.X1, y, vertLine)
 		scr.Write(f.X2, y, vertLine)
 	}
-}
-
-// Helper function to convert a string to []CharInfo considering the title color.
-func strToCharInfo(str string, borderColor, titleColor uint64, title string) []CharInfo {
-	runes := []rune(str)
-	info := make([]CharInfo, len(runes))
-
-	titleStart := -1
-	if title != "" {
-		titleStart = strings.Index(str, title)
-	}
-
-	for i, r := range runes {
-		isTitle := titleStart != -1 && i >= titleStart && i < titleStart+len(title)
-		info[i].Char = uint64(r)
-		if isTitle {
-			info[i].Attributes = titleColor
-		} else {
-			info[i].Attributes = borderColor
-		}
-	}
-	return info
 }

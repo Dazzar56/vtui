@@ -4,6 +4,7 @@ import (
 	"unicode"
 
 	"github.com/unxed/vtinput"
+	"github.com/mattn/go-runewidth"
 )
 
 type Edit struct {
@@ -33,41 +34,58 @@ func NewEdit(x, y, width int, defaultText string) *Edit {
 
 func (e *Edit) Show(scr *ScreenBuf) {
 	e.ScreenObject.Show(scr)
+
+	// Ensure cursor is visible before display
+	visibleWidth := e.X2 - e.X1 + 1
+	if e.curPos < e.leftPos {
+		e.leftPos = e.curPos
+	}
+	for runewidth.StringWidth(string(e.text[e.leftPos:e.curPos])) >= visibleWidth {
+		e.leftPos++
+	}
+
 	e.DisplayObject(scr)
+
 	if e.IsFocused() {
 		scr.SetCursorVisible(true)
-		scr.SetCursorPos(e.X1+(e.curPos-e.leftPos), e.Y1)
+		headText := string(e.text[e.leftPos:e.curPos])
+		vOffset := runewidth.StringWidth(headText)
+		scr.SetCursorPos(e.X1+vOffset, e.Y1)
+	} else {
+		scr.SetCursorVisible(false)
 	}
 }
 
 func (e *Edit) DisplayObject(scr *ScreenBuf) {
 	if !e.IsVisible() { return }
+	visibleWidth := e.X2 - e.X1 + 1
 
-	width := e.X2 - e.X1 + 1
-	// Automatic LeftPos adjustment (scrolling)
-	if e.curPos < e.leftPos {
-		e.leftPos = e.curPos
-	} else if e.curPos-e.leftPos >= width {
-		e.leftPos = e.curPos - width + 1
+	// Pre-fill the entire line with background to avoid artifacts
+	defaultAttr := Palette[ColDialogEdit]
+	if e.clearFlag {
+		defaultAttr = Palette[ColDialogEditUnchanged]
 	}
+	scr.FillRect(e.X1, e.Y1, e.X2, e.Y1, ' ', defaultAttr)
 
-	for i := 0; i < width; i++ {
-		strIdx := i + e.leftPos
-		char := ' '
-		attr := Palette[ColDialogEdit]
+	currX := 0
+	for i := e.leftPos; i < len(e.text); i++ {
+		r := e.text[i]
+		w := runewidth.RuneWidth(r)
 
-		if e.clearFlag {
-			attr = Palette[ColDialogEditUnchanged]
+		// Stop if next character doesn't fit visually
+		if currX + w > visibleWidth {
+			break
 		}
 
-		if strIdx < len(e.text) {
-			char = e.text[strIdx]
-			// Check selection
-			if e.selStart != -1 && strIdx >= e.selStart && strIdx < e.selEnd {
-				attr = Palette[ColDialogEditSelected]
-			}
+		attr := defaultAttr
+		if e.selStart != -1 && i >= e.selStart && i < e.selEnd {
+			attr = Palette[ColDialogEditSelected]
 		}
-		scr.Write(e.X1+i, e.Y1, []CharInfo{{Char: uint64(char), Attributes: attr}})
+
+		// Write rune (handles WideCharFiller automatically)
+		cells := StringToCharInfo(string(r), attr)
+		scr.Write(e.X1 + currX, e.Y1, cells)
+		currX += w
 	}
 }
 

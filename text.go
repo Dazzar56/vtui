@@ -1,5 +1,9 @@
 package vtui
 
+import (
+	"github.com/mattn/go-runewidth"
+)
+
 // Text represents a simple static text label.
 type Text struct {
 	ScreenObject
@@ -9,7 +13,8 @@ type Text struct {
 
 func NewText(x, y int, content string, color uint64) *Text {
 	t := &Text{content: content, color: color}
-	t.SetPosition(x, y, x+len([]rune(content))-1, y)
+	vLen := runewidth.StringWidth(content)
+	t.SetPosition(x, y, x+vLen-1, y)
 	return t
 }
 

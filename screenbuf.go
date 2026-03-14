@@ -288,11 +288,19 @@ func (s *ScreenBuf) Flush() {
 			builder.WriteString(attributesToANSI(attr, lastAttr))
 			lastAttr = attr
 
-			char := rune(s.buf[idx].Char)
-			if char == 0 {
+			charRaw := s.buf[idx].Char
+
+			if charRaw == WideCharFiller {
+				// The terminal already advanced the cursor when drawing the left half.
+				// We just update our internal tracker.
+				lastX, lastY = x, y
+				continue
+			}
+
+			if charRaw == 0 {
 				builder.WriteByte(' ')
 			} else {
-				builder.WriteRune(char)
+				builder.WriteRune(rune(charRaw))
 			}
 
 			lastX, lastY = x, y

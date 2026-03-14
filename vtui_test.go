@@ -7,15 +7,19 @@ import (
 )
 
 // checkCell is a helper to verify the character and attributes at a specific coordinate in the ScreenBuf.
-func checkCell(t *testing.T, scr *ScreenBuf, x, y int, expectedChar rune, expectedAttr uint64) {
+func checkCell(t *testing.T, scr *ScreenBuf, x, y int, expectedChar uint64, expectedAttr uint64) {
 	t.Helper()
 	if x < 0 || y < 0 || x >= scr.width || y >= scr.height {
 		t.Errorf("checkCell coordinates (%d, %d) are out of bounds for screen size (%d, %d)", x, y, scr.width, scr.height)
 		return
 	}
 	cell := scr.buf[y*scr.width+x]
-	if rune(cell.Char) != expectedChar {
-		t.Errorf("at (%d, %d): expected char '%c' (U+%04X), got '%c' (U+%04X)", x, y, expectedChar, expectedChar, rune(cell.Char), cell.Char)
+	if cell.Char != expectedChar {
+		if expectedChar == WideCharFiller || cell.Char == WideCharFiller {
+			t.Errorf("at (%d, %d): expected char %X, got %X", x, y, expectedChar, cell.Char)
+		} else {
+			t.Errorf("at (%d, %d): expected char '%c' (U+%04X), got '%c' (U+%04X)", x, y, rune(expectedChar), expectedChar, rune(cell.Char), cell.Char)
+		}
 	}
 	if cell.Attributes != expectedAttr {
 		t.Errorf("at (%d, %d): expected attr %X, got %X", x, y, expectedAttr, cell.Attributes)
@@ -60,12 +64,12 @@ func TestScreenBuf_FillRect(t *testing.T) {
 	scr.FillRect(5, 5, 15, 8, fillChar, attr)
 
 	// Check corners
-	checkCell(t, scr, 5, 5, fillChar, attr)
-	checkCell(t, scr, 15, 5, fillChar, attr)
-	checkCell(t, scr, 5, 8, fillChar, attr)
-	checkCell(t, scr, 15, 8, fillChar, attr)
+	checkCell(t, scr, 5, 5, uint64(fillChar), attr)
+	checkCell(t, scr, 15, 5, uint64(fillChar), attr)
+	checkCell(t, scr, 5, 8, uint64(fillChar), attr)
+	checkCell(t, scr, 15, 8, uint64(fillChar), attr)
 	// Check center
-	checkCell(t, scr, 10, 6, fillChar, attr)
+	checkCell(t, scr, 10, 6, uint64(fillChar), attr)
 	// Check outside
 	checkCell(t, scr, 4, 5, 0, 0)
 	checkCell(t, scr, 16, 8, 0, 0)
@@ -305,6 +309,40 @@ func TestEdit_Overtype(t *testing.T) {
 		t.Errorf("Insert: expected 'XYbc', got '%s'", string(e.text))
 	}
 }
+func TestEdit_Unicode_Selection(t *testing.T) {
+	SetDefaultPalette()
+	// "A世B" -> A(1), 世(2), B(1). Всего 4 ячейки.
+	e := NewEdit(0, 0, 10, "A世B")
+	e.curPos = 0
+
+	// Выделяем "A" (Shift + Right)
+	e.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT, ControlKeyState: vtinput.ShiftPressed})
+	if e.selStart != 0 || e.selEnd != 1 {
+		t.Errorf("Expected selection [0:1], got [%d:%d]", e.selStart, e.selEnd)
+	}
+
+	// Выделяем "A世" (Еще раз Right)
+	e.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT, ControlKeyState: vtinput.ShiftPressed})
+	if e.selStart != 0 || e.selEnd != 2 {
+		t.Errorf("Expected selection [0:2], got [%d:%d]", e.selStart, e.selEnd)
+	}
+
+	// Рендеринг в буфер 4 ячейки
+	scr := NewScreenBuf()
+	scr.AllocBuf(4, 1)
+	e.SetPosition(0, 0, 3, 0)
+	e.Show(scr)
+
+	// 'A' (ячейка 0) и '世' (ячейки 1, 2) должны быть в Palette[ColDialogEditSelected]
+	colSel := Palette[ColDialogEditSelected]
+	checkCell(t, scr, 0, 0, 'A', colSel)
+	checkCell(t, scr, 1, 0, '世', colSel)
+	checkCell(t, scr, 2, 0, WideCharFiller, colSel)
+
+	// 'B' (ячейка 3) не выделена
+	checkCell(t, scr, 3, 0, 'B', Palette[ColDialogEdit])
+}
+
 func TestDialog_FocusCycle(t *testing.T) {
 	d := NewDialog(0, 0, 20, 10, "Test")
 	b1 := NewButton(1, 1, "B1")

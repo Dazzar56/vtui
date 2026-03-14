@@ -85,7 +85,7 @@ func TestTable_Rendering(t *testing.T) {
 	checkCell(t, scr, 1, 0, '1', Palette[ColPanelColumnTitle])
 
 	// Проверяем разделитель в шапке
-	checkCell(t, scr, 4, 0, boxSymbols[bsV], Palette[ColPanelBox])
+	checkCell(t, scr, 4, 0, uint64(boxSymbols[bsV]), Palette[ColPanelBox])
 
 	// Проверяем первую строку данных
 	// Колонка 1 (Left aligned): "A   "
@@ -93,7 +93,7 @@ func TestTable_Rendering(t *testing.T) {
 	checkCell(t, scr, 1, 1, ' ', Palette[ColPanelCursor]) // Padding
 
 	// Разделитель в данных
-	checkCell(t, scr, 4, 1, boxSymbols[bsV], Palette[ColPanelBox])
+	checkCell(t, scr, 4, 1, uint64(boxSymbols[bsV]), Palette[ColPanelBox])
 
 	// Колонка 2 (Right aligned): "   B"
 	checkCell(t, scr, 5, 1, ' ', Palette[ColPanelCursor]) // Padding

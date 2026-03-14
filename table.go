@@ -2,6 +2,7 @@ package vtui
 
 import (
 	"github.com/unxed/vtinput"
+	"github.com/mattn/go-runewidth"
 	"strings"
 )
 
@@ -150,12 +151,16 @@ func (t *Table) drawSeparators(scr *ScreenBuf) {
 }
 
 func (t *Table) formatCell(text string, width int, align Alignment) string {
-	runes := []rune(text)
-	if len(runes) > width {
-		return string(runes[:width])
+	// 1. Truncate if visual width exceeds column width
+	text = runewidth.Truncate(text, width, "")
+
+	// 2. Calculate visual space remaining
+	vLen := runewidth.StringWidth(text)
+	if vLen >= width {
+		return text
 	}
 
-	space := width - len(runes)
+	space := width - vLen
 	switch align {
 	case AlignLeft:
 		return text + strings.Repeat(" ", space)
