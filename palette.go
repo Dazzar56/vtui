@@ -39,6 +39,11 @@ const (
 	ColPanelBox
 	ColPanelScrollbar
 
+	ColKeyBarNum
+	ColKeyBarText
+	ColCommandLinePrompt
+	ColCommandLineText
+
 	// Helper for array size
 	LastPaletteColor
 )
@@ -89,4 +94,12 @@ func SetDefaultPalette() {
 
 	// Background
 	Palette[ColCommandLineUserScreen] = SetRGBBoth(0, lightGray, black)
+
+	// KeyBar (Gray numbers on Black, Cyan text on Black)
+	Palette[ColKeyBarNum] = SetRGBBoth(0, darkGray, black)
+	Palette[ColKeyBarText] = SetRGBBoth(0, black, darkGray)
+
+	// CommandLine (White on Black)
+	Palette[ColCommandLinePrompt] = SetRGBBoth(0, 0x00FFFF, black)
+	Palette[ColCommandLineText] = SetRGBBoth(0, white, black)
 }
