@@ -22,6 +22,8 @@ type VMenu struct {
 	exitCode  int
 	OnSelect  func(int)
 	OnClose   func()
+	OnLeft    func()
+	OnRight   func()
 	selectPos int // Selected item index
 	topPos    int // Index of the first visible item (for scrolling)
 
@@ -101,6 +103,18 @@ func (m *VMenu) ProcessKey(e *vtinput.InputEvent) bool {
 	case vtinput.VK_F1:
 		m.ShowHelp()
 		return true
+	case vtinput.VK_LEFT:
+		if m.OnLeft != nil {
+			m.OnLeft()
+			m.SetExitCode(-1)
+			return true
+		}
+	case vtinput.VK_RIGHT:
+		if m.OnRight != nil {
+			m.OnRight()
+			m.SetExitCode(-1)
+			return true
+		}
 	case vtinput.VK_ESCAPE:
 		m.SetExitCode(-1)
 		return true

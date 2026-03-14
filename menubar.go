@@ -41,7 +41,8 @@ func (mb *MenuBar) DisplayObject(scr *ScreenBuf) {
 	currX := mb.X1 + 2
 	for i, item := range mb.Items {
 		itemAttr := attr
-		if mb.Active && i == mb.SelectPos {
+		// Highlight the selected item always (matching far2l behavior)
+		if i == mb.SelectPos {
 			itemAttr = Palette[ColMenuBarSelected]
 		}
 
