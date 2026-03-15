@@ -21,6 +21,7 @@ const (
 	CommonLvbStrikeout  uint64 = 0x2000 // Strikeout.
 	CommonLvbReverse    uint64 = 0x4000 // Reverse fore/back ground attribute.
 	CommonLvbUnderscore uint64 = 0x8000 // Underscore.
+	ForegroundDim       uint64 = 0x1000 // Extra flag for dim text (bit 12 is free in far2l)
 
 	// Masks for basic 16-color attributes
 	ForegroundRGB = ForegroundRed | ForegroundGreen | ForegroundBlue

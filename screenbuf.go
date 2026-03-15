@@ -3,6 +3,7 @@ package vtui
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -177,6 +178,48 @@ func rgb(c uint32) (r, g, b byte) {
 	return byte((c >> 16) & 0xFF), byte((c >> 8) & 0xFF), byte(c & 0xFF)
 }
 
+var winToAnsi = []int{0, 4, 2, 6, 1, 5, 3, 7}
+
+func colorToANSI(isBg bool, attr uint64) string {
+	flag := ForegroundTrueColor
+	rgbVal := GetRGBFore(attr)
+	cmd := 38
+	if isBg {
+		flag = BackgroundTrueColor
+		rgbVal = GetRGBBack(attr)
+		cmd = 48
+	}
+
+	if attr&flag != 0 {
+		// Optimization: Check if RGB matches 256-color palette
+		if idx, ok := rgbToXTerm[rgbVal]; ok {
+			return fmt.Sprintf("%d;5;%d", cmd, idx)
+		}
+		r, g, b := rgb(rgbVal)
+		return fmt.Sprintf("%d;2;%d;%d;%d", cmd, r, g, b)
+	}
+
+	// Standard 16 colors (Win32 to ANSI mapping)
+	colorPart := uint8(attr & 0x7)
+	if isBg {
+		colorPart = uint8((attr >> 4) & 0x7)
+	}
+	ansiColor := winToAnsi[colorPart]
+
+	offset := 30
+	if isBg {
+		offset = 40
+	}
+	if attr&ForegroundIntensity != 0 && !isBg {
+		offset += 60 // 90-97 for bright FG
+	}
+	if attr&BackgroundIntensity != 0 && isBg {
+		offset += 60 // 100-107 for bright BG
+	}
+
+	return strconv.Itoa(offset + ansiColor)
+}
+
 // attributesToANSI generates the minimum ANSI sequence to transition from lastAttr to attr.
 func attributesToANSI(attr, lastAttr uint64) string {
 	if attr == lastAttr {
@@ -185,56 +228,31 @@ func attributesToANSI(attr, lastAttr uint64) string {
 
 	var params []string
 
-	// 1. Checking for flag changes (underscore, inversion)
-	const simpleFlags = CommonLvbUnderscore | CommonLvbReverse
-	if (attr & simpleFlags) != (lastAttr & simpleFlags) {
+	// Check if we need a full reset (if any flag was removed)
+	// IMPORTANT: Mask with 0xFFFF to avoid looking at TrueColor bits (16-63)
+	const flagsMask = (ForegroundIntensity | ForegroundDim | CommonLvbUnderscore | CommonLvbReverse | CommonLvbStrikeout) & 0xFFFF
+	if (lastAttr&flagsMask) & ^(attr&flagsMask) != 0 {
 		params = append(params, "0")
-		if attr&CommonLvbUnderscore != 0 { params = append(params, "4") }
-		if attr&CommonLvbReverse != 0 { params = append(params, "7") }
+		lastAttr = 0 // After reset, compare with zero state
 	}
 
-	// 2. Text color (Foreground)
-	fgChanged := false
-	if (attr & ForegroundTrueColor) != (lastAttr & ForegroundTrueColor) {
-		fgChanged = true
-	} else if attr&ForegroundTrueColor != 0 {
-		if GetRGBFore(attr) != GetRGBFore(lastAttr) { fgChanged = true }
-	} else if (attr & (ForegroundRGB | ForegroundIntensity)) != (lastAttr & (ForegroundRGB | ForegroundIntensity)) {
-		fgChanged = true
+	// 1. Style Flags
+	if attr&ForegroundIntensity != 0 && lastAttr&ForegroundIntensity == 0 { params = append(params, "1") }
+	if attr&ForegroundDim != 0 && lastAttr&ForegroundDim == 0 { params = append(params, "2") }
+	if attr&CommonLvbUnderscore != 0 && lastAttr&CommonLvbUnderscore == 0 { params = append(params, "4") }
+	if attr&CommonLvbReverse != 0 && lastAttr&CommonLvbReverse == 0 { params = append(params, "7") }
+	if attr&CommonLvbStrikeout != 0 && lastAttr&CommonLvbStrikeout == 0 { params = append(params, "9") }
+
+	// 2. Foreground Color
+	fgMask := ForegroundTrueColor | ForegroundIntensity | 0x7
+	if attr&fgMask != lastAttr&fgMask || (attr&ForegroundTrueColor != 0 && GetRGBFore(attr) != GetRGBFore(lastAttr)) {
+		params = append(params, colorToANSI(false, attr))
 	}
 
-	if fgChanged {
-		if attr&ForegroundTrueColor != 0 {
-			r, g, b := rgb(GetRGBFore(attr))
-			params = append(params, fmt.Sprintf("38;2;%d;%d;%d", r, g, b))
-		} else {
-			fg := attr & 0b1111
-			if fg&ForegroundIntensity != 0 {
-				params = append(params, "1", ansiFg[fg&0b0111])
-			} else {
-				params = append(params, "22", ansiFg[fg])
-			}
-		}
-	}
-
-	// 3. Background
-	bgChanged := false
-	if (attr & BackgroundTrueColor) != (lastAttr & BackgroundTrueColor) {
-		bgChanged = true
-	} else if attr&BackgroundTrueColor != 0 {
-		if GetRGBBack(attr) != GetRGBBack(lastAttr) { bgChanged = true }
-	} else if (attr & (BackgroundRGB | BackgroundIntensity)) != (lastAttr & (BackgroundRGB | BackgroundIntensity)) {
-		bgChanged = true
-	}
-
-	if bgChanged {
-		if attr&BackgroundTrueColor != 0 {
-			r, g, b := rgb(GetRGBBack(attr))
-			params = append(params, fmt.Sprintf("48;2;%d;%d;%d", r, g, b))
-		} else {
-			bg := (attr >> 4) & 0b1111
-			params = append(params, ansiBg[bg&0b0111])
-		}
+	// 3. Background Color
+	bgMask := BackgroundTrueColor | BackgroundIntensity | (0x7 << 4)
+	if attr&bgMask != lastAttr&bgMask || (attr&BackgroundTrueColor != 0 && GetRGBBack(attr) != GetRGBBack(lastAttr)) {
+		params = append(params, colorToANSI(true, attr))
 	}
 
 	if len(params) == 0 {
