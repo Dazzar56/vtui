@@ -17,14 +17,20 @@ type Edit struct {
 	selAnchor      int  // Position where selection started
 	overtype       bool
 	clearFlag      bool // If true, first input will clear the text
+	ColorTextIdx      int
+	ColorUnchangedIdx int
+	ColorSelectedIdx  int
 }
 
 func NewEdit(x, y, width int, defaultText string) *Edit {
 	e := &Edit{
-		text:      []rune(defaultText),
-		selStart:  -1,
-		selAnchor: -1,
-		clearFlag: false,
+		text:              []rune(defaultText),
+		selStart:          -1,
+		selAnchor:         -1,
+		clearFlag:         false,
+		ColorTextIdx:      ColDialogEdit,
+		ColorUnchangedIdx: ColDialogEditUnchanged,
+		ColorSelectedIdx:  ColDialogEditSelected,
 	}
 	e.canFocus = true
 	e.curPos = len(e.text)
@@ -61,9 +67,9 @@ func (e *Edit) DisplayObject(scr *ScreenBuf) {
 	visibleWidth := e.X2 - e.X1 + 1
 
 	// Pre-fill the entire line with background to avoid artifacts
-	defaultAttr := Palette[ColDialogEdit]
+	defaultAttr := Palette[e.ColorTextIdx]
 	if e.clearFlag {
-		defaultAttr = Palette[ColDialogEditUnchanged]
+		defaultAttr = Palette[e.ColorUnchangedIdx]
 	}
 	scr.FillRect(e.X1, e.Y1, e.X2, e.Y1, ' ', defaultAttr)
 
@@ -79,7 +85,7 @@ func (e *Edit) DisplayObject(scr *ScreenBuf) {
 
 		attr := defaultAttr
 		if e.selStart != -1 && i >= e.selStart && i < e.selEnd {
-			attr = Palette[ColDialogEditSelected]
+			attr = Palette[e.ColorSelectedIdx]
 		}
 
 		// Write rune (handles WideCharFiller automatically)
