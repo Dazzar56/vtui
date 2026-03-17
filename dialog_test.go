@@ -100,3 +100,35 @@ func TestDialog_Shadow(t *testing.T) {
 	checkCell(t, scr, 9, 8, ' ', shAttr)
 	checkCell(t, scr, 8, 3, ' ', shAttr) // Вертикальная часть тени
 }
+func TestDialog_MouseFocus(t *testing.T) {
+	d := NewDialog(0, 0, 20, 10, "Test")
+	b1 := NewButton(1, 1, "B1")
+	b2 := NewButton(1, 2, "B2")
+	d.AddItem(b1)
+	d.AddItem(b2)
+
+	// Initially, b1 (index 0) has focus
+	if d.focusIdx != 0 {
+		t.Fatalf("Initial focus should be on b1 (0), got %d", d.focusIdx)
+	}
+
+	// Simulate a click on b2 at (1, 2)
+	d.ProcessMouse(&vtinput.InputEvent{
+		Type:        vtinput.MouseEventType,
+		KeyDown:     true,
+		MouseX:      1,
+		MouseY:      2,
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+	})
+
+	// Focus should now be on b2 (index 1)
+	if d.focusIdx != 1 {
+		t.Errorf("Mouse click failed to change focus: expected 1, got %d", d.focusIdx)
+	}
+	if !b2.IsFocused() {
+		t.Error("b2 should be focused after click")
+	}
+	if b1.IsFocused() {
+		t.Error("b1 should lose focus after click on b2")
+	}
+}
