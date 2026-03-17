@@ -33,6 +33,19 @@ func TestAttributesToANSI(t *testing.T) {
 		t.Errorf("Reset expected, got %q", gotReset)
 	}
 }
+func TestScreenBuf_ColorTransitions(t *testing.T) {
+	// Проверка перехода от TrueColor (бит 8-15) к обычной 16-цветовой палитре
+	tcAttr := SetRGBFore(0, 0xFF0000)
+	palAttr := uint64(ForegroundBlue) // Обычный синий
+
+	got := attributesToANSI(palAttr, tcAttr)
+
+	// Так как мы сменили тип цвета (TrueColor -> Palette), должен сработать сброс или
+	// явная установка кода 34 (Blue)
+	if !contains(got, "34") {
+		t.Errorf("Transition to palette failed, ANSI: %q", got)
+	}
+}
 
 func TestAttributesToANSI_Styles(t *testing.T) {
 	// Bold + Strikeout
