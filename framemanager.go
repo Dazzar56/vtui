@@ -33,9 +33,11 @@ type Frame interface {
 
 // frameManager manages the stack of frames and the main application loop.
 type frameManager struct {
-	frames []Frame
-	scr    *ScreenBuf
-	RedrawChan chan struct{}
+	frames         []Frame
+	scr            *ScreenBuf
+	RedrawChan     chan struct{}
+	EventFilter    func(*vtinput.InputEvent) bool
+	injectedEvents []*vtinput.InputEvent
 }
 
 // FrameManager is the global instance of the frame manager.
@@ -46,6 +48,7 @@ func (fm *frameManager) Init(scr *ScreenBuf) {
 	fm.scr = scr
 	fm.frames = make([]Frame, 0, 10)
 	fm.RedrawChan = make(chan struct{}, 1)
+	fm.injectedEvents = make([]*vtinput.InputEvent, 0)
 	SetDefaultPalette()
 	// Hide cursor globally at start
 	fm.scr.SetCursorVisible(false)
@@ -68,6 +71,10 @@ func (fm *frameManager) Redraw() {
 	case fm.RedrawChan <- struct{}{}:
 	default:
 	}
+}
+// InjectEvents adds simulated input events to the front of the queue.
+func (fm *frameManager) InjectEvents(events []*vtinput.InputEvent) {
+	fm.injectedEvents = append(fm.injectedEvents, events...)
 }
 // Shutdown clears all frames, effectively stopping the application loop.
 func (fm *frameManager) Shutdown() {
@@ -115,41 +122,56 @@ func (fm *frameManager) Run() {
 		fm.scr.Flush()
 
 		// 2. Event waiting
-		select {
-		case <-fm.RedrawChan:
-			// Loop around to redraw immediately
-			continue
-		case e, ok := <-eventChan:
-			if !ok {
-				return
-			}
+		var e *vtinput.InputEvent
+		injected := false
 
-			topFrame := fm.frames[len(fm.frames)-1]
-
-			// Dispatch event to the top-most frame
-			if e.Type == vtinput.KeyEventType {
-				// Global Hotkey: Ctrl+Q always exits the application
-				if e.VirtualKeyCode == vtinput.VK_Q && (e.ControlKeyState&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed)) != 0 {
-					fm.frames = nil // Clear all frames to exit
+		if len(fm.injectedEvents) > 0 {
+			e = fm.injectedEvents[0]
+			fm.injectedEvents = fm.injectedEvents[1:]
+			injected = true
+		} else {
+			select {
+			case <-fm.RedrawChan:
+				// Loop around to redraw immediately
+				continue
+			case ev, ok := <-eventChan:
+				if !ok {
 					return
 				}
-				topFrame.ProcessKey(e)
-			} else if e.Type == vtinput.MouseEventType {
-				topFrame.ProcessMouse(e)
+				e = ev
+			case <-sigChan:
+				width, height, _ := term.GetSize(int(os.Stdin.Fd()))
+				fm.scr.AllocBuf(width, height)
+				// Notify all frames about the resize
+				for _, frame := range fm.frames {
+					frame.ResizeConsole(width, height)
+				}
+				continue
 			}
+		}
 
-			// Check if the frame wants to close
-			if topFrame.IsDone() {
-				fm.Pop()
-			}
+		// Allow filtering only for real user inputs (prevent infinite macro loops)
+		if !injected && fm.EventFilter != nil && fm.EventFilter(e) {
+			continue
+		}
 
-		case <-sigChan:
-			width, height, _ := term.GetSize(int(os.Stdin.Fd()))
-			fm.scr.AllocBuf(width, height)
-			// Notify all frames about the resize
-			for _, frame := range fm.frames {
-				frame.ResizeConsole(width, height)
+		topFrame := fm.frames[len(fm.frames)-1]
+
+		// Dispatch event to the top-most frame
+		if e.Type == vtinput.KeyEventType {
+			// Global Hotkey: Ctrl+Q always exits the application
+			if e.VirtualKeyCode == vtinput.VK_Q && (e.ControlKeyState&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed)) != 0 {
+				fm.frames = nil // Clear all frames to exit
+				return
 			}
+			topFrame.ProcessKey(e)
+		} else if e.Type == vtinput.MouseEventType {
+			topFrame.ProcessMouse(e)
+		}
+
+		// Check if the frame wants to close
+		if topFrame.IsDone() {
+			fm.Pop()
 		}
 	}
 }
