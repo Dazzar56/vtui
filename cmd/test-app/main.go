@@ -138,15 +138,31 @@ func main() {
 	}
 	btnMsg.SetGrowMode(vtui.GrowLoY | vtui.GrowHiY)
 
-	btnDir := vtui.NewButton(x1+38, y1+23, "&Dir")
+	btnDir := vtui.NewButton(x1+36, y1+23, "&Dir")
 	btnDir.OnClick = func() {
 		vtui.SelectDirDialog(" Choose Directory ", ".", vtui.NewOSVFS("."))
 	}
 	btnDir.SetGrowMode(vtui.GrowLoY | vtui.GrowHiY)
 
+	btnFile := vtui.NewButton(x1+44, y1+23, "&File")
+	btnFile.OnClick = func() {
+		vtui.SelectFileDialog(" Open File ", ".", vtui.NewOSVFS("."))
+	}
+	btnFile.SetGrowMode(vtui.GrowLoY | vtui.GrowHiY)
+
+	btnInp := vtui.NewButton(x1+52, y1+23, "&Inp")
+	btnInp.OnClick = func() {
+		vtui.InputBox(" Question ", "What is your name?", "Explorer", func(s string) {
+			vtui.ShowMessage(" Reply ", "Hello, "+s+"!", []string{"&Hi"})
+		})
+	}
+	btnInp.SetGrowMode(vtui.GrowLoY | vtui.GrowHiY)
+
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnMsg)
 	dlg.AddItem(btnDir)
+	dlg.AddItem(btnFile)
+	dlg.AddItem(btnInp)
 
 	// Assign components to the Framework to enable standard behaviors
 	vtui.FrameManager.MenuBar = topMenu

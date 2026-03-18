@@ -1,6 +1,7 @@
 package vtui
 
 import (
+	"os"
 	"testing"
 	"github.com/unxed/vtinput"
 )
@@ -83,5 +84,77 @@ func TestSelectDirDialog_ArrowVsEnter(t *testing.T) {
 
 	if vfs.GetPath() == initialPath {
 		t.Error("Path DID NOT change on Enter Key")
+	}
+}
+func TestInputBox_OkCallback(t *testing.T) {
+	SetDefaultPalette()
+	FrameManager.Init(NewScreenBuf())
+
+	received := ""
+	onOk := func(s string) { received = s }
+
+	dlg := InputBox("Title", "Prompt", "DefaultValue", onOk)
+
+	// Find Edit and Button
+	var edit *Edit
+	var okBtn *Button
+	for _, item := range dlg.items {
+		if e, ok := item.(*Edit); ok { edit = e }
+		if b, ok := item.(*Button); ok && b.hotkey == 'o' { okBtn = b }
+	}
+
+	if edit == nil || okBtn == nil { t.Fatal("Dialog structure missing components") }
+
+	edit.SetText("NewValue")
+	okBtn.OnClick()
+
+	if received != "NewValue" {
+		t.Errorf("Expected 'NewValue', got '%s'", received)
+	}
+	if !dlg.IsDone() {
+		t.Error("Dialog should be finished after Ok")
+	}
+}
+
+func TestSelectFileDialog_Selection(t *testing.T) {
+	SetDefaultPalette()
+	tmpDir := t.TempDir()
+	vfs := NewOSVFS(tmpDir)
+
+	// Create a dummy file
+	os.WriteFile(vfs.Join(tmpDir, "dummy.txt"), []byte("data"), 0644)
+
+	dlg := SelectFileDialog("Title", tmpDir, vfs)
+
+	var lb *ListBox
+	var fileEdit *Edit
+	editCount := 0
+	for _, item := range dlg.items {
+		if l, ok := item.(*ListBox); ok {
+			lb = l
+		}
+		if e, ok := item.(*Edit); ok {
+			editCount++
+			if editCount == 2 { // fileEdit is the second Edit field
+				fileEdit = e
+			}
+		}
+	}
+
+	if lb == nil || fileEdit == nil { t.Fatal("SelectFileDialog structure error") }
+
+	// Find dummy.txt in list
+	fileIdx := -1
+	for i, name := range lb.Items {
+		if name == "dummy.txt" { fileIdx = i; break }
+	}
+
+	if fileIdx == -1 { t.Fatal("File not found in list") }
+
+	// Change selection to file
+	lb.OnChange(fileIdx)
+
+	if fileEdit.GetText() != "dummy.txt" {
+		t.Errorf("File Edit not updated on selection. Got %q", fileEdit.GetText())
 	}
 }

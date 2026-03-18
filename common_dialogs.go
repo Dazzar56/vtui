@@ -88,3 +88,137 @@ func SelectDirDialog(title string, initialPath string, vfs VFS) *Dialog {
 	FrameManager.Push(dlg)
 	return dlg
 }
+
+// SelectFileDialog creates a standard file selection dialog.
+func SelectFileDialog(title string, initialPath string, vfs VFS) *Dialog {
+	width := 55
+	height := 20
+	scrW := FrameManager.GetScreenSize()
+	x1 := (scrW - width) / 2
+	y1 := 3
+
+	dlg := NewDialog(x1, y1, x1+width-1, y1+height-1, title)
+	dlg.ShowClose = true
+
+	// 1. Current Path Preview
+	dlg.AddItem(NewLabel(x1+2, y1+2, "Path:", nil))
+	pathEdit := NewEdit(x1+8, y1+2, width-11, initialPath)
+	dlg.AddItem(pathEdit)
+
+	var items []string
+	var isDirMap map[string]bool
+
+	updateList := func(p string) {
+		entries, _ := vfs.ReadDir(p)
+		items = []string{".."}
+		isDirMap = make(map[string]bool)
+		isDirMap[".."] = true
+
+		// Folders first
+		for _, e := range entries {
+			if e.IsDir {
+				items = append(items, e.Name)
+				isDirMap[e.Name] = true
+			}
+		}
+		// Then files
+		for _, e := range entries {
+			if !e.IsDir {
+				items = append(items, e.Name)
+				isDirMap[e.Name] = false
+			}
+		}
+	}
+	updateList(vfs.GetPath())
+
+	// 2. File List
+	lb := NewListBox(x1+2, y1+4, width-4, height-10, items)
+	dlg.AddItem(lb)
+
+	// 3. Filename input
+	dlg.AddItem(NewLabel(x1+2, y1+height-4, "&File:", nil))
+	fileEdit := NewEdit(x1+8, y1+height-4, width-11, "")
+	dlg.AddItem(fileEdit)
+
+	lb.OnChange = func(idx int) {
+		if idx < 0 || idx >= len(items) { return }
+		selected := items[idx]
+		if !isDirMap[selected] {
+			fileEdit.SetText(selected)
+		}
+	}
+
+	lb.OnAction = func(idx int) {
+		if idx < 0 || idx >= len(items) { return }
+		selected := items[idx]
+		oldPath := vfs.GetPath()
+
+		if isDirMap[selected] {
+			var newPath string
+			if selected == ".." {
+				newPath = vfs.Dir(oldPath)
+			} else {
+				newPath = vfs.Join(oldPath, selected)
+			}
+			if err := vfs.SetPath(newPath); err == nil {
+				updateList(vfs.GetPath())
+				lb.Items = items
+				lb.SelectPos = 0
+				lb.TopPos = 0
+				pathEdit.SetText(vfs.GetPath())
+				if selected == ".." {
+					prevDir := vfs.Base(oldPath)
+					for i, name := range items {
+						if name == prevDir { lb.SelectPos = i; break }
+					}
+				}
+				lb.EnsureVisible()
+			}
+		} else {
+			// Selecting a file via Enter
+			dlg.SetExitCode(1)
+		}
+	}
+
+	btnOk := NewButton(x1+width/2-12, y1+height-2, "&Ok")
+	btnOk.OnClick = func() { dlg.SetExitCode(1) }
+	dlg.AddItem(btnOk)
+
+	btnCancel := NewButton(x1+width/2+2, y1+height-2, "&Cancel")
+	btnCancel.OnClick = func() { dlg.SetExitCode(-1) }
+	dlg.AddItem(btnCancel)
+
+	FrameManager.Push(dlg)
+	return dlg
+}
+
+// InputBox creates a simple one-line text input dialog.
+func InputBox(title, prompt, defaultText string, onOk func(string)) *Dialog {
+	width := 40
+	height := 8
+	scrW := FrameManager.GetScreenSize()
+	x1 := (scrW - width) / 2
+	y1 := 8
+
+	dlg := NewDialog(x1, y1, x1+width-1, y1+height-1, title)
+	dlg.ShowClose = true
+
+	dlg.AddItem(NewText(x1+2, y1+2, prompt, Palette[ColDialogText]))
+
+	edit := NewEdit(x1+2, y1+3, width-4, defaultText)
+	dlg.AddItem(edit)
+
+	btnOk := NewButton(x1+8, y1+5, "&Ok")
+	btnOk.OnClick = func() {
+		if onOk != nil { onOk(edit.GetText()) }
+		dlg.SetExitCode(1)
+	}
+	dlg.AddItem(btnOk)
+
+	btnCancel := NewButton(x1+width-18, y1+5, "&Cancel")
+	btnCancel.OnClick = func() { dlg.SetExitCode(-1) }
+	dlg.AddItem(btnCancel)
+
+	FrameManager.Push(dlg)
+	return dlg
+}
