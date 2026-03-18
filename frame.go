@@ -15,6 +15,7 @@ type BorderedFrame struct {
 	ColorBoxIdx        int
 	ColorTitleIdx      int
 	ColorBackgroundIdx int
+	ShowClose          bool
 }
 
 // NewBorderedFrame creates a new BorderedFrame instance.
@@ -101,6 +102,12 @@ func (f *BorderedFrame) DisplayObject(scr *ScreenBuf) {
 		scr.Write(f.X1+start, f.Y1, StringToCharInfo(titleStr, colTitle))
 	} else {
 		scr.Write(f.X1, f.Y1, RunesToCharInfo(topRunes, colBox))
+	}
+
+	// 1.5. Draw Close Button
+	if f.ShowClose {
+		closeStr := string(UIStrings.CloseBrackets[0]) + string(UIStrings.CloseSymbol) + string(UIStrings.CloseBrackets[1])
+		scr.Write(f.X2-4, f.Y1, StringToCharInfo(closeStr, colBox))
 	}
 	scr.Write(f.X1, f.Y2, StringToCharInfo(bottomBorder.String(), colBox))
 

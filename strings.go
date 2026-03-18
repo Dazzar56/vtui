@@ -5,9 +5,13 @@ package vtui
 var UIStrings = struct {
 	DesktopWelcome string
 	ButtonBrackets [2]rune
+	CloseBrackets  [2]rune
+	CloseSymbol    rune
 	DefaultHelp    string
 }{
 	DesktopWelcome: " vtui | Press Ctrl+Q to exit ",
 	ButtonBrackets: [2]rune{'[', ']'},
+	CloseBrackets:  [2]rune{'[', ']'},
+	CloseSymbol:    '×',
 	DefaultHelp:    "Contents",
 }

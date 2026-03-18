@@ -38,6 +38,7 @@ type Dialog struct {
 	lastH      int
 	MinW       int
 	MinH       int
+	ShowClose  bool
 }
 
 func NewDialog(x1, y1, x2, y2 int, title string) *Dialog {
@@ -68,6 +69,7 @@ func (d *Dialog) AddItem(item UIElement) {
 func (d *Dialog) Show(scr *ScreenBuf) {
 	d.ScreenObject.Show(scr)
 	d.drawShadow(scr)
+	d.frame.ShowClose = d.ShowClose
 	d.frame.DisplayObject(scr)
 	for _, item := range d.items {
 		item.Show(scr)
@@ -356,6 +358,12 @@ func (d *Dialog) ProcessMouse(e *vtinput.InputEvent) bool {
 
 	// 3. Initiate Dragging or Resizing (if click on border or background)
 	if e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
+		// 2.5. Check Close Button (usually at top right)
+		if d.ShowClose && my == d.Y1 && mx >= d.X2-4 && mx <= d.X2-2 {
+			d.SetExitCode(-1)
+			return true
+		}
+
 		if mx == d.X2 && my == d.Y2 {
 			d.isResizing = true
 			return true

@@ -505,6 +505,58 @@ func TestDialog_Center(t *testing.T) {
 	}
 }
 
+func TestDialog_CloseButton(t *testing.T) {
+	// X1:10, Y1:10, X2:30, Y2:20
+	d := NewDialog(10, 10, 30, 20, "Close Test")
+	d.ShowClose = true
+
+	// Simulate click on the [×] button.
+	// X2 is 30. Button is at 30-4=26, 30-3=27, 30-2=28.
+	// Y1 is 10.
+	d.ProcessMouse(&vtinput.InputEvent{
+		Type:        vtinput.MouseEventType,
+		KeyDown:     true,
+		MouseX:      27,
+		MouseY:      10,
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+	})
+
+	if !d.IsDone() || d.exitCode != -1 {
+		t.Errorf("Close button click failed. Done: %v, ExitCode: %d", d.IsDone(), d.exitCode)
+	}
+}
+func TestDialog_GrowModeManualResize(t *testing.T) {
+	// 20x10 Dialog
+	d := NewDialog(0, 0, 19, 9, "Grow Test")
+
+	// Edit that should stretch with the window (GrowHiX)
+	edit := NewEdit(2, 2, 10, "")
+	edit.SetGrowMode(GrowHiX)
+	d.AddItem(edit)
+
+	// Button that should move to keep its relative position from bottom-right (GrowLoX | GrowHiX | GrowLoY | GrowHiY)
+	btn := NewButton(12, 7, "Ok")
+	btn.SetGrowMode(GrowLoX | GrowHiX | GrowLoY | GrowHiY)
+	d.AddItem(btn)
+
+	// Simulate manual resize to 40x20 (+20 width, +10 height)
+	d.ChangeSize(40, 20)
+
+	// Check Edit: x1 remains 2.
+	// Original x2 was 2 + 10 - 1 = 11.
+	// After width delta +20, x2 should be 11 + 20 = 31.
+	ex1, _, ex2, _ := edit.GetPosition()
+	if ex1 != 2 || ex2 != 31 {
+		t.Errorf("Edit GrowHiX failed: x1=%d, x2=%d", ex1, ex2)
+	}
+
+	// Check Button: x1 should be 12 + 20 = 32, y1 should be 7 + 10 = 17
+	bx1, by1, _, _ := btn.GetPosition()
+	if bx1 != 32 || by1 != 17 {
+		t.Errorf("Button anchored resize failed: x1=%d, y1=%d", bx1, by1)
+	}
+}
+
 func TestDialog_GetFocusedItem(t *testing.T) {
 	d := NewDialog(0, 0, 20, 10, "Focus Test")
 	b1 := NewButton(1, 1, "Btn1")
@@ -525,6 +577,7 @@ func TestDialog_GetFocusedItem(t *testing.T) {
 		t.Errorf("GetFocusedItem() expected b2 after focus change, got %v", focused)
 	}
 }
+
 func TestElements_HelpTopic(t *testing.T) {
 	btn := NewButton(0, 0, "HelpMe")
 	btn.SetHelp("ButtonHelp")

@@ -135,6 +135,20 @@ func TestFrame_Rendering(t *testing.T) {
 		checkCell(t, scr, 4, 2, '╔', borderColor)
 	})
 }
+func TestFrame_CloseButtonRendering(t *testing.T) {
+	SetDefaultPalette()
+	scr := NewScreenBuf()
+	scr.AllocBuf(40, 10)
+	// Frame from X=5 to X=25. Close button [×] should be at 25-4=21, 22, 23.
+	frame := NewBorderedFrame(5, 5, 25, 10, DoubleBox, "")
+	frame.ShowClose = true
+	frame.DisplayObject(scr)
+
+	colBox := Palette[ColDialogBox]
+	checkCell(t, scr, 21, 5, uint64(UIStrings.CloseBrackets[0]), colBox)
+	checkCell(t, scr, 22, 5, uint64(UIStrings.CloseSymbol), colBox)
+	checkCell(t, scr, 23, 5, uint64(UIStrings.CloseBrackets[1]), colBox)
+}
 
 func TestFrame_IsBorderClick(t *testing.T) {
 	f := NewBorderedFrame(10, 10, 20, 20, SingleBox, "Test")

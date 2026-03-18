@@ -70,6 +70,7 @@ func main() {
 
 	// --- Comprehensive Dialog ---
 	dlg := vtui.NewDialog(0, 0, 63, 25, " vtui 3.0 Kitchen Sink ")
+	dlg.ShowClose = true
 	dlg.Center(width, height)
 	x1, y1 := dlg.X1, dlg.Y1
 
@@ -131,14 +132,21 @@ func main() {
 	btnOk.OnClick = func() { dlg.SetExitCode(0); desktop.SetExitCode(0) }
 	btnOk.SetGrowMode(vtui.GrowLoY | vtui.GrowHiY)
 
-	btnMsg := vtui.NewButton(x1+28, y1+23, "Show &Msg")
+	btnMsg := vtui.NewButton(x1+24, y1+23, "Show &Msg")
 	btnMsg.OnClick = func() {
 		vtui.ShowMessage(" MessageBox ", "Resizing is enabled!\nGrab the bottom-right corner.", []string{"&Got it"})
 	}
 	btnMsg.SetGrowMode(vtui.GrowLoY | vtui.GrowHiY)
 
+	btnDir := vtui.NewButton(x1+38, y1+23, "&Dir")
+	btnDir.OnClick = func() {
+		vtui.SelectDirDialog(" Choose Directory ", ".", vtui.NewOSVFS("."))
+	}
+	btnDir.SetGrowMode(vtui.GrowLoY | vtui.GrowHiY)
+
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnMsg)
+	dlg.AddItem(btnDir)
 
 	// Assign components to the Framework to enable standard behaviors
 	vtui.FrameManager.MenuBar = topMenu
