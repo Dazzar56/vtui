@@ -750,3 +750,60 @@ func TestVMenu_GetItemCount(t *testing.T) {
 		t.Errorf("Expected 3 items (including separator), got %d", m.GetItemCount())
 	}
 }
+func TestMenuBar_SubMenuCycling(t *testing.T) {
+	// Setup FrameManager and MenuBar with two submenus
+	oldFm := FrameManager
+	localFm := &frameManager{}
+	localFm.Init(NewScreenBuf())
+	FrameManager = localFm
+	defer func() { FrameManager = oldFm }()
+
+	mb := NewMenuBar(nil)
+	mb.Items = []MenuBarItem{
+		{Label: "Menu0", SubItems: []MenuItem{{Text: "Item0"}}},
+		{Label: "Menu1", SubItems: []MenuItem{{Text: "Item1"}}},
+	}
+	mb.Active = true
+
+	// 1. Activate first submenu
+	mb.ActivateSubMenu(0)
+	if localFm.GetTopFrameType() != TypeMenu {
+		t.Fatal("Menu0 not pushed")
+	}
+
+	// 2. Simulate Right Arrow inside the VMenu
+	// VMenu OnRight should call mb.ActivateSubMenu(1)
+	currentSub := localFm.frames[len(localFm.frames)-1].(*VMenu)
+	currentSub.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT})
+
+	// 3. Verify: old menu popped, new menu pushed
+	if len(localFm.frames) != 1 {
+		t.Errorf("Expected exactly 1 frame (the new submenu), got %d", len(localFm.frames))
+	}
+	newSub := localFm.frames[0].(*VMenu)
+	if newSub.title != "Menu1" {
+		t.Errorf("Expected Menu1 to be active, got %q", newSub.title)
+	}
+}
+
+func TestVMenu_NavigationCallbacks(t *testing.T) {
+	m := NewVMenu("Test")
+	m.AddItem("Item")
+
+	// Set callback that DOES NOT close the menu
+	m.OnLeft = func() {}
+
+	m.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_LEFT})
+
+	if m.IsDone() {
+		t.Error("VMenu closed on Left arrow, but callback didn't request it")
+	}
+
+	// Set callback that DOES close the menu
+	m.OnLeft = func() { m.SetExitCode(-1) }
+	m.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_LEFT})
+
+	if !m.IsDone() {
+		t.Error("VMenu should be closed when callback calls SetExitCode")
+	}
+}

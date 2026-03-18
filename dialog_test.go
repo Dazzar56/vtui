@@ -525,3 +525,16 @@ func TestDialog_GetFocusedItem(t *testing.T) {
 		t.Errorf("GetFocusedItem() expected b2 after focus change, got %v", focused)
 	}
 }
+func TestElements_HelpTopic(t *testing.T) {
+	btn := NewButton(0, 0, "HelpMe")
+	btn.SetHelp("ButtonHelp")
+	if btn.GetHelp() != "ButtonHelp" {
+		t.Errorf("Button HelpTopic failed: %s", btn.GetHelp())
+	}
+
+	cb := NewCheckbox(0, 0, "Check", false)
+	cb.SetHelp("CheckHelp")
+	if cb.GetHelp() != "CheckHelp" {
+		t.Errorf("Checkbox HelpTopic failed: %s", cb.GetHelp())
+	}
+}
