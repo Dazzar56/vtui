@@ -129,10 +129,16 @@ func main() {
 	dlg.AddItem(menu)
 
 	// 8. Кнопки управления
-	btnOk := vtui.NewButton(x1+10, y1+20, "Ok")
-	btnCancel := vtui.NewButton(x1+30, y1+20, "Cancel")
+	btnOk := vtui.NewButton(x1+22, y1+20, "&Ok")
+	btnCancel := vtui.NewButton(x1+38, y1+20, "&Cancel")
 
 	// Действия при нажатии на кнопки
+	btnMsg := vtui.NewButton(x1+5, y1+20, "Show &Msg")
+
+	// Действия при нажатии на кнопки
+	btnMsg.OnClick = func() {
+		vtui.ShowMessage(" MessageBox Demo ", "This is a dynamic message box.\nIt supports Unicode: Привет! 🚀\nIt automatically wraps long lines to fit the dialog width.", []string{"&Nice!", "&Whatever"})
+	}
 	btnCancel.OnClick = func() {
 		dlg.SetExitCode(-1)
 		desktop.SetExitCode(-1)
@@ -142,6 +148,7 @@ func main() {
 		desktop.SetExitCode(0)
 	}
 
+	dlg.AddItem(btnMsg)
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnCancel)
 

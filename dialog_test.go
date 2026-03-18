@@ -328,27 +328,6 @@ func TestDialog_DragRelativeConsistency(t *testing.T) {
 	}
 }
 
-func TestDialog_FocusLinkChain(t *testing.T) {
-	d := NewDialog(0, 0, 40, 10, "Chain Test")
-	edit := NewEdit(1, 3, 10, "")
-	label2 := NewLabel(1, 2, "Sub-Label:", edit)
-	label1 := NewLabel(1, 1, "&Grand-Label:", label2) // Ссылается на другую метку
-
-	d.AddItem(label1)
-	d.AddItem(label2)
-	d.AddItem(edit)
-
-	// Нажимаем Alt+G (хоткей первой метки)
-	d.ProcessKey(&vtinput.InputEvent{
-		Type: vtinput.KeyEventType, KeyDown: true, Char: 'g',
-		ControlKeyState: vtinput.LeftAltPressed,
-	})
-
-	if d.focusIdx != 2 || !edit.IsFocused() {
-		t.Errorf("Focus chain failed. Expected focus on edit (index 2), got index %d", d.focusIdx)
-	}
-}
-
 func TestDialog_DraggingOffscreen(t *testing.T) {
 	d := NewDialog(10, 10, 20, 20, "Offscreen")
 	
@@ -384,5 +363,26 @@ func TestDialog_RightClickNoDrag(t *testing.T) {
 
 	if d.isDragging {
 		t.Error("Dialog should NOT start dragging with Right Mouse Button")
+	}
+}
+
+func TestDialog_FocusLinkChain(t *testing.T) {
+	d := NewDialog(0, 0, 40, 10, "Chain Test")
+	edit := NewEdit(1, 3, 10, "")
+	label2 := NewLabel(1, 2, "Sub-Label:", edit)
+	label1 := NewLabel(1, 1, "&Grand-Label:", label2) // Ссылается на другую метку
+
+	d.AddItem(label1)
+	d.AddItem(label2)
+	d.AddItem(edit)
+
+	// Нажимаем Alt+G (хоткей первой метки)
+	d.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true, Char: 'g',
+		ControlKeyState: vtinput.LeftAltPressed,
+	})
+
+	if d.focusIdx != 2 || !edit.IsFocused() {
+		t.Errorf("Focus chain failed. Expected focus on edit (index 2), got index %d", d.focusIdx)
 	}
 }
