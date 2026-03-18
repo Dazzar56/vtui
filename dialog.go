@@ -69,16 +69,16 @@ func (d *Dialog) Show(scr *ScreenBuf) {
 }
 
 func (d *Dialog) drawShadow(scr *ScreenBuf) {
-	// Тень в Far — это смещение +2 по X и +1 по Y.
-	// Рисуем только если тень влезает в границы буфера.
+	// Shadow in Far is offset +2 on X and +1 on Y.
+	// Draw only if shadow fits within buffer boundaries.
 	shAttr := Palette[ColShadow]
 
-	// Вертикальная часть тени (справа)
-	// От Y1+1 до Y2+1, в колонках X2+1 и X2+2
+	// Vertical part of the shadow (right)
+	// From Y1+1 to Y2+1, in columns X2+1 and X2+2
 	scr.FillRect(d.X2+1, d.Y1+1, d.X2+2, d.Y2+1, ' ', shAttr)
 
-	// Горизонтальная часть тени (снизу)
-	// От X1+2 до X2, в строке Y2+1
+	// Horizontal part of the shadow (bottom)
+	// From X1+2 to X2, in row Y2+1
 	scr.FillRect(d.X1+2, d.Y2+1, d.X2, d.Y2+1, ' ', shAttr)
 }
 
@@ -91,8 +91,8 @@ func (d *Dialog) ProcessKey(e *vtinput.InputEvent) bool {
 			return true
 		}
 
-		// Специальная обработка RadioButton: если элемент не поглотил нажатие Space/Enter,
-		// но это радиокнопка, мы активируем её и сбрасываем остальные.
+		// Special RadioButton handling: if element didn't consume Space/Enter,
+		// but it's a radio button, we activate it and reset others.
 		if e.KeyDown && (e.VirtualKeyCode == vtinput.VK_SPACE || e.VirtualKeyCode == vtinput.VK_RETURN) {
 			if rb, ok := d.items[d.focusIdx].(*RadioButton); ok {
 				d.selectRadio(rb)
@@ -111,8 +111,8 @@ func (d *Dialog) ProcessKey(e *vtinput.InputEvent) bool {
 		charLower := unicode.ToLower(e.Char)
 		alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 
-		// В диалогах Far хоткеи срабатывают всегда по Alt+Буква.
-		// А просто по Букве — только если фокус НЕ на текстовом поле.
+		// In Far dialogs, hotkeys always trigger on Alt+Letter.
+		// And just by Letter — only if focus is NOT on an edit field.
 		allowWithoutAlt := true
 		if d.focusIdx != -1 {
 			if _, isEdit := d.items[d.focusIdx].(*Edit); isEdit {
@@ -129,7 +129,7 @@ func (d *Dialog) ProcessKey(e *vtinput.InputEvent) bool {
 					target := item
 					targetIdx := i
 
-					// Рекурсивно переходим по ссылкам FocusLink, пока не найдем конечный элемент
+					// Recursively traverse FocusLink links until terminal element found
 					for hops := 0; hops < len(d.items); hops++ {
 						if txt, ok := target.(*Text); ok && txt.FocusLink != nil {
 							target = txt.FocusLink
@@ -152,7 +152,7 @@ func (d *Dialog) ProcessKey(e *vtinput.InputEvent) bool {
 						target.SetFocus(true)
 					}
 
-					// Эмулируем клик
+					// Emulate click
 					if _, isBtn := target.(*Button); isBtn {
 						target.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_SPACE})
 					} else if _, isChk := target.(*Checkbox); isChk {
@@ -177,9 +177,9 @@ func (d *Dialog) ProcessKey(e *vtinput.InputEvent) bool {
 	case vtinput.VK_TAB:
 		shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
 		if shift {
-			d.changeFocus(-1) // Назад
+			d.changeFocus(-1) // Back
 		} else {
-			d.changeFocus(1) // Вперед
+			d.changeFocus(1) // Forward
 		}
 		return true
 	}
@@ -188,17 +188,17 @@ func (d *Dialog) ProcessKey(e *vtinput.InputEvent) bool {
 }
 
 func (d *Dialog) ResizeConsole(w, h int) {
-	// 1. Центрируем сам диалог на новом экране
+	// 1. Center dialog on the new screen
 	dw, dh := d.X2-d.X1+1, d.Y2-d.Y1+1
 	nx1 := (w - dw) / 2
 	ny1 := (h - dh) / 2
 
-	// Если диалог переместился целиком, просто вызываем MoveRelative
+	// If dialog moved entirely, just call MoveRelative
 	offX, offY := nx1-d.X1, ny1-d.Y1
 	d.MoveRelative(offX, offY)
 }
 
-// ChangeSize изменяет размер самого диалога и адаптирует положение детей через GrowMode.
+// ChangeSize changes dialog size and adapts child positions via GrowMode.
 func (d *Dialog) ChangeSize(nw, nh int) {
 	dx := nw - d.lastW
 	dy := nh - d.lastH
@@ -241,12 +241,12 @@ func (d *Dialog) IsBusy() bool { return false }
 func (d *Dialog) changeFocus(direction int) {
 	if len(d.items) == 0 { return }
 
-	// 1. Снимаем фокус с текущего элемента
+	// 1. Remove focus from the current element
 	if d.focusIdx != -1 {
 		d.items[d.focusIdx].SetFocus(false)
 	}
 
-	// 2. Ищем следующий/предыдущий фокусируемый элемент
+	// 2. Search for the next/previous focusable element
 	startIdx := d.focusIdx
 	for {
 		d.focusIdx += direction

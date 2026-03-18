@@ -67,10 +67,10 @@ func TestDialog_RadioButtonIntegration(t *testing.T) {
 	d.AddItem(rb1)
 	d.AddItem(rb2)
 
-	// Переходим на rb2 (Tab)
+	// Move to rb2 (Tab)
 	d.changeFocus(1)
 
-	// Нажимаем Space. Dialog должен перехватить это и обновить группу.
+	// Press Space. Dialog should intercept this and update the group.
 	d.ProcessKey(&vtinput.InputEvent{
 		Type:           vtinput.KeyEventType,
 		KeyDown:        true,
@@ -89,16 +89,16 @@ func TestDialog_Shadow(t *testing.T) {
 	scr := NewScreenBuf()
 	scr.AllocBuf(20, 20)
 
-	// Диалог 5x5
+	// 5x5 Dialog
 	d := NewDialog(2, 2, 7, 7, "Title")
 	d.Show(scr)
 
-	// Проверяем ячейку тени.
-	// Правый нижний угол диалога - (7, 7).
-	// Тень должна быть в (8, 8) и (9, 8).
+	// Checking shadow cell.
+	// Bottom-right corner of dialog is (7, 7).
+	// Shadow should be at (8, 8) and (9, 8).
 	shAttr := Palette[ColShadow]
 	checkCell(t, scr, 9, 8, ' ', shAttr)
-	checkCell(t, scr, 8, 3, ' ', shAttr) // Вертикальная часть тени
+	checkCell(t, scr, 8, 3, ' ', shAttr) // Vertical shadow part
 }
 func TestDialog_MouseFocus(t *testing.T) {
 	d := NewDialog(0, 0, 20, 10, "Test")
@@ -168,12 +168,12 @@ func TestDialog_HotkeyActivation(t *testing.T) {
 	d.AddItem(btn)
 	d.AddItem(e1)
 
-	// Переводим фокус на Edit, чтобы кнопка была не в фокусе
+	// Move focus to Edit so button is not focused
 	d.focusIdx = 1
 	btn.SetFocus(false)
 	e1.SetFocus(true)
 
-	// 1. Нажимаем Alt+C (хоткей кнопки)
+	// 1. Press Alt+C (button hotkey)
 	d.ProcessKey(&vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true, Char: 'c',
 		ControlKeyState: vtinput.LeftAltPressed,
@@ -192,17 +192,17 @@ func TestDialog_LabelFocusLink(t *testing.T) {
 
 	edit := NewEdit(1, 2, 10, "")
 	label := NewText(1, 1, "&Name:", 0)
-	label.FocusLink = edit // Привязываем метку к полю ввода
+	label.FocusLink = edit // Link label to the edit field!
 
 	d.AddItem(label)
 	d.AddItem(edit)
 
-	// Изначально фокус на первом элементе (label), но он не canFocus,
-	// поэтому Dialog сам выберет edit при добавлении. Сбросим это вручную для теста.
+	// Initially focus on first element (label), but it is not canFocus,
+	// so Dialog will choose edit on addition. Reset manually for test.
 	d.focusIdx = -1
 	edit.SetFocus(false)
 
-	// 1. Нажимаем Alt+N (хоткей метки)
+	// 1. Press Alt+N (label hotkey)
 	d.ProcessKey(&vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true, Char: 'n',
 		ControlKeyState: vtinput.LeftAltPressed,
@@ -217,8 +217,8 @@ func TestDialog_HotkeyCaseInsensitivity(t *testing.T) {
 	btn := NewButton(1, 1, "&File")
 	d.AddItem(btn)
 
-	// Нажимаем заглавную 'F', хотя в строке она может быть любой.
-	// Парсер сохраняет 'f', поэтому сравнение должно быть успешным.
+	// Press capital 'F', although it can be any in string.
+	// Parser stores 'f', so comparison should succeed.
 	handled := d.ProcessKey(&vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true, Char: 'F',
 		ControlKeyState: vtinput.LeftAltPressed,
@@ -230,12 +230,12 @@ func TestDialog_HotkeyCaseInsensitivity(t *testing.T) {
 }
 
 func TestDialog_DraggingLogic(t *testing.T) {
-	// Создаем диалог 10x10 в позиции (0,0)
+	// Create 10x10 dialog at (0,0)
 	d := NewDialog(0, 0, 9, 9, "Move Me")
-	btn := NewButton(2, 2, "OK") // Кнопка внутри
+	btn := NewButton(2, 2, "OK") // Button inside
 	d.AddItem(btn)
 
-	// 1. Нажимаем левую кнопку мыши на рамке (0,0)
+	// 1. Press left mouse button on border (0,0)
 	d.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType,
 		KeyDown: true,
@@ -247,8 +247,8 @@ func TestDialog_DraggingLogic(t *testing.T) {
 		t.Fatal("Dialog should start dragging after clicking on border")
 	}
 
-	// 2. Перемещаем мышь в (5,5)
-	// Эмулируем событие перемещения (в vtinput это обычно KeyDown: false при нажатой кнопке)
+	// 2. Move mouse to (5,5)
+	// Emulate move event (in vtinput usually KeyDown: false with button pressed)
 	d.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType,
 		KeyDown: false,
@@ -256,18 +256,18 @@ func TestDialog_DraggingLogic(t *testing.T) {
 		MouseX: 5, MouseY: 5,
 	})
 
-	// Диалог должен сместиться на +5, +5
+	// Dialog should shift by +5, +5
 	if d.X1 != 5 || d.Y1 != 5 {
 		t.Errorf("Dialog did not move correctly. Got (%d,%d), want (5,5)", d.X1, d.Y1)
 	}
 
-	// Проверяем, что кнопка внутри тоже сместилась!
+	// Check that internal button also shifted!
 	bx1, by1, _, _ := btn.GetPosition()
 	if bx1 != 7 || by1 != 7 { // 2 (orig) + 5 (offset) = 7
 		t.Errorf("Child element (button) did not move with dialog. Got (%d,%d), want (7,7)", bx1, by1)
 	}
 
-	// 3. Отпускаем мышь
+	// 3. Release mouse
 	d.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType,
 		KeyDown: false,
@@ -287,7 +287,7 @@ func TestDialog_NoDragWhenClickingElement(t *testing.T) {
 	btn.OnClick = func() { clicked = true }
 	d.AddItem(btn)
 
-	// Кликаем по кнопке (1, 1)
+	// Click button at (1, 1)
 	d.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType,
 		KeyDown: true,
@@ -304,17 +304,17 @@ func TestDialog_NoDragWhenClickingElement(t *testing.T) {
 }
 
 func TestDialog_DragRelativeConsistency(t *testing.T) {
-	// Тест на "накопление ошибки" при множественных перемещениях
+	// Test for "error accumulation" during multiple moves
 	d := NewDialog(0, 0, 10, 10, "Consistency")
-	
-	// Начинаем захват в точке (0,0)
+
+	// Start capture at point (0,0)
 	d.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: true,
 		ButtonState: vtinput.FromLeft1stButtonPressed,
 		MouseX: 0, MouseY: 0,
 	})
 
-	// Серия мелких перемещений
+	// Series of small moves
 	for i := 1; i <= 10; i++ {
 		d.ProcessMouse(&vtinput.InputEvent{
 			Type: vtinput.MouseEventType, KeyDown: false,
@@ -330,22 +330,22 @@ func TestDialog_DragRelativeConsistency(t *testing.T) {
 
 func TestDialog_DraggingOffscreen(t *testing.T) {
 	d := NewDialog(10, 10, 20, 20, "Offscreen")
-	
-	// Начинаем захват
+
+	// Start capture
 	d.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: true,
 		ButtonState: vtinput.FromLeft1stButtonPressed,
 		MouseX: 10, MouseY: 10,
 	})
 
-	// Утаскиваем мышь в "минус"
+	// Drag mouse into "negative"
 	d.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: false,
 		ButtonState: vtinput.FromLeft1stButtonPressed,
 		MouseX: 0, MouseY: 0,
 	})
 
-	// Диалог должен позволять перемещение в отрицательные координаты (как в Far)
+	// Dialog should allow moving to negative coordinates (like in Far)
 	if d.X1 != 0 || d.Y1 != 0 {
 		t.Errorf("Expected dialog at (0,0), got (%d,%d)", d.X1, d.Y1)
 	}
@@ -353,8 +353,8 @@ func TestDialog_DraggingOffscreen(t *testing.T) {
 
 func TestDialog_RightClickNoDrag(t *testing.T) {
 	d := NewDialog(0, 0, 10, 10, "Left Button Only")
-	
-	// Пытаемся захватить ПРАВОЙ кнопкой
+
+	// Attempting capture with RIGHT button
 	d.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: true,
 		ButtonState: vtinput.RightmostButtonPressed,
@@ -370,13 +370,13 @@ func TestDialog_FocusLinkChain(t *testing.T) {
 	d := NewDialog(0, 0, 40, 10, "Chain Test")
 	edit := NewEdit(1, 3, 10, "")
 	label2 := NewLabel(1, 2, "Sub-Label:", edit)
-	label1 := NewLabel(1, 1, "&Grand-Label:", label2) // Ссылается на другую метку
+	label1 := NewLabel(1, 1, "&Grand-Label:", label2) // References another label
 
 	d.AddItem(label1)
 	d.AddItem(label2)
 	d.AddItem(edit)
 
-	// Нажимаем Alt+G (хоткей первой метки)
+	// Press Alt+G (first label hotkey)
 	d.ProcessKey(&vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true, Char: 'g',
 		ControlKeyState: vtinput.LeftAltPressed,

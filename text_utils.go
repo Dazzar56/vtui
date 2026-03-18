@@ -5,8 +5,8 @@ import (
 	"github.com/mattn/go-runewidth"
 )
 
-// WrapText разбивает строку на массив строк, не превышающих maxWidth.
-// Учитывает переносы \n и старается разбивать по пробелам.
+// WrapText splits a string into an array of strings not exceeding maxWidth.
+// Respects \n line breaks and tries to split by spaces.
 func WrapText(text string, maxWidth int) []string {
 	if maxWidth <= 0 {
 		return []string{text}
@@ -28,7 +28,7 @@ func WrapText(text string, maxWidth int) []string {
 		for _, word := range words {
 			wordWidth := runewidth.StringWidth(word)
 
-			// Если слово само по себе длиннее maxWidth, разбиваем его насильно
+			// If a word is inherently longer than maxWidth, split it forcefully
 			if wordWidth > maxWidth {
 				if currentLineWidth > 0 {
 					result = append(result, currentLine.String())
@@ -58,7 +58,7 @@ func WrapText(text string, maxWidth int) []string {
 				continue
 			}
 
-			// Проверяем, влезет ли слово в текущую строку
+			// Check if the word fits in the current line
 			spaceWidth := 0
 			if currentLineWidth > 0 {
 				spaceWidth = 1

@@ -12,18 +12,18 @@ func TestShowMessage_Structure(t *testing.T) {
 
 	dlg := ShowMessage(title, text, buttons)
 
-	// Проверка количества элементов:
-	// 2 строки текста + 3 кнопки = 5 элементов
+	// Check the number of elements:
+	// 2 lines of text + 3 buttons = 5 elements
 	if len(dlg.items) != 5 {
 		t.Errorf("Wrong item count. Got %d, want 5", len(dlg.items))
 	}
 
-	// Проверка заголовка фрейма
+	// Check the frame title
 	if dlg.frame.title != title {
 		t.Errorf("Wrong title. Got %q, want %q", dlg.frame.title, title)
 	}
 
-	// Проверка, что кнопки возвращают правильный ExitCode
+	// Check that buttons return the correct ExitCode
 	for i := 0; i < 3; i++ {
 		btn := dlg.items[2+i].(*Button)
 		btn.OnClick()

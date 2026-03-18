@@ -11,7 +11,7 @@ func TestVText_Rendering(t *testing.T) {
 	vt := NewVText(1, 1, "ABC", color)
 	vt.Show(scr)
 
-	// Проверяем вертикаль:
+	// Check vertical:
 	// (1, 1) -> 'A'
 	// (1, 2) -> 'B'
 	// (1, 3) -> 'C'
@@ -19,7 +19,7 @@ func TestVText_Rendering(t *testing.T) {
 	checkCell(t, scr, 1, 2, 'B', color)
 	checkCell(t, scr, 1, 3, 'C', color)
 
-	// Соседние ячейки должны быть пустыми
+	// Neighboring cells should be empty
 	checkCell(t, scr, 0, 1, 0, 0)
 	checkCell(t, scr, 2, 1, 0, 0)
 }

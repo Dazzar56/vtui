@@ -7,7 +7,7 @@ import (
 
 func TestWrapText_Simple(t *testing.T) {
 	text := "The quick brown fox jumps"
-	// Ширина 10: "The quick ", "brown fox ", "jumps"
+	// Width 10: "The quick ", "brown fox ", "jumps"
 	got := WrapText(text, 10)
 	want := []string{"The quick", "brown fox", "jumps"}
 	if !reflect.DeepEqual(got, want) {
@@ -17,7 +17,7 @@ func TestWrapText_Simple(t *testing.T) {
 
 func TestWrapText_ForcedBreak(t *testing.T) {
 	text := "supercalifragilistic"
-	// Ширина 5: должна разбить слово насильно
+	// Width 5: should split the word forcefully
 	got := WrapText(text, 5)
 	want := []string{"super", "calif", "ragil", "istic"}
 	if !reflect.DeepEqual(got, want) {
@@ -28,7 +28,7 @@ func TestWrapText_ForcedBreak(t *testing.T) {
 func TestWrapText_NewLines(t *testing.T) {
 	text := "Line 1\nLine 2 is longer\n\nLine 4"
 	got := WrapText(text, 10)
-	// Ожидаем сохранение пустых строк и переносы внутри длинных
+	// Expect preservation of empty lines and wraps inside long ones
 	want := []string{
 		"Line 1",
 		"Line 2 is",
@@ -42,9 +42,9 @@ func TestWrapText_NewLines(t *testing.T) {
 }
 
 func TestWrapText_Unicode(t *testing.T) {
-	// "世" занимает 2 колонки
+	// "世" occupies 2 columns
 	text := "A世B世C"
-	// Ширина 3: "A世", "B世", "C"
+	// Width 3: "A世", "B世", "C"
 	got := WrapText(text, 3)
 	want := []string{"A世", "B世", "C"}
 	if !reflect.DeepEqual(got, want) {

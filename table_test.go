@@ -135,7 +135,7 @@ func TestTable_NoHeaderGeometry(t *testing.T) {
 	scr.AllocBuf(10, 5)
 	tbl.Show(scr)
 
-	// Без заголовка первая строка данных должна быть в Y=0
+	// Without a header, the first data row should be at Y=0
 	checkCell(t, scr, 0, 0, 'R', Palette[ColTableText])
 }
 func TestTable_OptionalScrollBar(t *testing.T) {
@@ -186,7 +186,7 @@ func TestTable_OptionalScrollBar(t *testing.T) {
 }
 
 func TestParseAmpersandString_Unicode(t *testing.T) {
-	// "Ф" - одна руна, но два байта в UTF-8
+	// "Ф" - one rune, but two bytes in UTF-8
 	clean, hk, pos := ParseAmpersandString("Сохранить &файл")
 	if clean != "Сохранить файл" {
 		t.Errorf("Clean string mismatch: got %q", clean)
@@ -194,7 +194,7 @@ func TestParseAmpersandString_Unicode(t *testing.T) {
 	if hk != 'ф' {
 		t.Errorf("Hotkey mismatch: got %c", hk)
 	}
-	if pos != 10 { // "Сохранить " (10 рун)
+	if pos != 10 { // "Сохранить " (10 runes)
 		t.Errorf("Hotkey pos mismatch: got %d", pos)
 	}
 }

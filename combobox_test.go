@@ -9,12 +9,12 @@ func TestComboBox_Selection(t *testing.T) {
 	items := []string{"One", "Two", "Three"}
 	cb := NewComboBox(0, 0, 20, items)
 
-	// Изначально текст пустой
+	// Initially text is empty
 	if cb.Edit.GetText() != "" {
 		t.Errorf("Expected empty text, got %q", cb.Edit.GetText())
 	}
 
-	// Имитируем выбор второго элемента ("Two") в меню
+	// Simulate selecting the second item ("Two") in menu
 	cb.Menu.OnSelect(1)
 
 	if cb.Edit.GetText() != "Two" {
@@ -26,7 +26,7 @@ func TestComboBox_DropdownOnly(t *testing.T) {
 	cb := NewComboBox(0, 0, 20, []string{"A", "B"})
 	cb.DropdownOnly = true
 
-	// Пытаемся ввести текст 'X'
+	// Attempting to enter text 'X'
 	cb.ProcessKey(&vtinput.InputEvent{
 		Type:    vtinput.KeyEventType,
 		KeyDown: true,

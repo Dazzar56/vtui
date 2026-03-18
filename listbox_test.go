@@ -7,19 +7,19 @@ import (
 
 func TestListBox_Scrolling(t *testing.T) {
 	items := []string{"1", "2", "3", "4", "5"}
-	// ListBox высотой 2 строки
+	// ListBox with a height of 2 lines
 	lb := NewListBox(0, 0, 10, 2, items)
 
-	// 1. Изначально SelectPos 0, TopPos 0
+	// 1. Initially SelectPos 0, TopPos 0
 	if lb.SelectPos != 0 || lb.TopPos != 0 {
 		t.Errorf("Initial state error: SelectPos %d, TopPos %d", lb.SelectPos, lb.TopPos)
 	}
 
-	// 2. Листаем вниз 2 раза
+	// 2. Scroll down twice
 	lb.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
 	lb.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
 
-	// SelectPos должен быть 2, TopPos должен стать 1 (чтобы видеть индекс 2 в окне из 2 строк)
+	// SelectPos should be 2, TopPos should become 1 (to see index 2 in a 2-line window)
 	if lb.SelectPos != 2 {
 		t.Errorf("SelectPos error after Down: %d", lb.SelectPos)
 	}
@@ -27,7 +27,7 @@ func TestListBox_Scrolling(t *testing.T) {
 		t.Errorf("TopPos error after Down (scrolling): %d", lb.TopPos)
 	}
 
-	// 3. Тест Home
+	// 3. Home test
 	lb.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_HOME})
 	if lb.SelectPos != 0 || lb.TopPos != 0 {
 		t.Errorf("Home error: SelectPos %d, TopPos %d", lb.SelectPos, lb.TopPos)
@@ -73,8 +73,8 @@ func TestListBox_OnChange(t *testing.T) {
 }
 
 func TestListBox_PageNavigation(t *testing.T) {
-	items := make([]string, 20) // 20 элементов
-	lb := NewListBox(0, 0, 10, 5, items) // Высота 5
+	items := make([]string, 20) // 20 items
+	lb := NewListBox(0, 0, 10, 5, items) // Height 5
 
 	// 1. End
 	lb.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_END})
@@ -97,11 +97,11 @@ func TestListBox_PageNavigation(t *testing.T) {
 
 func TestListBox_MouseClickItem(t *testing.T) {
 	lb := NewListBox(0, 0, 10, 5, []string{"0", "1", "2", "3", "4"})
-	lb.TopPos = 1 // Смещено на 1 (видим 1, 2, 3, 4, 5)
+	lb.TopPos = 1 // Offset by 1 (visible: 1, 2, 3, 4, 5)
 
-	// Кликаем по Y=2 (в локальных координатах это вторая видимая строка)
-	// Должен выбраться индекс TopPos (1) + (clickY (2) - lbY (0)) = 3.
-	// Стоп. Формула: lb.TopPos + (my - lb.Y1). 1 + (2 - 0) = 3.
+	// Click at Y=2 (this is the second visible row in local coordinates)
+	// Selected index should be TopPos (1) + (clickY (2) - lbY (0)) = 3.
+	// Formula check: lb.TopPos + (my - lb.Y1) => 1 + (2 - 0) = 3.
 	lb.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType,
 		KeyDown: true,
@@ -117,7 +117,7 @@ func TestListBox_MouseClickItem(t *testing.T) {
 func TestListBox_EmptyList(t *testing.T) {
 	lb := NewListBox(0, 0, 10, 5, []string{})
 
-	// Попытка навигации не должна вызывать панику
+	// Navigation attempt should not cause panic
 	lb.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
 
 	if lb.SelectPos != 0 {

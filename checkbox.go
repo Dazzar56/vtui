@@ -5,12 +5,12 @@ import (
 	"github.com/mattn/go-runewidth"
 )
 
-// Checkbox представляет собой флажок с 2 или 3 состояниями.
+// Checkbox represents a flag with 2 or 3 states.
 type Checkbox struct {
 	ScreenObject
 	Text       string
 	State      int  // 0 - Unchecked, 1 - Checked, 2 - Undefined (3-state)
-	ThreeState bool // Включить поддержку третьего состояния
+	ThreeState bool // Enable support for the third state
 }
 
 func NewCheckbox(x, y int, text string, threeState bool) *Checkbox {
@@ -21,7 +21,7 @@ func NewCheckbox(x, y int, text string, threeState bool) *Checkbox {
 	clean, hk, _ := ParseAmpersandString(text)
 	cb.hotkey = hk
 	cb.canFocus = true
-	// Формат: "[x] Текст"
+	// Format: "[x] Text"
 	vLen := 4 + runewidth.StringWidth(clean)
 	cb.SetPosition(x, y, x+vLen-1, y)
 	return cb
@@ -47,7 +47,7 @@ func (cb *Checkbox) DisplayObject(scr *ScreenBuf) {
 	case 1:
 		char = "x"
 	case 2:
-		char = "?" // Символ для неопределенного состояния
+		char = "?" // Symbol for undefined state
 	}
 
 	cells, _ := StringToCharInfoHighlighted("["+char+"] "+cb.Text, attr, highAttr)

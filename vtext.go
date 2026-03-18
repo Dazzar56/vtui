@@ -4,7 +4,7 @@ import (
 	"github.com/mattn/go-runewidth"
 )
 
-// VText представляет собой вертикальную текстовую метку.
+// VText represents a vertical text label.
 type VText struct {
 	ScreenObject
 	Content string
@@ -13,7 +13,7 @@ type VText struct {
 
 func NewVText(x, y int, content string, color uint64) *VText {
 	vt := &VText{Content: content, Color: color}
-	// Высота — это количество символов, ширина — максимальная ширина символа (обычно 1)
+	// Height is the number of characters, width is the maximum character width (usually 1)
 	runes := []rune(content)
 	height := len(runes)
 	width := 0
@@ -37,7 +37,7 @@ func (vt *VText) DisplayObject(scr *ScreenBuf) {
 
 	runes := []rune(vt.Content)
 	for i, r := range runes {
-		// Пишем каждый символ на новой строке Y
+		// Write each character on a new Y line
 		scr.Write(vt.X1, vt.Y1+i, StringToCharInfo(string(r), vt.Color))
 	}
 }

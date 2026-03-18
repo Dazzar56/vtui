@@ -14,8 +14,8 @@ const WideCharFiller = ^uint64(0)
 // StringToCharInfo converts a string into a slice of CharInfo cells,
 // correctly handling double-width characters by inserting WideCharFillers.
 // It currently ignores zero-width characters to keep cell alignment strict.
-// ParseAmpersandString парсит строку с амперсандами, удаляет служебные &,
-// обрабатывает && как & и возвращает чистую строку, хоткей и его позицию (в рунах).
+// ParseAmpersandString parses a string with ampersands, removes utility &,
+// processes && as &, and returns the clean string, the hotkey, and its position (in runes).
 func ParseAmpersandString(s string) (clean string, hotkey rune, hotkeyPos int) {
 	var sb strings.Builder
 	hotkeyPos = -1
@@ -44,7 +44,7 @@ func ParseAmpersandString(s string) (clean string, hotkey rune, hotkeyPos int) {
 	return sb.String(), hotkey, hotkeyPos
 }
 
-// StringToCharInfoHighlighted работает как StringToCharInfo, но подсвечивает букву после &.
+// StringToCharInfoHighlighted works like StringToCharInfo but highlights the letter after &.
 func StringToCharInfoHighlighted(s string, normalAttr, highAttr uint64) ([]CharInfo, rune) {
 	clean, hk, hkPos := ParseAmpersandString(s)
 	var res []CharInfo

@@ -60,7 +60,7 @@ func (f *BorderedFrame) DisplayObject(scr *ScreenBuf) {
 		return
 	}
 
-	// Сначала закрашиваем всю область фона
+	// First fill the entire background area
 	scr.FillRect(f.X1, f.Y1, f.X2, f.Y2, ' ', Palette[f.ColorBackgroundIdx])
 
 	sym := getBoxSymbols(f.boxType)

@@ -9,7 +9,7 @@ import (
 	"golang.org/x/term"
 )
 
-// fileRow реализует vtui.TableRow для тестирования таблицы
+// fileRow implements vtui.TableRow for table testing
 type fileRow struct {
 	name string
 	size string
@@ -29,7 +29,7 @@ func (f fileRow) GetCellText(col int) string {
 }
 
 func main() {
-	// 1. Включаем расширенный режим терминала
+	// 1. Enable extended terminal mode
 	restore, err := vtinput.Enable()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error enabling raw mode: %v\n", err)
@@ -37,38 +37,38 @@ func main() {
 	}
 	defer restore()
 
-	// Скрываем курсор и восстанавливаем его при выходе
+	// Hide cursor and restore it on exit
 	fmt.Print("\x1b[?25l")
 	defer fmt.Print("\x1b[?25h")
 
-	// 2. Получаем размер терминала и создаем экранный буфер
+	// 2. Get terminal size and create screen buffer
 	width, height, _ := term.GetSize(int(os.Stdin.Fd()))
 	scr := vtui.NewScreenBuf()
 	scr.AllocBuf(width, height)
 
-	// 3. Инициализируем FrameManager
+	// 3. Initialize FrameManager
 	vtui.FrameManager.Init(scr)
 
-	// Создаем фоновый слой Desktop
+	// Create Desktop background layer
 	desktop := vtui.NewDesktop()
 	vtui.FrameManager.Push(desktop)
 
-	// 4. Создаем демонстрационный диалог
+	// 4. Create demonstration dialog
 	dlgWidth, dlgHeight := 60, 22
 	x1 := (width - dlgWidth) / 2
 	y1 := (height - dlgHeight) / 2
 	dlg := vtui.NewDialog(x1, y1, x1+dlgWidth-1, y1+dlgHeight-1, " UI Components Test ")
 	dlg.SetHelp("MainDialogTopic")
 
-	// --- Определение и добавление элементов в порядке навигации (Tab) ---
+	// --- Define and add elements in navigation order (Tab) ---
 
-	// 1. Текстовое поле ввода
+	// 1. Text input field
 	labelEdit := vtui.NewText(x1+2, y1+1, "Input field:", vtui.SetRGBFore(0, 0xFFFFFF))
 	edit := vtui.NewEdit(x1+15, y1+1, 40, "vtui")
 	dlg.AddItem(labelEdit)
 	dlg.AddItem(edit)
 
-	// 2. Таблица (высота 6 строк)
+	// 2. Table (height 6 lines)
 	tableCols := []vtui.TableColumn{
 		{Title: "Name", Width: 25},
 		{Title: "Size", Width: 10, Alignment: vtui.AlignRight},
@@ -81,44 +81,44 @@ func main() {
 		fileRow{"日本語.txt", "2 KB", "2024-03-12"},
 		fileRow{"main.go", "2 KB", "2024-03-12"},
 	}
-	// Добавляем еще файлов, чтобы показать скроллбар (высота таблицы 6)
+	// Add more files to show scrollbar (table height 6)
 	for i := 1; i <= 20; i++ {
 	table.ShowScrollBar = true
 		rows = append(rows, fileRow{fmt.Sprintf("file_%02d.txt", i), "1 KB", "2024-03-13"})
 	}
 	table.SetRows(rows)
 	dlg.AddItem(table)
-	// Добавляем VText справа от таблицы для красоты
+	// Add VText to the right of the table for decoration
 	dlg.AddItem(vtui.NewVText(x1+58, y1+3, "FILES", vtui.Palette[vtui.ColDialogText]))
 
-	// 3. Радиокнопки (одна группа)
+	// 3. Radio buttons (one group)
 	dlg.AddItem(vtui.NewText(x1+2, y1+10, "Options:", vtui.Palette[vtui.ColDialogText]))
 	rb1 := vtui.NewRadioButton(x1+15, y1+10, "Option A")
 	rb1.Selected = true
 	dlg.AddItem(rb1)
 	dlg.AddItem(vtui.NewRadioButton(x1+30, y1+10, "Option B"))
 
-	// 4. Чекбоксы (обычный и с тремя состояниями)
+	// 4. Checkboxes (normal and three-state)
 	dlg.AddItem(vtui.NewText(x1+2, y1+11, "Checks:", vtui.Palette[vtui.ColDialogText]))
 	dlg.AddItem(vtui.NewCheckbox(x1+15, y1+11, "Normal", false))
 	dlg.AddItem(vtui.NewCheckbox(x1+30, y1+11, "3-State", true))
 
-	// 5. Поле ввода пароля (PasswordMode)
+	// 5. Password input field (PasswordMode)
 	dlg.AddItem(vtui.NewText(x1+2, y1+12, "Pass:", vtui.Palette[vtui.ColDialogText]))
 	pedit := vtui.NewEdit(x1+15, y1+12, 20, "secret")
 	pedit.PasswordMode = true
 	dlg.AddItem(pedit)
 
-	// 6. ComboBox (Выпадающий список)
+	// 6. ComboBox (Dropdown list)
 	dlg.AddItem(vtui.NewText(x1+2, y1+13, "Combo:", vtui.Palette[vtui.ColDialogText]))
 	comboItems := []string{"Red", "Green", "Blue", "Alpha", "Cyan", "Magenta"}
-	// Добавляем элементы для активации скроллбара
+	// Add elements to activate the scrollbar
 	for i := 1; i <= 15; i++ {
 		comboItems = append(comboItems, fmt.Sprintf("Color #%02d", i))
 	}
 	dlg.AddItem(vtui.NewComboBox(x1+15, y1+13, 20, comboItems))
 
-	// 7. Вертикальное меню (VMenu)
+	// 7. Vertical menu (VMenu)
 	menu := vtui.NewVMenu(" Operations ")
 	menu.SetHelp("MenuOperationsTopic")
 	menu.SetPosition(x1+2, y1+15, x1+30, y1+19)
@@ -128,14 +128,14 @@ func main() {
 	menu.AddItem("Delete File")
 	dlg.AddItem(menu)
 
-	// 8. Кнопки управления
+	// 8. Control buttons
 	btnOk := vtui.NewButton(x1+22, y1+20, "&Ok")
 	btnCancel := vtui.NewButton(x1+38, y1+20, "&Cancel")
 
-	// Действия при нажатии на кнопки
+	// Actions on button clicks
 	btnMsg := vtui.NewButton(x1+5, y1+20, "Show &Msg")
 
-	// Действия при нажатии на кнопки
+	// Actions on button clicks
 	btnMsg.OnClick = func() {
 		vtui.ShowMessage(" MessageBox Demo ", "This is a dynamic message box.\nIt supports Unicode: Привет! 🚀\nIt automatically wraps long lines to fit the dialog width.", []string{"&Nice!", "&Whatever"})
 	}
@@ -152,7 +152,7 @@ func main() {
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnCancel)
 
-	// 5. Добавляем диалог в стек FrameManager и запускаем цикл событий
+	// 5. Add dialog to FrameManager stack and start event loop
 	vtui.FrameManager.Push(dlg)
 	vtui.FrameManager.Run()
 }

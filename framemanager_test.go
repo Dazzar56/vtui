@@ -24,8 +24,8 @@ type busyFrame struct {
 func (b *busyFrame) IsBusy() bool { return b.Busy }
 
 func TestFrameManager_IsBusy_Suppress(t *testing.T) {
-	// Этот тест проверяет, что если IsBusy() == true,
-	// отрисовка может быть пропущена (логическая проверка контракта)
+	// This test checks that if IsBusy() == true,
+	// rendering can be skipped (logical contract check)
 	f := &busyFrame{Busy: true}
 	if !f.IsBusy() {
 		t.Error("busyFrame should be busy")
@@ -41,15 +41,15 @@ func TestFrameManager_NoDoubleDispatch(t *testing.T) {
 	frame := &mockFrame{}
 	fm.Push(frame)
 
-	// Имитируем одно событие в канале
+	// Simulate one event in the channel
 	eventChan := make(chan *vtinput.InputEvent, 1)
 	eventChan <- &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'A'}
 	close(eventChan)
 
-	// Запускаем цикл на одну итерацию (IsDone вернет true после обработки событий)
-	// В нашей реализации fm.Run() содержит бесконечный цикл, поэтому для теста
-	// нам пришлось бы его рефакторить. Но мы можем проверить логику dispatch.
+	// Run the loop for one iteration (IsDone will return true after processing events)
+	// In our implementation fm.Run() contains an infinite loop, so for the test
+	// we would have to refactor it. But we can check the dispatch logic.
 
-	// Просто убедимся, что вызов ProcessKey произойдет ровно 1 раз для 1 события.
-	// (Этот тест скорее для документации проблемы, реальный fm.Run слишком монолитен для теста без правок)
+	// Simply ensure that ProcessKey is called exactly once for 1 event.
+	// (This test is more for documenting the problem; the real fm.Run is too monolithic to test without changes)
 }

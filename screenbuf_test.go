@@ -34,14 +34,14 @@ func TestAttributesToANSI(t *testing.T) {
 	}
 }
 func TestScreenBuf_ColorTransitions(t *testing.T) {
-	// Проверка перехода от TrueColor (бит 8-15) к обычной 16-цветовой палитре
+	// Check transition from TrueColor (bits 8-15) to standard 16-color palette
 	tcAttr := SetRGBFore(0, 0xFF0000)
-	palAttr := uint64(ForegroundBlue) // Обычный синий
+	palAttr := uint64(ForegroundBlue) // Regular blue
 
 	got := attributesToANSI(palAttr, tcAttr)
 
-	// Так как мы сменили тип цвета (TrueColor -> Palette), должен сработать сброс или
-	// явная установка кода 34 (Blue)
+	// Since we changed color type (TrueColor -> Palette), either a reset
+	// or explicit code 34 (Blue) must be triggered.
 	if !contains(got, "34") {
 		t.Errorf("Transition to palette failed, ANSI: %q", got)
 	}

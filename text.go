@@ -7,7 +7,7 @@ import (
 // Text represents a simple static text label.
 type Text struct {
 	ScreenObject
-	FocusLink UIElement // Если установлен хоткей, фокус будет передан этому элементу
+	FocusLink UIElement // If a hotkey is set, focus will be passed to this element
 	content   string
 	color     uint64
 }

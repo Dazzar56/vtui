@@ -143,13 +143,13 @@ func TestFrame_IsBorderClick(t *testing.T) {
 		x, y int
 		want bool
 	}{
-		{10, 10, true},  // Левый верхний угол
-		{20, 20, true},  // Правый нижний угол
-		{15, 10, true},  // Верхняя грань
-		{10, 15, true},  // Левая грань
-		{15, 15, false}, // Центр (не рамка)
-		{5, 5, false},   // Снаружи
-		{25, 25, false}, // Снаружи
+		{10, 10, true},  // Top-left corner
+		{20, 20, true},  // Bottom-right corner
+		{15, 10, true},  // Top edge
+		{10, 15, true},  // Left edge
+		{15, 15, false}, // Center (not the border)
+		{5, 5, false},   // Outside
+		{25, 25, false}, // Outside
 	}
 
 	for _, tt := range tests {

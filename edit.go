@@ -236,8 +236,8 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 
 	// Text input
 	if event.Char != 0 && (unicode.IsGraphic(event.Char) || event.Char == ' ') {
-		// При проверке модификаторов игнорируем Lock-клавиши (Num, Caps, Scroll),
-		// так как они не должны блокировать ввод текста.
+		// When checking modifiers, ignore Lock keys (Num, Caps, Scroll),
+		// because they should not block text input.
 		mods := event.ControlKeyState & ^uint32(vtinput.NumLockOn|vtinput.CapsLockOn|vtinput.ScrollLockOn|vtinput.EnhancedKey)
 		if (mods & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed | vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0 {
 			return false

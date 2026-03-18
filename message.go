@@ -2,15 +2,15 @@ package vtui
 
 import "github.com/mattn/go-runewidth"
 
-// ShowMessage создает и отображает модальное окно с текстом и кнопками.
-// Возвращает ID нажатой кнопки (0, 1...) или -1 при отмене.
-// Поскольку FrameManager работает асинхронно, эта функция возвращает Dialog,
-// который можно отслеживать.
+// ShowMessage creates and displays a modal window with text and buttons.
+// Returns the ID of the pressed button (0, 1...) or -1 on cancellation.
+// Since FrameManager works asynchronously, this function returns a Dialog
+// that can be tracked.
 func ShowMessage(title string, text string, buttons []string) *Dialog {
 	const maxDialogWidth = 60
 	const padding = 4
 
-	// 1. Подготовка текста
+	// 1. Text preparation
 	lines := WrapText(text, maxDialogWidth-padding)
 
 	textWidth := 0
@@ -19,16 +19,16 @@ func ShowMessage(title string, text string, buttons []string) *Dialog {
 		if w > textWidth { textWidth = w }
 	}
 
-	// 2. Расчет размеров
+	// 2. Size calculation
 	if title != "" {
 		tw := runewidth.StringWidth(title) + 4
 		if tw > textWidth { textWidth = tw }
 	}
 
-	// Расчет ширины кнопок
+	// Button width calculation
 	btnsWidth := 0
 	for _, b := range buttons {
-		btnsWidth += runewidth.StringWidth(b) + 5 // + скобки и пробелы
+		btnsWidth += runewidth.StringWidth(b) + 5 // + brackets and spaces
 	}
 
 	dlgWidth := textWidth + padding
@@ -39,28 +39,28 @@ func ShowMessage(title string, text string, buttons []string) *Dialog {
 		dlgWidth = maxDialogWidth
 	}
 
-	dlgHeight := len(lines) + 4 // текст + отступы + кнопки
+	dlgHeight := len(lines) + 4 // text + padding + buttons
 	if len(buttons) > 0 {
 		dlgHeight += 2
 	}
 
 	scrWidth := FrameManager.GetScreenSize()
 	x1 := (scrWidth - dlgWidth) / 2
-	y1 := 6 // фиксированный отступ сверху
+	y1 := 6 // fixed top padding
 
 	dlg := NewDialog(x1, y1, x1+dlgWidth-1, y1+dlgHeight-1, title)
 
-	// 3. Добавление контента
+	// 3. Content addition
 	for i, l := range lines {
-		// Центрируем каждую строку текста
+		// Center each line of text
 		lineW := runewidth.StringWidth(l)
 		offX := (dlgWidth - lineW) / 2
 		dlg.AddItem(NewText(x1+offX, y1+2+i, l, Palette[ColDialogText]))
 	}
 
-	// 4. Добавление кнопок
+	// 4. Buttons addition
 	if len(buttons) > 0 {
-		// Вычисляем общую ширину кнопок с пробелами между ними
+		// Calculate total width of buttons with spaces between them
 		spacing := 2
 		totalBtnW := btnsWidth + (len(buttons)-1)*spacing
 

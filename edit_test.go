@@ -5,7 +5,6 @@ import (
 	"github.com/unxed/vtinput"
 )
 
-
 func TestEdit_PasswordMode(t *testing.T) {
 	SetDefaultPalette()
 	scr := NewScreenBuf()
@@ -15,8 +14,8 @@ func TestEdit_PasswordMode(t *testing.T) {
 	e.PasswordMode = true
 	e.Show(scr)
 
-	// Проверяем, что в буфере вместо 'a' находится '*'
-	// Атрибуты должны соответствовать ColDialogEdit
+	// Check that buffer contains '*' instead of 'a'
+	// Attributes must match ColDialogEdit
 	checkCell(t, scr, 0, 0, '*', Palette[ColDialogEdit])
 	checkCell(t, scr, 1, 0, '*', Palette[ColDialogEdit])
 	checkCell(t, scr, 2, 0, '*', Palette[ColDialogEdit])
@@ -25,7 +24,7 @@ func TestEdit_PasswordMode(t *testing.T) {
 func TestEdit_IgnoreLockKeys(t *testing.T) {
 	e := NewEdit(0, 0, 10, "")
 
-	// Имитируем ввод 'x' с включенным NumLock и CapsLock
+	// Simulate entering 'x' with NumLock and CapsLock enabled
 	e.ProcessKey(&vtinput.InputEvent{
 		Type:            vtinput.KeyEventType,
 		KeyDown:         true,
@@ -41,15 +40,15 @@ func TestEdit_IgnoreLockKeys(t *testing.T) {
 func TestVMenu_ScrollbarMouseClick(t *testing.T) {
 	SetDefaultPalette()
 	m := NewVMenu("Title")
-	// Добавляем 20 элементов, чтобы меню скроллилось
+	// Add 20 items so menu scrolls
 	for i := 0; i < 20; i++ {
 		m.AddItem("Item")
 	}
-	m.SetPosition(0, 0, 10, 6) // Высота 7, данные 5 (Y1+1..Y2-1)
+	m.SetPosition(0, 0, 10, 6) // Height 7, data 5 (Y1+1..Y2-1)
 
-	// Начальное состояние: SelectPos 0
-	
-	// 1. Клик по нижней стрелке (X = X2 = 10, Y = Y2-1 = 5)
+	// Initial state: SelectPos 0
+
+	// 1. Click down arrow (X = X2 = 10, Y = Y2-1 = 5)
 	m.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: true, MouseX: 10, MouseY: 5, ButtonState: vtinput.FromLeft1stButtonPressed,
 	})
@@ -57,7 +56,7 @@ func TestVMenu_ScrollbarMouseClick(t *testing.T) {
 		t.Errorf("VMenu down arrow click failed, pos %d", m.selectPos)
 	}
 
-	// 2. Клик по верхней стрелке (Y = Y1+1 = 1)
+	// 2. Click up arrow (Y = Y1+1 = 1)
 	m.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: true, MouseX: 10, MouseY: 1, ButtonState: vtinput.FromLeft1stButtonPressed,
 	})
@@ -65,7 +64,7 @@ func TestVMenu_ScrollbarMouseClick(t *testing.T) {
 		t.Errorf("VMenu up arrow click failed, pos %d", m.selectPos)
 	}
 
-	// 3. Page Down клик (Y = 4)
+	// 3. Page Down click (Y = 4)
 	m.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: true, MouseX: 10, MouseY: 4, ButtonState: vtinput.FromLeft1stButtonPressed,
 	})
@@ -73,7 +72,7 @@ func TestVMenu_ScrollbarMouseClick(t *testing.T) {
 		t.Errorf("VMenu PageDown click failed, pos %d", m.selectPos)
 	}
 
-	// 4. Page Up клик (Y = 2)
+	// 4. Page Up click (Y = 2)
 	m.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: true, MouseX: 10, MouseY: 2, ButtonState: vtinput.FromLeft1stButtonPressed,
 	})
@@ -87,7 +86,7 @@ func TestVMenu_Hotkeys(t *testing.T) {
 	m.AddItem("&Save")
 	m.AddItem("E&xit")
 
-	// 1. Нажимаем 's' (хоткей второго пункта)
+	// 1. Press 's' (second item hotkey)
 	m.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 's'})
 
 	if m.selectPos != 1 {

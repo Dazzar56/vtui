@@ -209,7 +209,7 @@ func (m *VMenu) ProcessMouse(e *vtinput.InputEvent) bool {
 		if mx >= m.X1 && mx <= m.X2 && my >= m.Y1 && my <= m.Y2 {
 			height := m.Y2 - m.Y1 - 1
 
-			// Отрабатываем клик по скроллбару
+			// Process scrollbar click
 			if len(m.items) > height && mx == m.X2 {
 				startY := m.Y1 + 1
 				if my == startY {

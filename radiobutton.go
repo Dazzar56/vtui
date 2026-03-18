@@ -5,7 +5,7 @@ import (
 	"github.com/mattn/go-runewidth"
 )
 
-// RadioButton представляет собой переключатель в группе.
+// RadioButton represents a toggle switch in a group.
 type RadioButton struct {
 	ScreenObject
 	Text     string
@@ -19,7 +19,7 @@ func NewRadioButton(x, y int, text string) *RadioButton {
 	clean, hk, _ := ParseAmpersandString(text)
 	rb.hotkey = hk
 	rb.canFocus = true
-	// Формат: "( ) Текст" или "(•) Текст"
+	// Format: "( ) Text" or "(•) Text"
 	vLen := 4 + runewidth.StringWidth(clean)
 	rb.SetPosition(x, y, x+vLen-1, y)
 	return rb
@@ -52,15 +52,15 @@ func (rb *RadioButton) DisplayObject(scr *ScreenBuf) {
 func (rb *RadioButton) ProcessKey(e *vtinput.InputEvent) bool {
 	if !e.KeyDown { return false }
 	if e.VirtualKeyCode == vtinput.VK_SPACE || e.VirtualKeyCode == vtinput.VK_RETURN {
-		// Сама кнопка не меняет состояние напрямую, это сделает Dialog
-		return false // Возвращаем false, чтобы Dialog поймал событие и обновил группу
+		// The button itself doesn't change state directly; Dialog will handle that.
+		return false // Return false so Dialog catches the event and updates the group
 	}
 	return false
 }
 
 func (rb *RadioButton) ProcessMouse(e *vtinput.InputEvent) bool {
 	if e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
-		return false // Даем диалогу обработать клик и обновить группу
+		return false // Let the dialog handle the click and update the group
 	}
 	return false
 }

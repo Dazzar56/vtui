@@ -34,7 +34,7 @@ func TestButton_OnClick(t *testing.T) {
 
 func TestButton_HotkeyParsing(t *testing.T) {
 	b := NewButton(0, 0, "Sa&ve")
-	// Проверяем, что конструктор правильно выцепил 'v' (в нижнем регистре)
+	// Check that the constructor correctly extracted 'v' (lowercase)
 	if b.GetHotkey() != 'v' {
 		t.Errorf("Expected hotkey 'v', got %c", b.GetHotkey())
 	}

@@ -18,8 +18,8 @@ func TestRadioButton_GroupLogic(t *testing.T) {
 		t.Fatal("Initial selection state invalid")
 	}
 
-	// Имитируем клик по второй кнопке (индекс 1 в диалоге)
-	// Для теста вызовем внутренний метод выбора
+	// Simulate click on the second button (index 1 in the dialog)
+	// Call the internal selection method for the test
 	d.selectRadio(rb2)
 
 	if rb1.Selected {
@@ -39,7 +39,7 @@ func TestRadioButton_Rendering(t *testing.T) {
 	rb.Selected = true
 	rb.Show(scr)
 
-	// Проверяем наличие точки (•) в начале (StringToCharInfo превращает её в rune)
-	// Координаты: (1, 0) внутри "(•) "
+	// Check for the presence of the dot (•) at the beginning (StringToCharInfo converts it to rune)
+	// Coordinates: (1, 0) inside "(•) "
 	checkCell(t, scr, 1, 0, '•', Palette[ColDialogText])
 }

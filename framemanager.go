@@ -30,7 +30,7 @@ type Frame interface {
 	GetType() FrameType
 	SetExitCode(code int)
 	IsDone() bool
-	IsBusy() bool // Если true, FrameManager может пропустить фазу отрисовки
+	IsBusy() bool // If true, FrameManager may skip the rendering phase
 }
 
 // frameManager manages the stack of frames and the main application loop.
@@ -125,8 +125,8 @@ func (fm *frameManager) Run() {
 		// 1. Rendering
 		topFrame := fm.frames[len(fm.frames)-1]
 
-		// Если фрейм "занят" (например, идёт массовая вставка), пропускаем отрисовку
-		// и Flush, чтобы не мерцать и не тратить CPU.
+		// If the frame is "busy" (e.g., mass insertion in progress), skip drawing
+		// and Flush to avoid flickering and save CPU.
 		if !topFrame.IsBusy() {
 			fm.scr.SetCursorVisible(false)
 			for _, frame := range fm.frames {
@@ -175,11 +175,11 @@ func (fm *frameManager) Run() {
 			}
 		}
 
-		// Обрабатываем первое полученное событие
+		// Process the first received event
 		dispatch(e, injected)
 
-		// 4. "Осушение" очереди (Drain)
-		// Если события приходят плотным потоком (вставка), обрабатываем их пачкой.
+		// 4. Queue "Drain"
+		// If events arrive in a dense stream (insertion), process them in a batch.
 		for {
 			select {
 			case ev, ok := <-eventChan:
@@ -187,9 +187,9 @@ func (fm *frameManager) Run() {
 				dispatch(ev, false)
 				continue
 			case <-time.After(2 * time.Millisecond):
-				// Если за 2мс ничего не пришло, считаем burst оконченным.
-				// Это критично для "мгновенности" Bracketed Paste, так как терминал
-				// шлет данные кусками, и обычный drain может прерваться слишком рано.
+				// If nothing arrived within 2ms, consider the burst finished.
+				// This is critical for "instant" Bracketed Paste, because the terminal
+				// sends data in chunks, and a normal drain may be interrupted too early.
 			}
 			break
 		}
