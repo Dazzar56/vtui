@@ -9,25 +9,6 @@ import (
 	"golang.org/x/term"
 )
 
-// fileRow implements vtui.TableRow for table testing
-type fileRow struct {
-	name string
-	size string
-	date string
-}
-
-func (f fileRow) GetCellText(col int) string {
-	switch col {
-	case 0:
-		return f.name
-	case 1:
-		return f.size
-	case 2:
-		return f.date
-	}
-	return ""
-}
-
 func main() {
 	// 1. Enable extended terminal mode
 	restore, err := vtinput.Enable()
@@ -53,104 +34,82 @@ func main() {
 	desktop := vtui.NewDesktop()
 	vtui.FrameManager.Push(desktop)
 
-	// 4. Create demonstration dialog
-	dlgWidth, dlgHeight := 60, 22
+	// 4. Create the unified, comprehensive demonstration dialog
+	dlgWidth, dlgHeight := 64, 20
 	x1 := (width - dlgWidth) / 2
 	y1 := (height - dlgHeight) / 2
-	dlg := vtui.NewDialog(x1, y1, x1+dlgWidth-1, y1+dlgHeight-1, " UI Components Test ")
+	dlg := vtui.NewDialog(x1, y1, x1+dlgWidth-1, y1+dlgHeight-1, " vtui Comprehensive Demo ")
 	dlg.SetHelp("MainDialogTopic")
 
-	// --- Define and add elements in navigation order (Tab) ---
+	// --- Left Column ---
 
-	// 1. Text input field
-	labelEdit := vtui.NewText(x1+2, y1+1, "Input field:", vtui.SetRGBFore(0, 0xFFFFFF))
-	edit := vtui.NewEdit(x1+15, y1+1, 40, "vtui")
-	dlg.AddItem(labelEdit)
-	dlg.AddItem(edit)
-
-	// 2. Table (height 6 lines)
-	tableCols := []vtui.TableColumn{
-		{Title: "Name", Width: 25},
-		{Title: "Size", Width: 10, Alignment: vtui.AlignRight},
-		{Title: "Date", Width: 12},
-	}
-	table := vtui.NewTable(x1+2, y1+3, 56, 6, tableCols)
-	rows := []vtui.TableRow{
-		fileRow{"kernel.go", "4 KB", "2024-03-10"},
-		fileRow{"🚀 rocket.exe", "12 KB", "2024-03-11"},
-		fileRow{"日本語.txt", "2 KB", "2024-03-12"},
-		fileRow{"main.go", "2 KB", "2024-03-12"},
-	}
-	// Add more files to show scrollbar (table height 6)
-	for i := 1; i <= 20; i++ {
-	table.ShowScrollBar = true
-		rows = append(rows, fileRow{fmt.Sprintf("file_%02d.txt", i), "1 KB", "2024-03-13"})
-	}
-	table.SetRows(rows)
-	dlg.AddItem(table)
-	// Add VText to the right of the table for decoration
-	dlg.AddItem(vtui.NewVText(x1+58, y1+3, "FILES", vtui.Palette[vtui.ColDialogText]))
-
-	// 3. Radio buttons (one group)
-	dlg.AddItem(vtui.NewText(x1+2, y1+10, "Options:", vtui.Palette[vtui.ColDialogText]))
-	rb1 := vtui.NewRadioButton(x1+15, y1+10, "Option A")
+	// Radio buttons
+	dlg.AddItem(vtui.NewLabel(x1+2, y1+2, "Select &mode:", nil))
+	rb1 := vtui.NewRadioButton(x1+4, y1+3, "&Fast and Dangerous")
 	rb1.Selected = true
 	dlg.AddItem(rb1)
-	dlg.AddItem(vtui.NewRadioButton(x1+30, y1+10, "Option B"))
+	dlg.AddItem(vtui.NewRadioButton(x1+4, y1+4, "Slow and &Stable"))
+	dlg.AddItem(vtui.NewRadioButton(x1+4, y1+5, "Mental &Health Mode"))
 
-	// 4. Checkboxes (normal and three-state)
-	dlg.AddItem(vtui.NewText(x1+2, y1+11, "Checks:", vtui.Palette[vtui.ColDialogText]))
-	dlg.AddItem(vtui.NewCheckbox(x1+15, y1+11, "Normal", false))
-	dlg.AddItem(vtui.NewCheckbox(x1+30, y1+11, "3-State", true))
+	// ComboBox
+	combo := vtui.NewComboBox(x1+13, y1+8, 16, []string{"UTF-8", "CP866 (OEM)", "Windows-1251", "KOI8-R"})
+	combo.Edit.SetText("UTF-8")
+	dlg.AddItem(vtui.NewLabel(x1+2, y1+8, "&Encoding:", combo))
+	dlg.AddItem(combo)
 
-	// 5. Password input field (PasswordMode)
-	dlg.AddItem(vtui.NewText(x1+2, y1+12, "Pass:", vtui.Palette[vtui.ColDialogText]))
-	pedit := vtui.NewEdit(x1+15, y1+12, 20, "secret")
-	pedit.PasswordMode = true
-	dlg.AddItem(pedit)
+	// Password
+	pass := vtui.NewEdit(x1+13, y1+10, 16, "")
+	pass.PasswordMode = true
+	dlg.AddItem(vtui.NewLabel(x1+2, y1+10, "&Password:", pass))
+	dlg.AddItem(pass)
 
-	// 6. ComboBox (Dropdown list)
-	dlg.AddItem(vtui.NewText(x1+2, y1+13, "Combo:", vtui.Palette[vtui.ColDialogText]))
-	comboItems := []string{"Red", "Green", "Blue", "Alpha", "Cyan", "Magenta"}
-	// Add elements to activate the scrollbar
-	for i := 1; i <= 15; i++ {
-		comboItems = append(comboItems, fmt.Sprintf("Color #%02d", i))
-	}
-	dlg.AddItem(vtui.NewComboBox(x1+15, y1+13, 20, comboItems))
 
-	// 7. Vertical menu (VMenu)
+	// --- Right Column ---
+
+	// VText separator
+	dlg.AddItem(vtui.NewVText(x1+30, y1+2, "│CORE│", vtui.Palette[vtui.ColDialogText]))
+
+	// Checkboxes
+	dlg.AddItem(vtui.NewLabel(x1+34, y1+2, "S&ettings:", nil))
+	dlg.AddItem(vtui.NewCheckbox(x1+36, y1+3, "Enable &AI", false))
+	dlg.AddItem(vtui.NewCheckbox(x1+36, y1+4, "A&uto-update", true))
+	dlg.AddItem(vtui.NewCheckbox(x1+36, y1+5, "F&orce Legacy (3-state)", true))
+
+	// VMenu
 	menu := vtui.NewVMenu(" Operations ")
 	menu.SetHelp("MenuOperationsTopic")
-	menu.SetPosition(x1+2, y1+15, x1+30, y1+19)
-	menu.AddItem("Copy File")
-	menu.AddItem("Move File")
+	menu.SetPosition(x1+34, y1+8, x1+58, y1+10) // Height of 3 lines
+	menu.AddItem("&Copy File")
+	menu.AddItem("&Move File")
 	menu.AddSeparator()
-	menu.AddItem("Delete File")
+	menu.AddItem("&Delete File")
 	dlg.AddItem(menu)
 
-	// 8. Control buttons
-	btnOk := vtui.NewButton(x1+22, y1+20, "&Ok")
-	btnCancel := vtui.NewButton(x1+38, y1+20, "&Cancel")
+	// ListBox (from f4 demo)
+	recentFiles := []string{"config.go", "main.go", "utils.go", "README.md", "LICENSE", "go.mod"}
+	lb := vtui.NewListBox(x1+34, y1+12, 24, 2, recentFiles) // Height of 2 lines
+	lb.ColorTextIdx = vtui.ColDialogEdit
+	lb.ColorSelectedTextIdx = vtui.ColDialogEditSelected
+	dlg.AddItem(vtui.NewLabel(x1+34, y1+11, "&Recently used:", lb))
+	dlg.AddItem(lb)
 
-	// Actions on button clicks
-	btnMsg := vtui.NewButton(x1+5, y1+20, "Show &Msg")
 
-	// Actions on button clicks
+	// --- Bottom Buttons ---
+
+	btnOk := vtui.NewButton(x1+dlgWidth/2-18, y1+17, "&Ok")
+	btnOk.OnClick = func() { dlg.SetExitCode(0); desktop.SetExitCode(0) }
+
+	btnCancel := vtui.NewButton(x1+dlgWidth/2-4, y1+17, "&Cancel")
+	btnCancel.OnClick = func() { dlg.SetExitCode(-1); desktop.SetExitCode(-1) }
+
+	btnMsg := vtui.NewButton(x1+dlgWidth/2+10, y1+17, "Show &Msg")
 	btnMsg.OnClick = func() {
-		vtui.ShowMessage(" MessageBox Demo ", "This is a dynamic message box.\nIt supports Unicode: Привет! 🚀\nIt automatically wraps long lines to fit the dialog width.", []string{"&Nice!", "&Whatever"})
-	}
-	btnCancel.OnClick = func() {
-		dlg.SetExitCode(-1)
-		desktop.SetExitCode(-1)
-	}
-	btnOk.OnClick = func() {
-		dlg.SetExitCode(0)
-		desktop.SetExitCode(0)
+		vtui.ShowMessage(" MessageBox Demo ", "This is a dynamic message box.\nIt supports Unicode: Привет! 🚀", []string{"&Nice!", "&Whatever"})
 	}
 
-	dlg.AddItem(btnMsg)
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnCancel)
+	dlg.AddItem(btnMsg)
 
 	// 5. Add dialog to FrameManager stack and start event loop
 	vtui.FrameManager.Push(dlg)
