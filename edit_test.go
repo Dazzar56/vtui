@@ -96,3 +96,20 @@ func TestVMenu_Hotkeys(t *testing.T) {
 		t.Error("Menu should be finished with exitCode 1")
 	}
 }
+
+func TestEdit_History(t *testing.T) {
+	e := NewEdit(0, 0, 10, "")
+	e.History = []string{"First", "Second"}
+
+	// Simulate Alt+Down
+	handled := e.ProcessKey(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_DOWN,
+		ControlKeyState: vtinput.LeftAltPressed,
+	})
+
+	if !handled {
+		t.Error("Alt+Down should be handled when History is present")
+	}
+}

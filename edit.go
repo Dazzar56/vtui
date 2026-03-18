@@ -18,6 +18,7 @@ type Edit struct {
 	overtype       bool
 	clearFlag      bool // If true, first input will clear the text
 	PasswordMode   bool // Mask text with '*'
+	History        []string
 	ColorTextIdx      int
 	ColorUnchangedIdx int
 	ColorSelectedIdx  int
@@ -133,6 +134,12 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 	DebugLog("  Edit.ProcessKey: VK=%X Char=%d", event.VirtualKeyCode, event.Char)
 	shift := (event.ControlKeyState & vtinput.ShiftPressed) != 0
 	ctrl := (event.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
+	alt := (event.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
+
+	if alt && event.VirtualKeyCode == vtinput.VK_DOWN && len(e.History) > 0 {
+		e.OpenHistory()
+		return true
+	}
 
 	if ctrl && !shift {
 		switch event.VirtualKeyCode {
@@ -311,4 +318,28 @@ func (e *Edit) copySelection() {
 		return
 	}
 	SetClipboard(string(e.text[e.selStart:e.selEnd]))
+}
+func (e *Edit) OpenHistory() {
+	if len(e.History) == 0 {
+		return
+	}
+	menu := NewVMenu("")
+	for _, h := range e.History {
+		menu.AddItem(h)
+	}
+
+	h := len(e.History) + 2
+	if h > 10 { h = 10 }
+
+	menu.SetPosition(e.X1, e.Y1+1, e.X2, e.Y1+h)
+
+	menu.OnSelect = func(idx int) {
+		e.SetText(e.History[idx])
+		e.SetFocus(true)
+	}
+	menu.OnClose = func() {
+		e.SetFocus(true)
+	}
+
+	FrameManager.Push(menu)
 }

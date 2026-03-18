@@ -30,10 +30,13 @@ type Dialog struct {
 	done       bool
 	exitCode   int
 	isDragging bool
+	isResizing bool
 	dragOffX   int
 	dragOffY   int
 	lastW      int
 	lastH      int
+	MinW       int
+	MinH       int
 }
 
 func NewDialog(x1, y1, x2, y2 int, title string) *Dialog {
@@ -41,6 +44,8 @@ func NewDialog(x1, y1, x2, y2 int, title string) *Dialog {
 		items:    []UIElement{},
 		focusIdx: -1,
 		frame:    NewBorderedFrame(x1, y1, x2, y2, DoubleBox, title),
+		MinW:     10,
+		MinH:     3,
 	}
 	d.SetPosition(x1, y1, x2, y2)
 	d.lastW = x2 - x1 + 1
@@ -295,6 +300,20 @@ func (d *Dialog) ProcessMouse(e *vtinput.InputEvent) bool {
 		return true
 	}
 
+	// 1.5 Handle Active Resizing
+	if d.isResizing {
+		if !e.KeyDown && e.ButtonState == 0 {
+			d.isResizing = false
+			return true
+		}
+		newW := mx - d.X1 + 1
+		newH := my - d.Y1 + 1
+		if newW < d.MinW { newW = d.MinW }
+		if newH < d.MinH { newH = d.MinH }
+		d.ChangeSize(newW, newH)
+		return true
+	}
+
 	// 2. Check elements
 	for i := len(d.items) - 1; i >= 0; i-- {
 		item := d.items[i]
@@ -320,8 +339,12 @@ func (d *Dialog) ProcessMouse(e *vtinput.InputEvent) bool {
 		}
 	}
 
-	// 3. Initiate Dragging (if click on border or background)
+	// 3. Initiate Dragging or Resizing (if click on border or background)
 	if e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
+		if mx == d.X2 && my == d.Y2 {
+			d.isResizing = true
+			return true
+		}
 		if mx >= d.X1 && mx <= d.X2 && my >= d.Y1 && my <= d.Y2 {
 			d.isDragging = true
 			d.dragOffX = mx - d.X1

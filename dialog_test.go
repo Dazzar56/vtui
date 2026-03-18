@@ -351,6 +351,55 @@ func TestDialog_DraggingOffscreen(t *testing.T) {
 	}
 }
 
+func TestDialog_ResizingLogic(t *testing.T) {
+	d := NewDialog(0, 0, 9, 9, "Resize Me")
+	d.MinW = 5
+	d.MinH = 5
+
+	// 1. Click bottom-right corner (9,9)
+	d.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: true,
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+		MouseX: 9, MouseY: 9,
+	})
+
+	if !d.isResizing {
+		t.Fatal("Dialog should start resizing when clicking bottom-right corner")
+	}
+
+	// 2. Drag to (14, 14) -> size should become 15x15
+	d.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: false,
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+		MouseX: 14, MouseY: 14,
+	})
+
+	if d.X2 != 14 || d.Y2 != 14 {
+		t.Errorf("Dialog did not resize correctly. Got X2=%d, Y2=%d", d.X2, d.Y2)
+	}
+
+	// 3. Drag to (2, 2) -> size should hit minimum 5x5 (so X2=4, Y2=4)
+	d.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: false,
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+		MouseX: 2, MouseY: 2,
+	})
+
+	if d.X2 != 4 || d.Y2 != 4 {
+		t.Errorf("Dialog minimum size failed. Got X2=%d, Y2=%d", d.X2, d.Y2)
+	}
+
+	// 4. Release mouse
+	d.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: false,
+		ButtonState: 0,
+		MouseX: 4, MouseY: 4,
+	})
+
+	if d.isResizing {
+		t.Error("Dialog should stop resizing on mouse release")
+	}
+}
 func TestDialog_RightClickNoDrag(t *testing.T) {
 	d := NewDialog(0, 0, 10, 10, "Left Button Only")
 
