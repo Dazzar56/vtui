@@ -400,6 +400,35 @@ func TestDialog_ResizingLogic(t *testing.T) {
 		t.Error("Dialog should stop resizing on mouse release")
 	}
 }
+func TestDialog_ResizeGrowMode(t *testing.T) {
+	// 10x10 Dialog
+	d := NewDialog(0, 0, 9, 9, "Grow Test")
+
+	// Button anchored to the bottom-right (GrowLoX | GrowHiX | GrowLoY | GrowHiY moves it)
+	btn := NewButton(5, 5, "Fixed")
+	btn.SetGrowMode(GrowLoX | GrowHiX | GrowLoY | GrowHiY)
+	d.AddItem(btn)
+
+	// Initiate resize via mouse at bottom-right corner
+	d.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: true,
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+		MouseX: 9, MouseY: 9,
+	})
+
+	// Drag mouse to (19, 19) -> Dialog size becomes 20x20 (Delta +10, +10)
+	d.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: false,
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+		MouseX: 19, MouseY: 19,
+	})
+
+	bx1, by1, _, _ := btn.GetPosition()
+	// Original (5,5) + Delta (10,10) = (15,15)
+	if bx1 != 15 || by1 != 15 {
+		t.Errorf("Child GrowMode failed during resize. Expected (15,15), got (%d,%d)", bx1, by1)
+	}
+}
 func TestDialog_RightClickNoDrag(t *testing.T) {
 	d := NewDialog(0, 0, 10, 10, "Left Button Only")
 

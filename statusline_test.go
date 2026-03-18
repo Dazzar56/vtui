@@ -32,3 +32,21 @@ func TestStatusLine_ContextUpdate(t *testing.T) {
 		t.Errorf("Expected topic 'Dialog', got '%s'", sl.currentTopic)
 	}
 }
+
+func TestStatusLine_Truncation(t *testing.T) {
+	SetDefaultPalette()
+	scr := NewScreenBuf()
+	scr.AllocBuf(10, 1) // Very narrow screen
+
+	sl := NewStatusLine()
+	sl.Default = []StatusItem{
+		{Key: "F1", Label: "Very Long Help Label That Should Be Truncated"},
+	}
+	sl.SetPosition(0, 0, 9, 0)
+
+	// Should not panic
+	sl.Show(scr)
+
+	// Check that at least the start is visible
+	checkCell(t, scr, 0, 0, 'F', Palette[ColKeyBarNum])
+}

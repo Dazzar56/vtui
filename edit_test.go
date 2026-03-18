@@ -113,3 +113,19 @@ func TestEdit_History(t *testing.T) {
 		t.Error("Alt+Down should be handled when History is present")
 	}
 }
+func TestEdit_HistorySelection(t *testing.T) {
+	e := NewEdit(0, 0, 10, "")
+	e.History = []string{"Previous Command"}
+
+	// We can't easily test the full Push/Pop cycle of FrameManager here,
+	// but we can test the Edit's SetText which is called by the history menu.
+	e.SetText(e.History[0])
+
+	if e.GetText() != "Previous Command" {
+		t.Errorf("SetText failed: expected 'Previous Command', got %q", e.GetText())
+	}
+
+	if e.curPos != 16 {
+		t.Errorf("Cursor position should be at the end of the new text, got %d", e.curPos)
+	}
+}
