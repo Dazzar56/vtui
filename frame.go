@@ -34,6 +34,16 @@ func NewBorderedFrame(x1, y1, x2, y2 int, boxType int, title string) *BorderedFr
 func (f *BorderedFrame) SetTitle(title string) {
 	f.title = title
 }
+// IsBorderClick returns true if the coordinates hit the frame border.
+func (f *BorderedFrame) IsBorderClick(x, y int) bool {
+	if f.boxType == NoBox {
+		return false
+	}
+	// Check if click is on any of the four borders
+	onHoriz := (y == f.Y1 || y == f.Y2) && (x >= f.X1 && x <= f.X2)
+	onVert := (x == f.X1 || x == f.X2) && (y >= f.Y1 && y <= f.Y2)
+	return onHoriz || onVert
+}
 
 // Show saves the background and calls the object's drawing method.
 func (f *BorderedFrame) Show(scr *ScreenBuf) {

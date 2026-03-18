@@ -22,11 +22,14 @@ type UIElement interface {
 // Dialog is a container for UI elements that manages focus and events.
 type Dialog struct {
 	ScreenObject
-	items    []UIElement
-	focusIdx int
-	frame    *BorderedFrame
-	done     bool
-	exitCode int
+	items      []UIElement
+	focusIdx   int
+	frame      *BorderedFrame
+	done       bool
+	exitCode   int
+	isDragging bool
+	dragOffX   int
+	dragOffY   int
 }
 
 func NewDialog(x1, y1, x2, y2 int, title string) *Dialog {
@@ -120,15 +123,19 @@ func (d *Dialog) ProcessKey(e *vtinput.InputEvent) bool {
 					target := item
 					targetIdx := i
 
-					// Если хоткей у метки (Text), перебрасываем фокус на привязанный элемент
-					if txt, ok := target.(*Text); ok && txt.FocusLink != nil {
-						target = txt.FocusLink
-						for j, other := range d.items {
-							if other == target {
-								targetIdx = j
-								break
+					// Рекурсивно переходим по ссылкам FocusLink, пока не найдем конечный элемент
+					for hops := 0; hops < len(d.items); hops++ {
+						if txt, ok := target.(*Text); ok && txt.FocusLink != nil {
+							target = txt.FocusLink
+							for j, other := range d.items {
+								if other == target {
+									targetIdx = j
+									break
+								}
 							}
+							continue
 						}
+						break
 					}
 
 					if target.CanFocus() {
@@ -139,7 +146,7 @@ func (d *Dialog) ProcessKey(e *vtinput.InputEvent) bool {
 						target.SetFocus(true)
 					}
 
-					// Эмулируем клик для кнопок/чекбоксов
+					// Эмулируем клик
 					if _, isBtn := target.(*Button); isBtn {
 						target.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_SPACE})
 					} else if _, isChk := target.(*Checkbox); isChk {
@@ -147,7 +154,6 @@ func (d *Dialog) ProcessKey(e *vtinput.InputEvent) bool {
 					} else if rb, isRad := target.(*RadioButton); isRad {
 						d.selectRadio(rb)
 					}
-
 					return true
 				}
 			}
@@ -239,14 +245,27 @@ func (d *Dialog) selectRadio(rb *RadioButton) {
 func (d *Dialog) ProcessMouse(e *vtinput.InputEvent) bool {
 	mx, my := int(e.MouseX), int(e.MouseY)
 
-	// Check whether the click hit any element of the dialog.
-	// Iterate over the elements in reverse order (Z-order: top first)
+	// 1. Handle Active Dragging
+	if d.isDragging {
+		if !e.KeyDown && e.ButtonState == 0 {
+			d.isDragging = false
+			return true
+		}
+		// Move the whole dialog including its components
+		dx := mx - d.dragOffX
+		dy := my - d.dragOffY
+		if dx != d.X1 || dy != d.Y1 {
+			offX, offY := dx-d.X1, dy-d.Y1
+			d.MoveRelative(offX, offY)
+		}
+		return true
+	}
+
+	// 2. Check elements
 	for i := len(d.items) - 1; i >= 0; i-- {
 		item := d.items[i]
 		x1, y1, x2, y2 := item.GetPosition()
 		if mx >= x1 && mx <= x2 && my >= y1 && my <= y2 {
-
-			// If it's a left button click, change focus.
 			if e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
 				if item.CanFocus() && d.focusIdx != i {
 					if d.focusIdx != -1 {
@@ -256,22 +275,43 @@ func (d *Dialog) ProcessMouse(e *vtinput.InputEvent) bool {
 					item.SetFocus(true)
 				}
 			}
-
-			// Always propagate an event to the element under the mouse
 			if item.ProcessMouse(e) {
 				return true
 			}
-			// Специальная обработка клика по RadioButton
 			if rb, ok := item.(*RadioButton); ok && e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
 				d.selectRadio(rb)
 				return true
 			}
+			return true
+		}
+	}
 
-			// If an element absorbs a click (even if it returns false),
-			// prevent clicks through it (important for overlapping elements)
+	// 3. Initiate Dragging (if click on border or background)
+	if e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
+		if mx >= d.X1 && mx <= d.X2 && my >= d.Y1 && my <= d.Y2 {
+			d.isDragging = true
+			d.dragOffX = mx - d.X1
+			d.dragOffY = my - d.Y1
 			return true
 		}
 	}
 
 	return false
+}
+
+// MoveRelative shifts the dialog and all its children by offset.
+func (d *Dialog) MoveRelative(dx, dy int) {
+	d.X1 += dx
+	d.X2 += dx
+	d.Y1 += dy
+	d.Y2 += dy
+	d.frame.SetPosition(d.X1, d.Y1, d.X2, d.Y2)
+	for _, item := range d.items {
+		ix1, iy1, ix2, iy2 := item.GetPosition()
+		// We need to ensure UIElement has SetPosition or similar. 
+		// Since most implement ScreenObject, we can type assert.
+		if so, ok := item.(interface{ SetPosition(int, int, int, int) }); ok {
+			so.SetPosition(ix1+dx, iy1+dy, ix2+dx, iy2+dy)
+		}
+	}
 }

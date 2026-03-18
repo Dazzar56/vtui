@@ -136,6 +136,29 @@ func TestFrame_Rendering(t *testing.T) {
 	})
 }
 
+func TestFrame_IsBorderClick(t *testing.T) {
+	f := NewBorderedFrame(10, 10, 20, 20, SingleBox, "Test")
+
+	tests := []struct {
+		x, y int
+		want bool
+	}{
+		{10, 10, true},  // Левый верхний угол
+		{20, 20, true},  // Правый нижний угол
+		{15, 10, true},  // Верхняя грань
+		{10, 15, true},  // Левая грань
+		{15, 15, false}, // Центр (не рамка)
+		{5, 5, false},   // Снаружи
+		{25, 25, false}, // Снаружи
+	}
+
+	for _, tt := range tests {
+		if got := f.IsBorderClick(tt.x, tt.y); got != tt.want {
+			t.Errorf("IsBorderClick(%d, %d) = %v; want %v", tt.x, tt.y, got, tt.want)
+		}
+	}
+}
+
 func TestScreenObject_HelpInheritance(t *testing.T) {
 	parent := &ScreenObject{}
 	child := &ScreenObject{owner: parent}

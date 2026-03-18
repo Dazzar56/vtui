@@ -228,3 +228,161 @@ func TestDialog_HotkeyCaseInsensitivity(t *testing.T) {
 		t.Error("Hotkey should be case-insensitive")
 	}
 }
+
+func TestDialog_DraggingLogic(t *testing.T) {
+	// Создаем диалог 10x10 в позиции (0,0)
+	d := NewDialog(0, 0, 9, 9, "Move Me")
+	btn := NewButton(2, 2, "OK") // Кнопка внутри
+	d.AddItem(btn)
+
+	// 1. Нажимаем левую кнопку мыши на рамке (0,0)
+	d.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType,
+		KeyDown: true,
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+		MouseX: 0, MouseY: 0,
+	})
+
+	if !d.isDragging {
+		t.Fatal("Dialog should start dragging after clicking on border")
+	}
+
+	// 2. Перемещаем мышь в (5,5)
+	// Эмулируем событие перемещения (в vtinput это обычно KeyDown: false при нажатой кнопке)
+	d.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType,
+		KeyDown: false,
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+		MouseX: 5, MouseY: 5,
+	})
+
+	// Диалог должен сместиться на +5, +5
+	if d.X1 != 5 || d.Y1 != 5 {
+		t.Errorf("Dialog did not move correctly. Got (%d,%d), want (5,5)", d.X1, d.Y1)
+	}
+
+	// Проверяем, что кнопка внутри тоже сместилась!
+	bx1, by1, _, _ := btn.GetPosition()
+	if bx1 != 7 || by1 != 7 { // 2 (orig) + 5 (offset) = 7
+		t.Errorf("Child element (button) did not move with dialog. Got (%d,%d), want (7,7)", bx1, by1)
+	}
+
+	// 3. Отпускаем мышь
+	d.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType,
+		KeyDown: false,
+		ButtonState: 0,
+		MouseX: 5, MouseY: 5,
+	})
+
+	if d.isDragging {
+		t.Error("Dialog should stop dragging after mouse button release")
+	}
+}
+
+func TestDialog_NoDragWhenClickingElement(t *testing.T) {
+	d := NewDialog(0, 0, 10, 10, "No Drag")
+	clicked := false
+	btn := NewButton(1, 1, "Btn")
+	btn.OnClick = func() { clicked = true }
+	d.AddItem(btn)
+
+	// Кликаем по кнопке (1, 1)
+	d.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType,
+		KeyDown: true,
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+		MouseX: 1, MouseY: 1,
+	})
+
+	if d.isDragging {
+		t.Error("Dialog should NOT start dragging when clicking on an interactive element")
+	}
+	if !clicked {
+		t.Error("Button should have handled the click")
+	}
+}
+
+func TestDialog_DragRelativeConsistency(t *testing.T) {
+	// Тест на "накопление ошибки" при множественных перемещениях
+	d := NewDialog(0, 0, 10, 10, "Consistency")
+	
+	// Начинаем захват в точке (0,0)
+	d.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: true,
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+		MouseX: 0, MouseY: 0,
+	})
+
+	// Серия мелких перемещений
+	for i := 1; i <= 10; i++ {
+		d.ProcessMouse(&vtinput.InputEvent{
+			Type: vtinput.MouseEventType, KeyDown: false,
+			ButtonState: vtinput.FromLeft1stButtonPressed,
+			MouseX: uint16(i), MouseY: uint16(i),
+		})
+	}
+
+	if d.X1 != 10 || d.Y1 != 10 {
+		t.Errorf("Incremental move failed. Expected (10,10), got (%d,%d)", d.X1, d.Y1)
+	}
+}
+
+func TestDialog_FocusLinkChain(t *testing.T) {
+	d := NewDialog(0, 0, 40, 10, "Chain Test")
+	edit := NewEdit(1, 3, 10, "")
+	label2 := NewLabel(1, 2, "Sub-Label:", edit)
+	label1 := NewLabel(1, 1, "&Grand-Label:", label2) // Ссылается на другую метку
+
+	d.AddItem(label1)
+	d.AddItem(label2)
+	d.AddItem(edit)
+
+	// Нажимаем Alt+G (хоткей первой метки)
+	d.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true, Char: 'g',
+		ControlKeyState: vtinput.LeftAltPressed,
+	})
+
+	if d.focusIdx != 2 || !edit.IsFocused() {
+		t.Errorf("Focus chain failed. Expected focus on edit (index 2), got index %d", d.focusIdx)
+	}
+}
+
+func TestDialog_DraggingOffscreen(t *testing.T) {
+	d := NewDialog(10, 10, 20, 20, "Offscreen")
+	
+	// Начинаем захват
+	d.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: true,
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+		MouseX: 10, MouseY: 10,
+	})
+
+	// Утаскиваем мышь в "минус"
+	d.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: false,
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+		MouseX: 0, MouseY: 0,
+	})
+
+	// Диалог должен позволять перемещение в отрицательные координаты (как в Far)
+	if d.X1 != 0 || d.Y1 != 0 {
+		t.Errorf("Expected dialog at (0,0), got (%d,%d)", d.X1, d.Y1)
+	}
+}
+
+func TestDialog_RightClickNoDrag(t *testing.T) {
+	d := NewDialog(0, 0, 10, 10, "Left Button Only")
+	
+	// Пытаемся захватить ПРАВОЙ кнопкой
+	d.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: true,
+		ButtonState: vtinput.RightmostButtonPressed,
+		MouseX: 0, MouseY: 0,
+	})
+
+	if d.isDragging {
+		t.Error("Dialog should NOT start dragging with Right Mouse Button")
+	}
+}

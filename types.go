@@ -20,4 +20,15 @@ type SmallRect struct {
 type CharInfo struct {
 	Char       uint64 // Equivalent to union with COMP_CHAR UnicodeChar
 	Attributes uint64 // DWORD64 Equivalent Attributes (lower 16 bits are flags, 16-39 are Fore RGB, 40-63 are Back RGB)
-}
+}// GrowMode flags for responsive layout resizing (analogous to Turbo Vision)
+type GrowMode int
+
+const (
+	GrowNone   GrowMode = 0
+	GrowLoX    GrowMode = 0x01
+	GrowHiX    GrowMode = 0x02
+	GrowLoY    GrowMode = 0x04
+	GrowHiY    GrowMode = 0x08
+	GrowAll    GrowMode = 0x0f
+	GrowRel    GrowMode = 0x10
+)
