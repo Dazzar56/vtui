@@ -14,11 +14,13 @@ type Button struct {
 func NewButton(x, y int, text string) *Button {
 	// Buttons in Far always look like "[ Text ]"
 	fullText := string(UIStrings.ButtonBrackets[0]) + " " + text + " " + string(UIStrings.ButtonBrackets[1])
+	clean, hk, _ := ParseAmpersandString(fullText)
 	b := &Button{
 		text: fullText,
 	}
+	b.hotkey = hk
 	b.canFocus = true
-	vLen := runewidth.StringWidth(fullText)
+	vLen := runewidth.StringWidth(clean)
 	b.SetPosition(x, y, x+vLen-1, y)
 	return b
 }
@@ -31,10 +33,13 @@ func (b *Button) Show(scr *ScreenBuf) {
 func (b *Button) DisplayObject(scr *ScreenBuf) {
 	if !b.IsVisible() { return }
 	attr := Palette[ColDialogButton]
+	highAttr := Palette[ColDialogHighlightButton]
 	if b.IsFocused() {
 		attr = Palette[ColDialogSelectedButton]
+		highAttr = Palette[ColDialogHighlightSelectedButton]
 	}
-	scr.Write(b.X1, b.Y1, StringToCharInfo(b.text, attr))
+	cells, _ := StringToCharInfoHighlighted(b.text, attr, highAttr)
+	scr.Write(b.X1, b.Y1, cells)
 }
 
 func (b *Button) SetFocus(f bool) {

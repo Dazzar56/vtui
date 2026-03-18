@@ -1,9 +1,10 @@
 package vtui
 
 import (
+	"unicode"
+	"strings"
 	"github.com/unxed/vtinput"
 	"github.com/mattn/go-runewidth"
-	"strings"
 )
 
 // MenuItem represents a single menu item.
@@ -137,6 +138,24 @@ func (m *VMenu) ProcessKey(e *vtinput.InputEvent) bool {
 		m.SetSelectPos(len(m.items)-1, -1)
 		return true
 	}
+
+	// Quick jump by hotkey
+	if e.Char != 0 {
+		charLower := unicode.ToLower(e.Char)
+		for i, item := range m.items {
+			if item.Separator { continue }
+			_, hk, _ := ParseAmpersandString(item.Text)
+			if hk == charLower {
+				m.SetSelectPos(i, 1)
+				if m.OnSelect != nil {
+					m.OnSelect(i)
+				}
+				m.SetExitCode(i)
+				return true
+			}
+		}
+	}
+
 	return false
 }
 
@@ -254,6 +273,9 @@ func (m *VMenu) DisplayObject(scr *ScreenBuf) {
 	interiorWidth := fullWidth - 2
 	height := m.Y2 - m.Y1 - 1
 
+	colHigh := Palette[ColMenuHighlight]
+	colSelHigh := Palette[ColMenuSelectedHighlight]
+
 	// 3. Rendering items
 	for i := 0; i < height; i++ {
 		itemIdx := i + m.topPos
@@ -282,24 +304,21 @@ func (m *VMenu) DisplayObject(scr *ScreenBuf) {
 			sepRunes[fullWidth-1] = boxSymbols[23] // ╢
 			scr.Write(m.X1, currY, RunesToCharInfo(sepRunes, colBox))
 		} else {
-			// Padded menu item
-			textRunes := make([]rune, interiorWidth)
-			for j := range textRunes {
-				textRunes[j] = ' '
+			fullItemText := " " + item.Text
+			clean, _, _ := ParseAmpersandString(fullItemText)
+			vLen := runewidth.StringWidth(clean)
+			padding := interiorWidth - vLen
+			if padding > 0 {
+				fullItemText += strings.Repeat(" ", padding)
 			}
-
-			// Use runewidth for proper padding and truncation
-			contentStr := runewidth.Truncate(item.Text, interiorWidth-2, "")
-			vLen := runewidth.StringWidth(contentStr)
-
-			// Build the string: " " + content + padding
-			padding := interiorWidth - 1 - vLen
-			if padding < 0 {
-				padding = 0
+			
+			finalHighAttr := colHigh
+			if itemIdx == m.selectPos {
+				finalHighAttr = colSelHigh
 			}
-
-			finalStr := " " + contentStr + strings.Repeat(" ", padding)
-			scr.Write(m.X1+1, currY, StringToCharInfo(finalStr, attr))
+			
+			cells, _ := StringToCharInfoHighlighted(fullItemText, attr, finalHighAttr)
+			scr.Write(m.X1+1, currY, cells)
 		}
 	}
 

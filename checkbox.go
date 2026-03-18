@@ -18,9 +18,11 @@ func NewCheckbox(x, y int, text string, threeState bool) *Checkbox {
 		Text:       text,
 		ThreeState: threeState,
 	}
+	clean, hk, _ := ParseAmpersandString(text)
+	cb.hotkey = hk
 	cb.canFocus = true
 	// Формат: "[x] Текст"
-	vLen := 4 + runewidth.StringWidth(text)
+	vLen := 4 + runewidth.StringWidth(clean)
 	cb.SetPosition(x, y, x+vLen-1, y)
 	return cb
 }
@@ -34,8 +36,10 @@ func (cb *Checkbox) DisplayObject(scr *ScreenBuf) {
 	if !cb.IsVisible() { return }
 
 	attr := Palette[ColDialogText]
+	highAttr := Palette[ColDialogHighlightText]
 	if cb.IsFocused() {
 		attr = Palette[ColDialogSelectedButton]
+		highAttr = Palette[ColDialogHighlightSelectedButton]
 	}
 
 	char := " "
@@ -46,7 +50,8 @@ func (cb *Checkbox) DisplayObject(scr *ScreenBuf) {
 		char = "?" // Символ для неопределенного состояния
 	}
 
-	scr.Write(cb.X1, cb.Y1, StringToCharInfo("["+char+"] "+cb.Text, attr))
+	cells, _ := StringToCharInfoHighlighted("["+char+"] "+cb.Text, attr, highAttr)
+	scr.Write(cb.X1, cb.Y1, cells)
 }
 
 func (cb *Checkbox) ProcessKey(e *vtinput.InputEvent) bool {

@@ -7,13 +7,16 @@ import (
 // Text represents a simple static text label.
 type Text struct {
 	ScreenObject
-	content string
-	color   uint64
+	FocusLink UIElement // Если установлен хоткей, фокус будет передан этому элементу
+	content   string
+	color     uint64
 }
 
 func NewText(x, y int, content string, color uint64) *Text {
+	clean, hk, _ := ParseAmpersandString(content)
 	t := &Text{content: content, color: color}
-	vLen := runewidth.StringWidth(content)
+	t.hotkey = hk
+	vLen := runewidth.StringWidth(clean)
 	t.SetPosition(x, y, x+vLen-1, y)
 	return t
 }
@@ -25,5 +28,6 @@ func (t *Text) Show(scr *ScreenBuf) {
 
 func (t *Text) DisplayObject(scr *ScreenBuf) {
 	if !t.IsVisible() { return }
-	scr.Write(t.X1, t.Y1, StringToCharInfo(t.content, t.color))
+	cells, _ := StringToCharInfoHighlighted(t.content, t.color, Palette[ColDialogHighlightText])
+	scr.Write(t.X1, t.Y1, cells)
 }

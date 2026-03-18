@@ -1,6 +1,9 @@
 package vtui
 
-import "github.com/unxed/vtinput"
+import (
+	"github.com/unxed/vtinput"
+	"unicode"
+)
 
 // UIElement is the interface that all dialog elements must implement.
 type UIElement interface {
@@ -10,6 +13,7 @@ type UIElement interface {
 	SetFocus(bool)
 	IsFocused() bool
 	CanFocus() bool
+	GetHotkey() rune
 	ProcessKey(e *vtinput.InputEvent) bool
 	ProcessMouse(e *vtinput.InputEvent) bool
 }
@@ -91,6 +95,63 @@ func (d *Dialog) ProcessKey(e *vtinput.InputEvent) bool {
 	if !e.KeyDown { return false }
 
 	DebugLog("Dialog.ProcessKey: VK=%X Char=%d FocusIdx=%d", e.VirtualKeyCode, e.Char, d.focusIdx)
+
+	// --- Hotkey handling (Alt+Char or just Char) ---
+	if e.Char != 0 {
+		charLower := unicode.ToLower(e.Char)
+		alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
+
+		// В диалогах Far хоткеи срабатывают всегда по Alt+Буква.
+		// А просто по Букве — только если фокус НЕ на текстовом поле.
+		allowWithoutAlt := true
+		if d.focusIdx != -1 {
+			if _, isEdit := d.items[d.focusIdx].(*Edit); isEdit {
+				allowWithoutAlt = false
+			} else if cb, isCombo := d.items[d.focusIdx].(*ComboBox); isCombo && !cb.DropdownOnly {
+				allowWithoutAlt = false
+			}
+		}
+
+		if alt || allowWithoutAlt {
+			for i, item := range d.items {
+				hk := item.GetHotkey()
+				if hk != 0 && hk == charLower {
+					target := item
+					targetIdx := i
+
+					// Если хоткей у метки (Text), перебрасываем фокус на привязанный элемент
+					if txt, ok := target.(*Text); ok && txt.FocusLink != nil {
+						target = txt.FocusLink
+						for j, other := range d.items {
+							if other == target {
+								targetIdx = j
+								break
+							}
+						}
+					}
+
+					if target.CanFocus() {
+						if d.focusIdx != -1 {
+							d.items[d.focusIdx].SetFocus(false)
+						}
+						d.focusIdx = targetIdx
+						target.SetFocus(true)
+					}
+
+					// Эмулируем клик для кнопок/чекбоксов
+					if _, isBtn := target.(*Button); isBtn {
+						target.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_SPACE})
+					} else if _, isChk := target.(*Checkbox); isChk {
+						target.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_SPACE})
+					} else if rb, isRad := target.(*RadioButton); isRad {
+						d.selectRadio(rb)
+					}
+
+					return true
+				}
+			}
+		}
+	}
 
 	switch e.VirtualKeyCode {
 	case vtinput.VK_F1:

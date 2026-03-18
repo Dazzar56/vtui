@@ -89,6 +89,7 @@ func (t *Table) DisplayObject(scr *ScreenBuf) {
 
 	// 2. Draw Data Rows
 	dataHeight := height - yOffset
+	if dataHeight <= 0 { dataHeight = 0 }
 	for i := 0; i < dataHeight; i++ {
 		rowIdx := t.TopPos + i
 		currY := t.Y1 + yOffset + i
@@ -112,14 +113,6 @@ func (t *Table) DisplayObject(scr *ScreenBuf) {
 	// 3. Draw Vertical Separators if needed
 	if t.ShowSeparators {
 		t.drawSeparators(scr)
-	}
-
-	// 4. Draw Scrollbar
-	if len(t.Rows) > dataHeight {
-		scrollbarX := t.X2
-		scrollbarY := t.Y1 + yOffset
-		scrollbarLen := dataHeight
-		DrawScrollBar(scr, scrollbarX, scrollbarY, scrollbarLen, t.TopPos, len(t.Rows), Palette[t.ColorBoxIdx])
 	}
 }
 
@@ -149,19 +142,10 @@ func (t *Table) drawRow(scr *ScreenBuf, y int, rowIdx int, attr uint64) {
 		}
 	}
 
-	// Fill remaining horizontal space if any.
-	// If scrollbar is drawn, we must not overwrite the rightmost column.
-	headerOffset := 0
-	if t.ShowHeader { headerOffset = 1 }
-	dataHeight := (t.Y2 - t.Y1 + 1) - headerOffset
-
-	endX := t.X2
-	if len(t.Rows) > dataHeight {
-		endX-- // Leave space for scrollbar
-	}
+	// Fill remaining horizontal space if any
 	lastX := currX - 1
-	if lastX < endX {
-		scr.FillRect(lastX+1, y, endX, y, ' ', attr)
+	if lastX < t.X2 {
+		scr.FillRect(lastX+1, y, t.X2, y, ' ', attr)
 	}
 }
 
@@ -246,39 +230,13 @@ func (t *Table) ProcessMouse(e *vtinput.InputEvent) bool {
 
 	headerOffset := 0
 	if t.ShowHeader { headerOffset = 1 }
-	dataHeight := (t.Y2 - t.Y1 + 1) - headerOffset
-
-	// Check scrollbar click
-	if len(t.Rows) > dataHeight && int(e.MouseX) == t.X2 {
-		if e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
-			my := int(e.MouseY)
-			startY := t.Y1 + headerOffset
-			if my == startY {
-				t.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_UP})
-				return true
-			} else if my == startY+dataHeight-1 {
-				t.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
-				return true
-			} else if my > startY && my < startY+dataHeight-1 {
-				if my < startY+dataHeight/2 {
-					t.TopPos -= dataHeight
-					if t.TopPos < 0 { t.TopPos = 0 }
-				} else {
-					t.TopPos += dataHeight
-					if t.TopPos > len(t.Rows)-dataHeight { t.TopPos = len(t.Rows) - dataHeight }
-				}
-				return true
-			}
-		}
-	}
 
 	if e.WheelDirection > 0 {
 		if t.TopPos > 0 { t.TopPos-- }
 		return true
 	} else if e.WheelDirection < 0 {
-		headerOffset := 0
-		if t.ShowHeader { headerOffset = 1 }
-		if t.TopPos < len(t.Rows)-((t.Y2-t.Y1+1)-headerOffset) {
+		dataHeight := (t.Y2 - t.Y1 + 1) - headerOffset
+		if t.TopPos < len(t.Rows)-dataHeight {
 			t.TopPos++
 		}
 		return true
@@ -286,11 +244,14 @@ func (t *Table) ProcessMouse(e *vtinput.InputEvent) bool {
 
 	if e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
 		my := int(e.MouseY)
+		//dataHeight := (t.Y2 - t.Y1 + 1) - headerOffset
 
 		clickIdx := t.TopPos + (my - t.Y1 - headerOffset)
-		if clickIdx >= 0 && clickIdx < len(t.Rows) {
-			t.SelectPos = clickIdx
-			return true
+		if my >= t.Y1+headerOffset && my <= t.Y2 && clickIdx >= 0 && clickIdx < len(t.Rows) {
+			if clickIdx >= 0 && clickIdx < len(t.Rows) {
+				t.SelectPos = clickIdx
+				return true
+			}
 		}
 	}
 	return false

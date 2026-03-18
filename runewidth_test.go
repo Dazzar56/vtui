@@ -28,3 +28,16 @@ func TestStringToCharInfo_WideChars(t *testing.T) {
 		t.Errorf("Cell 3: expected 'B', got %c", ci[3].Char)
 	}
 }
+
+func TestParseAmpersandString(t *testing.T) {
+	clean, hk, pos := ParseAmpersandString("Save &As && Exit")
+	if clean != "Save As & Exit" {
+		t.Errorf("Clean string mismatch: got %q", clean)
+	}
+	if hk != 'a' {
+		t.Errorf("Hotkey mismatch: got %c", hk)
+	}
+	if pos != 5 { // 'S', 'a', 'v', 'e', ' ', 'A' -> pos 5
+		t.Errorf("Hotkey pos mismatch: got %d", pos)
+	}
+}

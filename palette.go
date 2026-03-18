@@ -74,8 +74,10 @@ func SetDefaultPalette() {
 
 	// Dialogs (Black on LightGray)
 	Palette[ColDialogText] = SetRGBBoth(0, black, lightGray)
+	Palette[ColDialogHighlightText] = SetRGBBoth(0, yellow, lightGray)
 	Palette[ColDialogBox] = SetRGBBoth(0, black, lightGray)
 	Palette[ColDialogBoxTitle] = SetRGBBoth(0, black, lightGray)
+	Palette[ColDialogHighlightBoxTitle] = SetRGBBoth(0, yellow, lightGray)
 
 	// Dialog Edits (Black on Cyan)
 	Palette[ColDialogEdit] = SetRGBBoth(0, black, cyan)
@@ -84,7 +86,9 @@ func SetDefaultPalette() {
 
 	// Dialog Buttons
 	Palette[ColDialogButton] = SetRGBBoth(0, black, lightGray)
+	Palette[ColDialogHighlightButton] = SetRGBBoth(0, yellow, lightGray)
 	Palette[ColDialogSelectedButton] = SetRGBBoth(0, black, cyan)
+	Palette[ColDialogHighlightSelectedButton] = SetRGBBoth(0, yellow, cyan)
 
 	// Desktop
 	Palette[ColDesktopBackground] = SetRGBBoth(0, lightGray, black)

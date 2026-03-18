@@ -13,6 +13,12 @@ type ScreenObject struct {
 	canFocus       bool
 	lockCount      int
 	helpTopic      string
+	hotkey         rune
+}
+
+// GetHotkey returns the assigned hotkey rune for the object.
+func (so *ScreenObject) GetHotkey() rune {
+	return so.hotkey
 }
 
 // SetPosition sets the object's coordinates.

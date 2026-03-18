@@ -16,9 +16,11 @@ func NewRadioButton(x, y int, text string) *RadioButton {
 	rb := &RadioButton{
 		Text: text,
 	}
+	clean, hk, _ := ParseAmpersandString(text)
+	rb.hotkey = hk
 	rb.canFocus = true
 	// Формат: "( ) Текст" или "(•) Текст"
-	vLen := 4 + runewidth.StringWidth(text)
+	vLen := 4 + runewidth.StringWidth(clean)
 	rb.SetPosition(x, y, x+vLen-1, y)
 	return rb
 }
@@ -32,8 +34,10 @@ func (rb *RadioButton) DisplayObject(scr *ScreenBuf) {
 	if !rb.IsVisible() { return }
 
 	attr := Palette[ColDialogText]
+	highAttr := Palette[ColDialogHighlightText]
 	if rb.IsFocused() {
-		attr = Palette[ColDialogSelectedButton] // Используем стиль активного элемента
+		attr = Palette[ColDialogSelectedButton]
+		highAttr = Palette[ColDialogHighlightSelectedButton]
 	}
 
 	state := "( ) "
@@ -41,7 +45,8 @@ func (rb *RadioButton) DisplayObject(scr *ScreenBuf) {
 		state = "(•) "
 	}
 
-	scr.Write(rb.X1, rb.Y1, StringToCharInfo(state+rb.Text, attr))
+	cells, _ := StringToCharInfoHighlighted(state+rb.Text, attr, highAttr)
+	scr.Write(rb.X1, rb.Y1, cells)
 }
 
 func (rb *RadioButton) ProcessKey(e *vtinput.InputEvent) bool {

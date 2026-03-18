@@ -100,9 +100,9 @@ func TestTable_Rendering(t *testing.T) {
 	checkCell(t, scr, 8, 1, 'B', Palette[ColTableSelectedText])
 }
 
-func TestTable_ScrollbarMouseClick(t *testing.T) {
+func TestTable_MouseWheel(t *testing.T) {
 	cols := []TableColumn{{Title: "Col", Width: 10}}
-	tbl := NewTable(0, 0, 10, 5, cols) // Высота 5, хидер 1, данные 4
+	tbl := NewTable(0, 0, 10, 5, cols)
 
 	var rows []TableRow
 	for i := 0; i < 20; i++ {
@@ -110,38 +110,31 @@ func TestTable_ScrollbarMouseClick(t *testing.T) {
 	}
 	tbl.SetRows(rows)
 
-	// Изначально TopPos = 0, SelectPos = 0
+	tbl.TopPos = 5
 
-	// 1. Клик по нижней стрелке скроллбара (Y = Y1 + HeaderOffset + DataHeight - 1)
-	// X = 9 (X2), Y = 0 + 1 + 4 - 1 = 4
-	tbl.ProcessMouse(&vtinput.InputEvent{
-		Type: vtinput.MouseEventType, KeyDown: true, MouseX: 9, MouseY: 4, ButtonState: vtinput.FromLeft1stButtonPressed,
-	})
-	if tbl.SelectPos != 1 {
-		t.Errorf("Click down arrow failed, SelectPos: %d", tbl.SelectPos)
+	// 1. Scroll Down
+	tbl.ProcessMouse(&vtinput.InputEvent{Type: vtinput.MouseEventType, WheelDirection: -1})
+	if tbl.TopPos != 6 {
+		t.Errorf("Mouse wheel down failed, TopPos: %d", tbl.TopPos)
 	}
 
-	// 2. Клик по верхней стрелке скроллбара (Y = 1)
-	tbl.ProcessMouse(&vtinput.InputEvent{
-		Type: vtinput.MouseEventType, KeyDown: true, MouseX: 9, MouseY: 1, ButtonState: vtinput.FromLeft1stButtonPressed,
-	})
-	if tbl.SelectPos != 0 {
-		t.Errorf("Click up arrow failed, SelectPos: %d", tbl.SelectPos)
+	// 2. Scroll Up
+	tbl.ProcessMouse(&vtinput.InputEvent{Type: vtinput.MouseEventType, WheelDirection: 1})
+	if tbl.TopPos != 5 {
+		t.Errorf("Mouse wheel up failed, TopPos: %d", tbl.TopPos)
 	}
+}
 
-	// 3. Клик ниже середины трека (Page Down) -> Y = 3
-	tbl.ProcessMouse(&vtinput.InputEvent{
-		Type: vtinput.MouseEventType, KeyDown: true, MouseX: 9, MouseY: 3, ButtonState: vtinput.FromLeft1stButtonPressed,
-	})
-	if tbl.TopPos != 4 { // TopPos должен сдвинуться на DataHeight (4)
-		t.Errorf("PageDown click failed, TopPos: %d", tbl.TopPos)
+func TestParseAmpersandString_Unicode(t *testing.T) {
+	// "Ф" - одна руна, но два байта в UTF-8
+	clean, hk, pos := ParseAmpersandString("Сохранить &файл")
+	if clean != "Сохранить файл" {
+		t.Errorf("Clean string mismatch: got %q", clean)
 	}
-
-	// 4. Клик выше середины трека (Page Up) -> Y = 2
-	tbl.ProcessMouse(&vtinput.InputEvent{
-		Type: vtinput.MouseEventType, KeyDown: true, MouseX: 9, MouseY: 2, ButtonState: vtinput.FromLeft1stButtonPressed,
-	})
-	if tbl.TopPos != 0 { // TopPos должен сдвинуться обратно
-		t.Errorf("PageUp click failed, TopPos: %d", tbl.TopPos)
+	if hk != 'ф' {
+		t.Errorf("Hotkey mismatch: got %c", hk)
+	}
+	if pos != 10 { // "Сохранить " (10 рун)
+		t.Errorf("Hotkey pos mismatch: got %d", pos)
 	}
 }

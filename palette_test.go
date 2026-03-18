@@ -20,6 +20,14 @@ func TestSetDefaultPalette(t *testing.T) {
 		t.Errorf("Expected MenuText color %X, got %X", expectedMenuText, Palette[ColMenuText])
 	}
 
+	// Check highlight colors are initialized
+	if Palette[ColDialogHighlightText] == 0 {
+		t.Error("ColDialogHighlightText was not initialized")
+	}
+	if Palette[ColDialogHighlightButton] == 0 {
+		t.Error("ColDialogHighlightButton was not initialized")
+	}
+
 	// Check table color (LightGray on Black)
 	expectedTableText := SetRGBBoth(0, 0xC0C0C0, 0x000000)
 	if Palette[ColTableText] != expectedTableText {

@@ -132,3 +132,26 @@ func TestDialog_MouseFocus(t *testing.T) {
 		t.Error("b1 should lose focus after click on b2")
 	}
 }
+
+func TestDialog_HotkeyColor(t *testing.T) {
+	d := NewDialog(0, 0, 20, 5, "Test")
+	btn := NewButton(1, 1, "&Test")
+	d.AddItem(btn)
+
+	scr := NewScreenBuf()
+	scr.AllocBuf(22, 7)
+	SetDefaultPalette()
+
+	// 1. Unfocused state
+	btn.SetFocus(false)
+	d.Show(scr)
+	// Hotkey 'T' should have highlight color
+	// Text is "[ &Test ]", clean is "[ Test ]". Hotkey pos is 2.
+	checkCell(t, scr, 1+2, 1, 'T', Palette[ColDialogHighlightButton])
+	
+	// 2. Focused state
+	btn.SetFocus(true)
+	d.Show(scr)
+	// Hotkey 'T' should have SELECTED highlight color
+	checkCell(t, scr, 1+2, 1, 'T', Palette[ColDialogHighlightSelectedButton])
+}

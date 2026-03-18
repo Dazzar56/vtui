@@ -41,14 +41,17 @@ func (mb *MenuBar) DisplayObject(scr *ScreenBuf) {
 	currX := mb.X1 + 2
 	for i, item := range mb.Items {
 		itemAttr := attr
-		// Highlight the selected item always (matching far2l behavior)
+		hiAttr := Palette[ColMenuHighlight]
 		if i == mb.SelectPos {
 			itemAttr = Palette[ColMenuBarSelected]
+			hiAttr = Palette[ColMenuSelectedHighlight]
 		}
 
-		text := "  " + item.Label + "  "
-		scr.Write(currX, mb.Y1, StringToCharInfo(text, itemAttr))
-		currX += runewidth.StringWidth(text)
+		cells, _ := StringToCharInfoHighlighted("  "+item.Label+"  ", itemAttr, hiAttr)
+		scr.Write(currX, mb.Y1, cells)
+
+		clean, _, _ := ParseAmpersandString(item.Label)
+		currX += runewidth.StringWidth("  " + clean + "  ")
 	}
 }
 
@@ -56,7 +59,8 @@ func (mb *MenuBar) DisplayObject(scr *ScreenBuf) {
 func (mb *MenuBar) GetItemX(index int) int {
 	x := mb.X1 + 2
 	for i := 0; i < index; i++ {
-		x += runewidth.StringWidth("  " + mb.Items[i].Label + "  ")
+		clean, _, _ := ParseAmpersandString(mb.Items[i].Label)
+		x += runewidth.StringWidth("  " + clean + "  ")
 	}
 	return x
 }
