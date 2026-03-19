@@ -112,3 +112,11 @@ func main() {
 	vtui.FrameManager.Run()
 }
 ```
+
+## Demo app
+
+The repository includes a demo app:
+
+```bash
+go run ./cmd/test-app
+```
