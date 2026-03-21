@@ -7,11 +7,13 @@ var UIStrings = struct {
 	ButtonBrackets [2]rune
 	CloseBrackets  [2]rune
 	CloseSymbol    rune
+	ZoomSymbol     rune
 	DefaultHelp    string
 }{
 	DesktopWelcome: " vtui | Press Ctrl+Q to exit ",
 	ButtonBrackets: [2]rune{'[', ']'},
 	CloseBrackets:  [2]rune{'[', ']'},
 	CloseSymbol:    '×',
+	ZoomSymbol:     '↕',
 	DefaultHelp:    "Contents",
 }

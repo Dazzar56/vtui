@@ -53,3 +53,8 @@ func (d *Desktop) SetExitCode(code int) {
 
 func (d *Desktop) IsDone() bool { return d.done }
 func (d *Desktop) IsBusy() bool { return false }
+func (d *Desktop) IsModal() bool { return false }
+func (d *Desktop) GetWindowNumber() int { return 0 }
+func (d *Desktop) SetWindowNumber(n int) {}
+func (d *Desktop) RequestFocus() bool { return false }
+func (d *Desktop) Close() { d.SetExitCode(-1) }

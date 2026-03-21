@@ -93,6 +93,46 @@ func (s *ScreenBuf) PopClipRect() {
 		s.clipStack = s.clipStack[:len(s.clipStack)-1]
 	}
 }
+// ApplyShadow applies a semi-transparent shadow effect to the specified area.
+func (s *ScreenBuf) ApplyShadow(x1, y1, x2, y2 int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.buf == nil || len(s.clipStack) == 0 { return }
+	clip := s.clipStack[len(s.clipStack)-1]
+	if x1 < clip.X1 { x1 = clip.X1 }
+	if y1 < clip.Y1 { y1 = clip.Y1 }
+	if x2 > clip.X2 { x2 = clip.X2 }
+	if y2 > clip.Y2 { y2 = clip.Y2 }
+	if x1 > x2 || y1 > y2 { return }
+
+	for y := y1; y <= y2; y++ {
+		offset := y*s.width + x1
+		for x := 0; x <= x2-x1; x++ {
+			attr := s.buf[offset+x].Attributes
+			if attr&BackgroundTrueColor != 0 {
+				// Darken RGB background by halving the values
+				bg := GetRGBBack(attr)
+				r, g, b := (bg>>16)&0xFF, (bg>>8)&0xFF, bg&0xFF
+				attr = SetRGBBack(attr, (r/2)<<16|(g/2)<<8|(b/2))
+			} else {
+				// Clear background 16-color bits to make it black
+				attr &^= (uint64(0x7) << 4) | BackgroundIntensity
+			}
+
+			// For shadow, set foreground to DarkGray (8) if palette based, or darken RGB
+			if attr&ForegroundTrueColor != 0 {
+				fg := GetRGBFore(attr)
+				r, g, b := (fg>>16)&0xFF, (fg>>8)&0xFF, fg&0xFF
+				attr = SetRGBFore(attr, (r/2)<<16|(g/2)<<8|(b/2))
+			} else {
+				attr &^= uint64(0x7) | ForegroundIntensity
+				attr |= uint64(0x0) | ForegroundIntensity // 8 = DarkGray
+			}
+
+			s.buf[offset+x].Attributes = attr
+		}
+	}
+}
 
 // Write writes a slice of CharInfo into the virtual buffer at specified coordinates.
 func (s *ScreenBuf) Write(x, y int, text []CharInfo) {

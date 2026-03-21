@@ -32,6 +32,15 @@ type Frame interface {
 	IsDone() bool
 	GetHelp() string
 	IsBusy() bool // If true, FrameManager may skip the rendering phase
+
+	// MDI Methods
+	SetPosition(x1, y1, x2, y2 int)
+	GetPosition() (x1, y1, x2, y2 int)
+	IsModal() bool
+	GetWindowNumber() int
+	SetWindowNumber(n int)
+	RequestFocus() bool
+	Close()
 }
 
 // frameManager manages the stack of frames and the main application loop.

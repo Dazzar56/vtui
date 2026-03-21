@@ -84,21 +84,26 @@ func TestDialog_RadioButtonIntegration(t *testing.T) {
 		t.Error("rb2 should be selected via ProcessKey(Space)")
 	}
 }
-func TestDialog_Shadow(t *testing.T) {
+func TestScreenBuf_ApplyShadow(t *testing.T) {
 	SetDefaultPalette()
 	scr := NewScreenBuf()
 	scr.AllocBuf(20, 20)
 
-	// 5x5 Dialog
-	d := NewDialog(2, 2, 7, 7, "Title")
-	d.Show(scr)
+	// Fill screen with bright white on bright blue
+	attr := SetRGBBoth(0, 0xFFFFFF, 0x0000FF)
+	scr.FillRect(0, 0, 19, 19, 'X', attr)
 
-	// Checking shadow cell.
-	// Bottom-right corner of dialog is (7, 7).
-	// Shadow should be at (8, 8) and (9, 8).
-	shAttr := Palette[ColShadow]
-	checkCell(t, scr, 9, 8, ' ', shAttr)
-	checkCell(t, scr, 8, 3, ' ', shAttr) // Vertical shadow part
+	// Apply shadow to 5,5 - 10,10
+	scr.ApplyShadow(5, 5, 10, 10)
+
+	// Check shadowed cell
+	cell := scr.buf[5*scr.width+5]
+	bg := GetRGBBack(cell.Attributes)
+
+	// Expected half of 0x0000FF -> 0x00007F
+	if bg != 0x00007F {
+		t.Errorf("Shadow BG expected 0x00007F, got 0x%06X", bg)
+	}
 }
 func TestDialog_MouseFocus(t *testing.T) {
 	d := NewDialog(0, 0, 20, 10, "Test")

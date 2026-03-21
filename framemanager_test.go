@@ -17,6 +17,13 @@ func (m *mockFrame) SetExitCode(c int) {}
 func (m *mockFrame) IsDone() bool { return m.ProcessCount >= 2 }
 func (m *mockFrame) GetHelp() string { return "" }
 func (m *mockFrame) IsBusy() bool { return false }
+func (m *mockFrame) SetPosition(x1, y1, x2, y2 int) {}
+func (m *mockFrame) GetPosition() (int, int, int, int) { return 0, 0, 0, 0 }
+func (m *mockFrame) IsModal() bool { return false }
+func (m *mockFrame) GetWindowNumber() int { return 0 }
+func (m *mockFrame) SetWindowNumber(n int) {}
+func (m *mockFrame) RequestFocus() bool { return true }
+func (m *mockFrame) Close() { m.SetExitCode(-1) }
 
 type busyFrame struct {
 	mockFrame

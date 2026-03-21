@@ -183,6 +183,11 @@ func (m *VMenu) IsDone() bool {
 	return m.done
 }
 func (m *VMenu) IsBusy() bool { return false }
+func (m *VMenu) IsModal() bool { return true }
+func (m *VMenu) GetWindowNumber() int { return 0 }
+func (m *VMenu) SetWindowNumber(n int) {}
+func (m *VMenu) RequestFocus() bool { return true }
+func (m *VMenu) Close() { m.SetExitCode(-1) }
 // ClearDone resets the menu state, allowing it to be shown again.
 func (m *VMenu) ClearDone() {
 	m.done = false
