@@ -197,12 +197,10 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 	case vtinput.VK_LEFT:
 		if shift { e.beginSelection() } else { e.selStart = -1; e.selAnchor = -1 }
 		if ctrl {
-			for e.curPos > 0 && unicode.IsSpace(e.text[e.curPos-1]) {
-				e.curPos--
-			}
-			for e.curPos > 0 && !unicode.IsSpace(e.text[e.curPos-1]) {
-				e.curPos--
-			}
+			// Skip leading spaces
+			for e.curPos > 0 && unicode.IsSpace(e.text[e.curPos-1]) { e.curPos-- }
+			// Skip word
+			for e.curPos > 0 && !unicode.IsSpace(e.text[e.curPos-1]) { e.curPos-- }
 		} else {
 			if e.curPos > 0 { e.curPos-- }
 		}
@@ -213,12 +211,10 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 	case vtinput.VK_RIGHT:
 		if shift { e.beginSelection() } else { e.selStart = -1; e.selAnchor = -1 }
 		if ctrl {
-			for e.curPos < len(e.text) && !unicode.IsSpace(e.text[e.curPos]) {
-				e.curPos++
-			}
-			for e.curPos < len(e.text) && unicode.IsSpace(e.text[e.curPos]) {
-				e.curPos++
-			}
+			// Skip current word
+			for e.curPos < len(e.text) && !unicode.IsSpace(e.text[e.curPos]) { e.curPos++ }
+			// Skip following spaces
+			for e.curPos < len(e.text) && unicode.IsSpace(e.text[e.curPos]) { e.curPos++ }
 		} else {
 			if e.curPos < len(e.text) { e.curPos++ }
 		}
