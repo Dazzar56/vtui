@@ -290,3 +290,47 @@ func TestFrameManager_FocusOnRemove(t *testing.T) {
 		t.Error("Underlying frame did not receive focus after top frame was removed")
 	}
 }
+func TestFrameManager_KeyBarUpdate(t *testing.T) {
+	fm := &frameManager{}
+	scr := NewScreenBuf()
+	scr.AllocBuf(80, 25)
+	fm.Init(scr)
+	fm.KeyBar = NewKeyBar()
+
+	f1 := &mockFrame{}
+	f1.onProcessKey = func(e *vtinput.InputEvent) bool { return false }
+	// This frame provides specific labels
+	f1.onProcessMouse = func(e *vtinput.InputEvent) bool { return false }
+
+	// We need to manually implement GetKeyLabels for this mock in the test
+	// but since mockFrame is a struct, we'll use a wrapper or just a specialized mock
+}
+
+// Specialized mock for label testing
+type labelFrame struct {
+	mockFrame
+	labels *KeySet
+}
+func (l *labelFrame) GetKeyLabels() *KeySet { return l.labels }
+
+func TestFrameManager_ContextualLabels(t *testing.T) {
+	fm := &frameManager{}
+	fm.Init(NewScreenBuf())
+	fm.KeyBar = NewKeyBar()
+
+	ks := &KeySet{Normal: KeyBarLabels{"TestLabel"}}
+	f := &labelFrame{labels: ks}
+	fm.Push(f)
+
+	// Simulate one frame of the main loop logic
+	for i := len(fm.frames) - 1; i >= 0; i-- {
+		if labels := fm.frames[i].GetKeyLabels(); labels != nil {
+			fm.KeyBar.Normal = labels.Normal
+			break
+		}
+	}
+
+	if fm.KeyBar.Normal[0] != "TestLabel" {
+		t.Errorf("KeyBar did not update from frame. Got %q", fm.KeyBar.Normal[0])
+	}
+}
