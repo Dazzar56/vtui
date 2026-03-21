@@ -28,7 +28,7 @@ type VMenu struct {
 	OnRight   func()
 	selectPos int // Selected item index
 	topPos    int // Index of the first visible item (for scrolling)
-
+	HideShadow bool
 }
 
 // NewVMenu creates a new vertical menu instance.
@@ -188,6 +188,7 @@ func (m *VMenu) GetWindowNumber() int { return 0 }
 func (m *VMenu) SetWindowNumber(n int) {}
 func (m *VMenu) RequestFocus() bool { return true }
 func (m *VMenu) Close() { m.SetExitCode(-1) }
+func (m *VMenu) HasShadow() bool { return !m.HideShadow }
 // ClearDone resets the menu state, allowing it to be shown again.
 func (m *VMenu) ClearDone() {
 	m.done = false

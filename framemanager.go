@@ -32,6 +32,7 @@ type Frame interface {
 	IsDone() bool
 	GetHelp() string
 	IsBusy() bool // If true, FrameManager may skip the rendering phase
+	HasShadow() bool
 
 	// MDI Methods
 	SetPosition(x1, y1, x2, y2 int)
@@ -276,12 +277,13 @@ func (fm *frameManager) Run() {
 
 			// Render frames from bottom to top (Painter's algorithm)
 			for i, frame := range fm.frames {
-				// Draw shadow for windows/dialogs (skip desktop and fullscreen frames)
-				x1, y1, x2, y2 := frame.GetPosition()
-				if i > 0 && (x1 > 0 || y1 > 0 || x2 < fm.scr.width-1 || y2 < fm.scr.height-1) {
-					// Shadow offset: +2 on X, +1 on Y. Prevent overlapping corner.
-					fm.scr.ApplyShadow(x1+2, y2+1, x2+2, y2+1) // Bottom shadow (full width)
-					fm.scr.ApplyShadow(x2+1, y1+1, x2+2, y2)   // Right shadow (stops above bottom shadow)
+				if frame.HasShadow() {
+					x1, y1, x2, y2 := frame.GetPosition()
+					// Fullscreen check
+					if i > 0 && (x1 > 0 || y1 > 0 || x2 < fm.scr.width-1 || y2 < fm.scr.height-1) {
+						fm.scr.ApplyShadow(x1+2, y2+1, x2+2, y2+1)
+						fm.scr.ApplyShadow(x2+1, y1+1, x2+2, y2)
+					}
 				}
 				frame.Show(fm.scr)
 			}

@@ -105,6 +105,7 @@ func (cb *ComboBox) Open() {
 	// If little space below combo box, open upwards (simplified)
 	cb.Menu.SetPosition(cb.X1, cb.Y1+1, cb.X2, cb.Y1+h)
 	cb.Menu.ClearDone()
+	cb.Menu.HideShadow = true
 	FrameManager.Push(cb.Menu)
 }
 

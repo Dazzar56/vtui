@@ -151,3 +151,6 @@ func (so *ScreenObject) ShowHelp() {
 	DebugLog("HELP SYSTEM: Requested topic '%s'", topic)
 	// In the future, this will push a HelpFrame to FrameManager.
 }
+func (so *ScreenObject) HasShadow() bool {
+	return false
+}

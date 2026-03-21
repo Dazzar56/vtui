@@ -401,4 +401,5 @@ func (bw *BaseWindow) MoveRelative(dx, dy int) {
 
 func (bw *BaseWindow) GetWindowNumber() int { return bw.Number }
 func (bw *BaseWindow) SetWindowNumber(n int) { bw.Number = n }
-func (bw *BaseWindow) RequestFocus() bool { return false } // Handled by FrameManager
+func (bw *BaseWindow) RequestFocus() bool { return false } // Handled by FrameManagerfunc (bw *BaseWindow) HasShadow() bool { return true }
+func (bw *BaseWindow) HasShadow() bool { return true }

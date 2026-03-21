@@ -58,3 +58,4 @@ func (d *Desktop) GetWindowNumber() int { return 0 }
 func (d *Desktop) SetWindowNumber(n int) {}
 func (d *Desktop) RequestFocus() bool { return false }
 func (d *Desktop) Close() { d.SetExitCode(-1) }
+func (d *Desktop) HasShadow() bool { return false }

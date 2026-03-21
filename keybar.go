@@ -64,18 +64,28 @@ func (kb *KeyBar) DisplayObject(scr *ScreenBuf) {
 
 		// 1. Draw number
 		numStr := fmt.Sprintf("%d", i+1)
+		numW := runewidth.StringWidth(numStr)
 		scr.Write(x, kb.Y1, StringToCharInfo(numStr, numAttr))
 
-		// 2. Draw label
-		label := labels[i]
-		vLabelWidth := slotWidth - runewidth.StringWidth(numStr)
-		if vLabelWidth > 0 {
-			label = runewidth.Truncate(label, vLabelWidth, "")
-			// Padding
-			for runewidth.StringWidth(label) < vLabelWidth {
+		// 2. Draw label block (occupies slot minus gap)
+		labelX := x + numW
+		labelW := slotWidth - numW - 1
+		if i == 11 {
+			labelW = (kb.X2 - labelX) + 1
+		}
+
+		if labelW > 0 {
+			label := labels[i]
+			label = runewidth.Truncate(label, labelW, "")
+			for runewidth.StringWidth(label) < labelW {
 				label += " "
 			}
-			scr.Write(x+runewidth.StringWidth(numStr), kb.Y1, StringToCharInfo(label, textAttr))
+			scr.Write(labelX, kb.Y1, StringToCharInfo(label, textAttr))
+		}
+
+		// 3. Gap (using number's background color)
+		if i < 11 {
+			scr.Write(x+slotWidth-1, kb.Y1, StringToCharInfo(" ", numAttr))
 		}
 	}
 }
