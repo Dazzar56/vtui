@@ -233,3 +233,26 @@ func dispatchHelper(fm *frameManager, ev *vtinput.InputEvent) {
 		}
 	}
 }
+
+func TestFrameManager_PostTask(t *testing.T) {
+	fm := &frameManager{}
+	// Инициализируем только каналы, без запуска цикла Run
+	fm.TaskChan = make(chan func(), 10)
+	
+	taskExecuted := false
+	fm.PostTask(func() {
+		taskExecuted = true
+	})
+	
+	// Извлекаем задачу из канала и выполняем её
+	select {
+	case task := <-fm.TaskChan:
+		task()
+	default:
+		t.Fatal("Task was not posted to TaskChan")
+	}
+	
+	if !taskExecuted {
+		t.Error("Posted task was not executed")
+	}
+}
