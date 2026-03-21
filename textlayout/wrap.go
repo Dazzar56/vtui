@@ -1,6 +1,7 @@
 package textlayout
 
 import (
+	"sort"
     "unicode/utf8"
 
 	"github.com/unxed/vtui/piecetable"
@@ -22,14 +23,20 @@ type WrapEngine struct {
 	wrapWidth  int
 	wordWrap   bool
 	fragmentCache map[int][]LineFragment
+
+	// rowOffsets[i] хранит общее количество визуальных строк во всех
+	// логических строках ПЕРЕД строкой i.
+	rowOffsets []int
+	totalRows  int
+	cacheValid bool
 }
 
 func NewWrapEngine(pt *piecetable.PieceTable, li *piecetable.LineIndex) *WrapEngine {
 	return &WrapEngine{
-		pt:         pt,
-		li:         li,
-		wrapWidth:  80,
-		wordWrap:   true,
+		pt:            pt,
+		li:            li,
+		wrapWidth:     80,
+		wordWrap:      true,
 		fragmentCache: make(map[int][]LineFragment),
 	}
 }
@@ -54,6 +61,9 @@ func (we *WrapEngine) ToggleWrap(wrap bool) {
 // InvalidateCache сбрасывает кэш фрагментов.
 func (we *WrapEngine) InvalidateCache() {
 	we.fragmentCache = make(map[int][]LineFragment)
+	we.cacheValid = false
+	we.rowOffsets = nil
+	we.totalRows = 0
 }
 
 // GetFragments возвращает визуальные фрагменты для одной логической строки.
@@ -151,16 +161,52 @@ func (we *WrapEngine) GetFragments(logLineIdx int) []LineFragment {
 	return fragments
 }
 
+func (we *WrapEngine) ensureRowCountCache() {
+	lineCount := we.li.LineCount()
+	if we.cacheValid && len(we.rowOffsets) == lineCount {
+		return
+	}
+	we.rowOffsets = make([]int, lineCount)
+	currentOffset := 0
+	for i := 0; i < lineCount; i++ {
+		we.rowOffsets[i] = currentOffset
+		currentOffset += len(we.GetFragments(i))
+	}
+	we.totalRows = currentOffset
+	we.cacheValid = true
+}
+
+// GetTotalVisualRows возвращает общее количество визуальных строк в документе.
+func (we *WrapEngine) GetTotalVisualRows() int {
+	we.ensureRowCountCache()
+	return we.totalRows
+}
+
+// GetLogLineAtVisualRow переводит абсолютный индекс визуальной строки в индекс
+// логической строки и порядковый номер фрагмента внутри неё.
+func (we *WrapEngine) GetLogLineAtVisualRow(visualRow int) (logLineIdx int, fragIdx int) {
+	we.ensureRowCountCache()
+	if visualRow < 0 { return 0, 0 }
+	if visualRow >= we.totalRows { return we.li.LineCount() - 1, 0 }
+
+	// Бинарный поиск O(log N)
+	logLineIdx = sort.Search(len(we.rowOffsets), func(i int) bool {
+		return we.rowOffsets[i] > visualRow
+	}) - 1
+
+	if logLineIdx < 0 { logLineIdx = 0 }
+	fragIdx = visualRow - we.rowOffsets[logLineIdx]
+	return
+}
+
 // LogicalToVisual переводит байтовый оффсет в документе в (строка, колонка) на экране.
 func (we *WrapEngine) LogicalToVisual(byteOffset int) (visualRow, visualCol int) {
+	we.ensureRowCountCache()
 	logLineIdx := we.li.GetLineAtOffset(byteOffset)
 	fragments := we.GetFragments(logLineIdx)
 
-	// Считаем визуальный ряд от начала документа
-	totalRow := 0
-	for i := 0; i < logLineIdx; i++ {
-		totalRow += len(we.GetFragments(i))
-	}
+	// O(1) получение базового ряда из префиксных сумм
+	totalRow := we.rowOffsets[logLineIdx]
 
 	for i, frag := range fragments {
 		// Используем < для конца фрагмента, чтобы оффсет на границе
@@ -180,40 +226,36 @@ func (we *WrapEngine) LogicalToVisual(byteOffset int) (visualRow, visualCol int)
 
 // VisualToLogical переводит (строка, колонка) на экране в байтовый оффсет документа.
 func (we *WrapEngine) VisualToLogical(visualRow, visualCol int) int {
-	if visualRow < 0 {
+	logLineIdx, fragIdx := we.GetLogLineAtVisualRow(visualRow)
+	fragments := we.GetFragments(logLineIdx)
+	if fragments == nil {
 		return 0
 	}
-	currRow := 0
-	for i := 0; i < we.li.LineCount(); i++ {
-		fragments := we.GetFragments(i)
-		if visualRow < currRow+len(fragments) {
-			frag := fragments[visualRow-currRow]
+	if fragIdx >= len(fragments) {
+		fragIdx = len(fragments) - 1
+	}
+	frag := fragments[fragIdx]
 
-			// Если фрагмент пустой (например, пустая строка), возвращаем его начало
-			if frag.ByteOffsetStart == frag.ByteOffsetEnd || visualCol <= 0 {
-				return frag.ByteOffsetStart
-			}
+	if frag.ByteOffsetStart >= frag.ByteOffsetEnd || visualCol <= 0 {
+		return frag.ByteOffsetStart
+	}
 
-			lineData := string(we.pt.GetRange(frag.ByteOffsetStart, frag.ByteOffsetEnd-frag.ByteOffsetStart))
-			runes := []rune(lineData)
+	lineData := we.pt.GetRange(frag.ByteOffsetStart, frag.ByteOffsetEnd-frag.ByteOffsetStart)
+	offset := frag.ByteOffsetStart
+	currentCol := 0
 
-			offset := frag.ByteOffsetStart
-			w := 0
-			for _, r := range runes {
-				rw := runewidth.RuneWidth(r)
-				if rw <= 0 {
-					rw = 1
-				}
-				// Если мы достигли или перешли нужную колонку — возвращаем текущий байт
-				if w+rw > visualCol {
-					return offset
-				}
-				w += rw
-				offset += len(string(r))
-			}
+	for len(lineData) > 0 {
+		r, size := utf8.DecodeRune(lineData)
+		rw := runewidth.RuneWidth(r)
+		if rw <= 0 {
+			rw = 1
+		}
+		if currentCol+rw > visualCol {
 			return offset
 		}
-		currRow += len(fragments)
+		currentCol += rw
+		offset += size
+		lineData = lineData[size:]
 	}
-	return we.pt.Size()
+	return offset
 }
