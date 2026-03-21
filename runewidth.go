@@ -3,6 +3,7 @@ package vtui
 import (
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/mattn/go-runewidth"
 )
@@ -69,17 +70,60 @@ func StringToCharInfoHighlighted(s string, normalAttr, highAttr uint64) ([]CharI
 
 func StringToCharInfo(s string, attr uint64) []CharInfo {
 	var res []CharInfo
-	for _, r := range s {
-		w := runewidth.RuneWidth(r)
-		if w > 0 {
-			res = append(res, CharInfo{Char: uint64(r), Attributes: attr})
-			// Fill the extra cells required by the wide character
-			for i := 1; i < w; i++ {
-				res = append(res, CharInfo{Char: WideCharFiller, Attributes: attr})
-			}
+	res = FillCharInfo(res, []byte(s), attr)
+	return res
+}
+
+// FillCharInfo fills a slice of CharInfo with data from a byte slice without extra allocations.
+// It grows the target slice if necessary.
+func FillCharInfo(target []CharInfo, data []byte, attr uint64) []CharInfo {
+	target = target[:0]
+	for len(data) > 0 {
+		r, size := utf8.DecodeRune(data)
+		data = data[size:]
+		w := 1
+		if r >= 0x7F { // Fast path for ASCII
+			w = runewidth.RuneWidth(r)
+		}
+		if w <= 0 {
+			continue
+		}
+		target = append(target, CharInfo{Char: uint64(r), Attributes: attr})
+		for i := 1; i < w; i++ {
+			target = append(target, CharInfo{Char: WideCharFiller, Attributes: attr})
 		}
 	}
-	return res
+	return target
+}
+
+// FillCharInfoWithSelection combines FillCharInfo and selection highlighting in a single pass.
+func FillCharInfoWithSelection(target []CharInfo, data []byte, defaultAttr, selAttr uint64, fragStartOffset, selMin, selMax int) []CharInfo {
+	target = target[:0]
+	currByte := 0
+	for len(data) > 0 {
+		r, size := utf8.DecodeRune(data)
+		data = data[size:]
+
+		attr := defaultAttr
+		absPos := fragStartOffset + currByte
+		if absPos >= selMin && absPos < selMax {
+			attr = selAttr
+		}
+		currByte += size
+
+		w := 1
+		if r >= 0x7F {
+			w = runewidth.RuneWidth(r)
+		}
+		if w <= 0 {
+			continue
+		}
+		target = append(target, CharInfo{Char: uint64(r), Attributes: attr})
+		for i := 1; i < w; i++ {
+			target = append(target, CharInfo{Char: WideCharFiller, Attributes: attr})
+		}
+	}
+	return target
 }
 
 func RunesToCharInfo(runes []rune, attr uint64) []CharInfo {

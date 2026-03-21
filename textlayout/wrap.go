@@ -28,7 +28,9 @@ type WrapEngine struct {
 	// логических строках ПЕРЕД строкой i.
 	rowOffsets []int
 	totalRows  int
-	cacheValid bool
+	validUntil int // Index of the last logical line with a valid calculated row offset
+
+	tmpBuf []byte // Reusable buffer for avoiding allocations
 }
 
 func NewWrapEngine(pt *piecetable.PieceTable, li *piecetable.LineIndex) *WrapEngine {
@@ -61,9 +63,23 @@ func (we *WrapEngine) ToggleWrap(wrap bool) {
 // InvalidateCache сбрасывает кэш фрагментов.
 func (we *WrapEngine) InvalidateCache() {
 	we.fragmentCache = nil
-	we.cacheValid = false
+	we.validUntil = -1
 	we.rowOffsets = nil
 	we.totalRows = 0
+}
+
+func (we *WrapEngine) InvalidateFrom(logLineIdx int) {
+	if logLineIdx < 0 {
+		logLineIdx = 0
+	}
+	if we.fragmentCache != nil && logLineIdx < len(we.fragmentCache) {
+		for i := logLineIdx; i < len(we.fragmentCache); i++ {
+			we.fragmentCache[i] = nil
+		}
+	}
+	if logLineIdx <= we.validUntil {
+		we.validUntil = logLineIdx - 1
+	}
 }
 
 // GetFragments возвращает визуальные фрагменты для одной логической строки.
@@ -87,7 +103,9 @@ func (we *WrapEngine) GetFragments(logLineIdx int) []LineFragment {
 		endOffset = we.li.GetLineOffset(logLineIdx + 1)
 	}
 
-	lineData := we.pt.GetRange(startOffset, endOffset-startOffset)
+	we.tmpBuf = we.tmpBuf[:0]
+	we.tmpBuf = we.pt.AppendRange(we.tmpBuf, startOffset, endOffset-startOffset)
+	lineData := we.tmpBuf
 	// Убираем \n или \r\n с конца
 	if len(lineData) > 0 && lineData[len(lineData)-1] == '\n' {
 		lineData = lineData[:len(lineData)-1]
@@ -97,7 +115,19 @@ func (we *WrapEngine) GetFragments(logLineIdx int) []LineFragment {
 	}
 
 	if !we.wordWrap || we.wrapWidth <= 0 {
-		width := runewidth.StringWidth(string(lineData))
+		width := 0
+		tmpData := lineData
+		for len(tmpData) > 0 {
+			r, size := utf8.DecodeRune(tmpData)
+			rw := 1
+			if r >= 0x7F {
+				rw = runewidth.RuneWidth(r)
+			}
+			if rw < 0 { rw = 1 }
+			width += rw
+			tmpData = tmpData[size:]
+		}
+
 		frag := LineFragment{
 			LogicalLineIdx:  logLineIdx,
 			ByteOffsetStart: startOffset,
@@ -121,7 +151,10 @@ func (we *WrapEngine) GetFragments(logLineIdx int) []LineFragment {
 		scanPos := bytePos
 		for scanPos < dataLen {
 			r, size := utf8.DecodeRune(lineData[scanPos:])
-			w := runewidth.RuneWidth(r)
+			w := 1
+			if r >= 0x7F {
+				w = runewidth.RuneWidth(r)
+			}
 			if w < 0 { w = 1 }
 
 			if visualWidth+w > we.wrapWidth {
@@ -166,67 +199,122 @@ func (we *WrapEngine) GetFragments(logLineIdx int) []LineFragment {
 	return fragments
 }
 
-func (we *WrapEngine) ensureRowCountCache() {
+func (we *WrapEngine) ensureRowCountCache(until int) {
 	lineCount := we.li.LineCount()
-	if we.cacheValid && len(we.rowOffsets) == lineCount {
+	if until >= lineCount {
+		until = lineCount - 1
+	}
+	if we.validUntil >= until && we.rowOffsets != nil && len(we.rowOffsets) == lineCount {
 		return
 	}
 
-	we.rowOffsets = make([]int, lineCount)
+	if we.rowOffsets == nil || len(we.rowOffsets) != lineCount {
+		oldOffsets := we.rowOffsets
+		we.rowOffsets = make([]int, lineCount)
+		if oldOffsets != nil {
+			numToCopy := len(oldOffsets)
+			if numToCopy > lineCount {
+				numToCopy = lineCount
+			}
+			copy(we.rowOffsets, oldOffsets[:numToCopy])
+			if we.validUntil >= numToCopy {
+				we.validUntil = numToCopy - 1
+			}
+		} else {
+			we.validUntil = -1
+		}
+	}
 
-	// Оптимизация: если WordWrap выключен, каждая логическая строка = 1 визуальная
 	if !we.wordWrap {
-		for i := 0; i < lineCount; i++ {
+		for i := we.validUntil + 1; i < lineCount; i++ {
 			we.rowOffsets[i] = i
 		}
 		we.totalRows = lineCount
-		we.cacheValid = true
+		we.validUntil = lineCount - 1
 		return
 	}
 
 	currentOffset := 0
-	for i := 0; i < lineCount; i++ {
+	start := we.validUntil + 1
+	if start > 0 {
+		currentOffset = we.rowOffsets[start-1] + len(we.GetFragments(start-1))
+	}
+
+	for i := start; i <= until; i++ {
 		we.rowOffsets[i] = currentOffset
 		currentOffset += len(we.GetFragments(i))
 	}
-	we.totalRows = currentOffset
-	we.cacheValid = true
+	if until > we.validUntil {
+		we.validUntil = until
+	}
+	if we.validUntil == lineCount-1 {
+		we.totalRows = currentOffset
+	}
 }
 
 // GetTotalVisualRows возвращает общее количество визуальных строк в документе.
 func (we *WrapEngine) GetTotalVisualRows() int {
-	we.ensureRowCountCache()
+	we.ensureRowCountCache(we.li.LineCount() - 1)
 	return we.totalRows
 }
 // GetRowOffset возвращает индекс первой визуальной строки для данной логической строки.
 func (we *WrapEngine) GetRowOffset(logLineIdx int) int {
-	we.ensureRowCountCache()
-	if logLineIdx < 0 { return 0 }
-	if logLineIdx >= len(we.rowOffsets) { return we.totalRows }
+	we.ensureRowCountCache(logLineIdx)
+	if logLineIdx < 0 {
+		return 0
+	}
+	if logLineIdx >= len(we.rowOffsets) {
+		we.ensureRowCountCache(we.li.LineCount() - 1)
+		return we.totalRows
+	}
 	return we.rowOffsets[logLineIdx]
 }
 
 // GetLogLineAtVisualRow переводит абсолютный индекс визуальной строки в индекс
 // логической строки и порядковый номер фрагмента внутри неё.
 func (we *WrapEngine) GetLogLineAtVisualRow(visualRow int) (logLineIdx int, fragIdx int) {
-	we.ensureRowCountCache()
-	if visualRow < 0 { return 0, 0 }
-	if visualRow >= we.totalRows { return we.li.LineCount() - 1, 0 }
+	if visualRow < 0 {
+		return 0, 0
+	}
 
-	// Бинарный поиск O(log N)
-	logLineIdx = sort.Search(len(we.rowOffsets), func(i int) bool {
+	// Lazy calculation until we find the row or hit EOF
+	lineCount := we.li.LineCount()
+	for we.validUntil < lineCount-1 {
+		var lastCalculatedRow int
+		if we.validUntil >= 0 {
+			lastCalculatedRow = we.rowOffsets[we.validUntil] + len(we.GetFragments(we.validUntil))
+		}
+		if lastCalculatedRow > visualRow {
+			break
+		}
+		// Expand cache in chunks
+		nextTarget := we.validUntil + 100
+		if nextTarget >= lineCount {
+			nextTarget = lineCount - 1
+		}
+		we.ensureRowCountCache(nextTarget)
+	}
+
+	if visualRow >= we.totalRows && we.validUntil == lineCount-1 {
+		return lineCount - 1, 0
+	}
+
+	// Binary search on the valid portion of the cache
+	logLineIdx = sort.Search(we.validUntil+1, func(i int) bool {
 		return we.rowOffsets[i] > visualRow
 	}) - 1
 
-	if logLineIdx < 0 { logLineIdx = 0 }
+	if logLineIdx < 0 {
+		logLineIdx = 0
+	}
 	fragIdx = visualRow - we.rowOffsets[logLineIdx]
 	return
 }
 
 // LogicalToVisual переводит байтовый оффсет в документе в (строка, колонка) на экране.
 func (we *WrapEngine) LogicalToVisual(byteOffset int) (visualRow, visualCol int) {
-	we.ensureRowCountCache()
 	logLineIdx := we.li.GetLineAtOffset(byteOffset)
+	we.ensureRowCountCache(logLineIdx)
 	fragments := we.GetFragments(logLineIdx)
 	totalRow := we.rowOffsets[logLineIdx]
 
@@ -234,14 +322,21 @@ func (we *WrapEngine) LogicalToVisual(byteOffset int) (visualRow, visualCol int)
 		isLastFrag := (logLineIdx == we.li.LineCount()-1) && (i == len(fragments)-1)
 		if byteOffset >= frag.ByteOffsetStart && (byteOffset < frag.ByteOffsetEnd || (isLastFrag && byteOffset == frag.ByteOffsetEnd)) {
 			// Вычисляем колонку без аллокаций
-			data := we.pt.GetRange(frag.ByteOffsetStart, byteOffset-frag.ByteOffsetStart)
 			width := 0
-			for len(data) > 0 {
-				r, size := utf8.DecodeRune(data)
-				rw := runewidth.RuneWidth(r)
-				if rw <= 0 { rw = 1 }
-				width += rw
-				data = data[size:]
+			if byteOffset > frag.ByteOffsetStart {
+				we.tmpBuf = we.tmpBuf[:0]
+				we.tmpBuf = we.pt.AppendRange(we.tmpBuf, frag.ByteOffsetStart, byteOffset-frag.ByteOffsetStart)
+				data := we.tmpBuf
+				for len(data) > 0 {
+					r, size := utf8.DecodeRune(data)
+					rw := 1
+					if r >= 0x7F {
+						rw = runewidth.RuneWidth(r)
+					}
+					if rw <= 0 { rw = 1 }
+					width += rw
+					data = data[size:]
+				}
 			}
 			return totalRow + i, width
 		}
@@ -265,13 +360,18 @@ func (we *WrapEngine) VisualToLogical(visualRow, visualCol int) int {
 		return frag.ByteOffsetStart
 	}
 
-	lineData := we.pt.GetRange(frag.ByteOffsetStart, frag.ByteOffsetEnd-frag.ByteOffsetStart)
+	we.tmpBuf = we.tmpBuf[:0]
+	we.tmpBuf = we.pt.AppendRange(we.tmpBuf, frag.ByteOffsetStart, frag.ByteOffsetEnd-frag.ByteOffsetStart)
+	lineData := we.tmpBuf
 	offset := frag.ByteOffsetStart
 	currentCol := 0
 
 	for len(lineData) > 0 {
 		r, size := utf8.DecodeRune(lineData)
-		rw := runewidth.RuneWidth(r)
+		rw := 1
+		if r >= 0x7F {
+			rw = runewidth.RuneWidth(r)
+		}
 		if rw <= 0 {
 			rw = 1
 		}

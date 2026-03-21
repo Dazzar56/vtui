@@ -161,6 +161,35 @@ func (pt *PieceTable) Bytes() []byte {
 	}
 	return res
 }
+// AppendRange appends the specified range to the dest slice without new allocations.
+func (pt *PieceTable) AppendRange(dest []byte, offset, length int) []byte {
+	if offset < 0 || length <= 0 || offset+length > pt.size {
+		return dest
+	}
+
+	remaining := length
+	startIdx, offInPiece := pt.offsetToPiece(offset)
+
+	for i := startIdx; i < len(pt.pieces) && remaining > 0; i++ {
+		p := pt.pieces[i]
+
+		take := p.Length - offInPiece
+		if take > remaining {
+			take = remaining
+		}
+
+		if p.Buf == Original {
+			dest = append(dest, pt.orig[p.Start+offInPiece : p.Start+offInPiece+take]...)
+		} else {
+			dest = append(dest, pt.add[p.Start+offInPiece : p.Start+offInPiece+take]...)
+		}
+
+		remaining -= take
+		offInPiece = 0
+	}
+
+	return dest
+}
 
 // String returns current text as a string (convenient for tests).
 func (pt *PieceTable) String() string {
