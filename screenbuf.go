@@ -23,6 +23,7 @@ type ScreenBuf struct {
 
 	lockCount int
 	dirty     bool // Flag indicating that a full rewrite is required during the next Flush.
+	clipStack []Rect
 }
 
 // NewScreenBuf creates a new ScreenBuf instance.
@@ -65,6 +66,32 @@ func (s *ScreenBuf) AllocBuf(width, height int) {
 	s.width = width
 	s.height = height
 	s.dirty = true // After resizing, a full redraw is needed
+	s.clipStack = []Rect{{0, 0, width - 1, height - 1}}
+}
+
+// PushClipRect adds a new clipping rectangle by intersecting it with the current one.
+func (s *ScreenBuf) PushClipRect(x1, y1, x2, y2 int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.clipStack) == 0 {
+		if s.width <= 0 || s.height <= 0 {
+			return
+		}
+		s.clipStack = []Rect{{0, 0, s.width - 1, s.height - 1}}
+	}
+	curr := s.clipStack[len(s.clipStack)-1]
+	nx1, ny1 := max(curr.X1, x1), max(curr.Y1, y1)
+	nx2, ny2 := min(curr.X2, x2), min(curr.Y2, y2)
+	s.clipStack = append(s.clipStack, Rect{nx1, ny1, nx2, ny2})
+}
+
+// PopClipRect removes the top clipping rectangle.
+func (s *ScreenBuf) PopClipRect() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.clipStack) > 1 {
+		s.clipStack = s.clipStack[:len(s.clipStack)-1]
+	}
 }
 
 // Write writes a slice of CharInfo into the virtual buffer at specified coordinates.
@@ -72,22 +99,26 @@ func (s *ScreenBuf) Write(x, y int, text []CharInfo) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if s.buf == nil || y < 0 || y >= s.height || x >= s.width {
+	if s.buf == nil || len(s.clipStack) == 0 {
 		return
 	}
 
-	// Clipping behind the left boundary
-	if x < 0 {
-		if -x >= len(text) {
-			return
-		}
-		text = text[-x:]
-		x = 0
+	clip := s.clipStack[len(s.clipStack)-1]
+	if y < clip.Y1 || y > clip.Y2 || x > clip.X2 {
+		return
 	}
 
-	// Clipping behind the right boundary
-	if x+len(text) > s.width {
-		text = text[:s.width-x]
+	if x < clip.X1 {
+		skip := clip.X1 - x
+		if skip >= len(text) {
+			return
+		}
+		text = text[skip:]
+		x = clip.X1
+	}
+
+	if x+len(text)-1 > clip.X2 {
+		text = text[:clip.X2-x+1]
 	}
 
 	if len(text) == 0 {
@@ -109,11 +140,13 @@ func (s *ScreenBuf) ApplyColor(x1, y1, x2, y2 int, attributes uint64) {
 		return
 	}
 
-	// Clipping by screen boundaries
-	if x1 < 0 { x1 = 0 }
-	if y1 < 0 { y1 = 0 }
-	if x2 >= s.width { x2 = s.width - 1 }
-	if y2 >= s.height { y2 = s.height - 1 }
+	if len(s.clipStack) == 0 { return }
+	clip := s.clipStack[len(s.clipStack)-1]
+	if x1 < clip.X1 { x1 = clip.X1 }
+	if y1 < clip.Y1 { y1 = clip.Y1 }
+	if x2 > clip.X2 { x2 = clip.X2 }
+	if y2 > clip.Y2 { y2 = clip.Y2 }
+	if x1 > x2 || y1 > y2 { return }
 
 	for y := y1; y <= y2; y++ {
 		offset := y*s.width + x1
@@ -127,11 +160,13 @@ func (s *ScreenBuf) ApplyColor(x1, y1, x2, y2 int, attributes uint64) {
 func (s *ScreenBuf) FillRect(x1, y1, x2, y2 int, char rune, attributes uint64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.buf == nil { return }
-	if x1 < 0 { x1 = 0 }
-	if y1 < 0 { y1 = 0 }
-	if x2 >= s.width { x2 = s.width - 1 }
-	if y2 >= s.height { y2 = s.height - 1 }
+	if s.buf == nil || len(s.clipStack) == 0 { return }
+	clip := s.clipStack[len(s.clipStack)-1]
+	if x1 < clip.X1 { x1 = clip.X1 }
+	if y1 < clip.Y1 { y1 = clip.Y1 }
+	if x2 > clip.X2 { x2 = clip.X2 }
+	if y2 > clip.Y2 { y2 = clip.Y2 }
+	if x1 > x2 || y1 > y2 { return }
 	cell := CharInfo{Char: uint64(char), Attributes: attributes}
 	for y := y1; y <= y2; y++ {
 		offset := y*s.width + x1

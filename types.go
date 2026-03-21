@@ -7,6 +7,12 @@ type Coord struct {
 }
 
 // SmallRect defines a rectangular area in the console.
+// Rect defines a generic rectangle with absolute coordinates.
+type Rect struct {
+	X1, Y1, X2, Y2 int
+}
+
+// SmallRect defines a rectangular area in the console.
 type SmallRect struct {
 	Left   int16
 	Top    int16

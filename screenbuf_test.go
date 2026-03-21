@@ -66,3 +66,44 @@ func contains(s, substr string) bool {
 	}
 	return false
 }
+
+func TestScreenBuf_Clipping(t *testing.T) {
+	scr := NewScreenBuf()
+	scr.AllocBuf(20, 10)
+	attr := uint64(111)
+
+	// Default clip should be the whole screen
+	scr.Write(0, 0, StringToCharInfo("ABC", attr))
+	checkCell(t, scr, 0, 0, 'A', attr)
+
+	// Push a clip rect (5, 5) to (10, 10)
+	scr.PushClipRect(5, 5, 10, 10)
+
+	// Try to write outside (left)
+	scr.Write(2, 5, StringToCharInfo("HELLO", attr))
+	// 'H', 'E', 'L' should be clipped. 'L', 'O' should be printed at 5 and 6
+	checkCell(t, scr, 2, 5, 0, 0)
+	checkCell(t, scr, 5, 5, 'L', attr)
+	checkCell(t, scr, 6, 5, 'O', attr)
+
+	// Try to write outside (right)
+	scr.Write(8, 6, StringToCharInfo("WORLD", attr))
+	// 'W', 'O', 'R' should be at 8, 9, 10. 'L', 'D' should be clipped
+	checkCell(t, scr, 8, 6, 'W', attr)
+	checkCell(t, scr, 10, 6, 'R', attr)
+	checkCell(t, scr, 11, 6, 0, 0)
+
+	// Try to fill rect crossing bounds
+	scr.FillRect(2, 7, 15, 8, 'X', attr)
+	checkCell(t, scr, 4, 7, 0, 0)
+	checkCell(t, scr, 5, 7, 'X', attr)
+	checkCell(t, scr, 10, 7, 'X', attr)
+	checkCell(t, scr, 11, 7, 0, 0)
+
+	// Pop clip rect
+	scr.PopClipRect()
+
+	// Now we can write outside again
+	scr.Write(0, 9, StringToCharInfo("END", attr))
+	checkCell(t, scr, 0, 9, 'E', attr)
+}
