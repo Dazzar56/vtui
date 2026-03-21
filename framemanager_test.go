@@ -10,6 +10,7 @@ type mockFrame struct {
 	isModal        bool
 	isDone         bool
 	onProcessMouse func(e *vtinput.InputEvent) bool
+	onProcessKey   func(e *vtinput.InputEvent) bool
 }
 
 func newMockFrame(x, y, w, h int, modal bool) *mockFrame {
@@ -18,7 +19,12 @@ func newMockFrame(x, y, w, h int, modal bool) *mockFrame {
 	return f
 }
 
-func (m *mockFrame) ProcessKey(e *vtinput.InputEvent) bool { return false }
+func (m *mockFrame) ProcessKey(e *vtinput.InputEvent) bool {
+	if m.onProcessKey != nil {
+		return m.onProcessKey(e)
+	}
+	return false
+}
 
 func (m *mockFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 	if m.onProcessMouse != nil {
@@ -254,5 +260,31 @@ func TestFrameManager_PostTask(t *testing.T) {
 	
 	if !taskExecuted {
 		t.Error("Posted task was not executed")
+	}
+}
+func TestFrameManager_FocusOnRemove(t *testing.T) {
+	fm := &frameManager{}
+	fm.Init(NewScreenBuf())
+
+	f1FocusReceived := false
+	f1 := &mockFrame{}
+	f1.onProcessKey = func(e *vtinput.InputEvent) bool {
+		if e.Type == vtinput.FocusEventType && e.SetFocus {
+			f1FocusReceived = true
+		}
+		return true
+	}
+
+	f2 := &mockFrame{}
+
+	fm.Push(f1)
+	f1FocusReceived = false // Reset after initial push
+	fm.Push(f2)
+
+	// Removing f2 (the top frame) should trigger focus on f1
+	fm.RemoveFrame(f2)
+
+	if !f1FocusReceived {
+		t.Error("Underlying frame did not receive focus after top frame was removed")
 	}
 }

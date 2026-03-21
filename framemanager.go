@@ -157,6 +157,25 @@ func (fm *frameManager) Pop() {
 			fm.capturedFrame = nil
 		}
 		fm.frames = fm.frames[:len(fm.frames)-1]
+		if len(fm.frames) > 0 {
+			fm.frames[len(fm.frames)-1].ProcessKey(&vtinput.InputEvent{Type: vtinput.FocusEventType, SetFocus: true})
+		}
+	}
+}
+// RemoveFrame deletes a specific frame from the stack, regardless of its position.
+func (fm *frameManager) RemoveFrame(f Frame) {
+	isTop := len(fm.frames) > 0 && fm.frames[len(fm.frames)-1] == f
+	for i, frame := range fm.frames {
+		if frame == f {
+			if fm.capturedFrame == f {
+				fm.capturedFrame = nil
+			}
+			fm.frames = append(fm.frames[:i], fm.frames[i+1:]...)
+			if isTop && len(fm.frames) > 0 {
+				fm.frames[len(fm.frames)-1].ProcessKey(&vtinput.InputEvent{Type: vtinput.FocusEventType, SetFocus: true})
+			}
+			return
+		}
 	}
 }
 // Redraw triggers an asynchronous redraw request.
@@ -314,8 +333,9 @@ func (fm *frameManager) Run() {
 				if fm.MenuBar != nil && fm.MenuBar.Active {
 					// Exception: if a VMenu is open, it MUST handle navigation keys
 					if fm.GetTopFrameType() == TypeMenu {
-						if fm.frames[len(fm.frames)-1].ProcessKey(ev) {
-							if fm.frames[len(fm.frames)-1].IsDone() { fm.Pop() }
+						menuFrame := fm.frames[len(fm.frames)-1]
+						if menuFrame.ProcessKey(ev) {
+							if menuFrame.IsDone() { fm.RemoveFrame(menuFrame) }
 							return
 						}
 					}
@@ -397,7 +417,7 @@ func (fm *frameManager) Run() {
 				}
 			}
 
-			if topFrame.IsDone() { fm.Pop() }
+			if topFrame.IsDone() { fm.RemoveFrame(topFrame) }
 		}
 
 		// 3. Event waiting (Blocking)

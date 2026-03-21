@@ -185,6 +185,18 @@ func (bw *BaseWindow) ProcessKey(e *vtinput.InputEvent) bool {
 			bw.changeFocus(1)
 		}
 		return true
+
+	case vtinput.VK_RETURN:
+		// If Enter was not handled by the focused item (like an Edit with OnAction),
+		// try to find the first available button and click it.
+		for _, item := range bw.items {
+			if btn, ok := item.(*Button); ok {
+				if btn.OnClick != nil {
+					btn.OnClick()
+					return true
+				}
+			}
+		}
 	}
 
 	return false

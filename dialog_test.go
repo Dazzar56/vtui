@@ -705,3 +705,41 @@ func TestBaseWindow_FocusVisualFeedback(t *testing.T) {
 	// Заголовок должен стать обычным (ColDialogBoxTitle)
 	checkCell(t, scr, 10, 5, 'A', Palette[ColDialogBoxTitle])
 }
+
+func TestDialog_EnterTriggersFirstButton(t *testing.T) {
+	d := NewDialog(0, 0, 40, 10, "Enter Test")
+	
+	okClicked := false
+	cancelClicked := false
+	
+	// Add an edit field (to simulate focus being somewhere else)
+	edit := NewEdit(1, 1, 20, "text")
+	d.AddItem(edit)
+	
+	btnOk := NewButton(1, 3, "&Ok")
+	btnOk.OnClick = func() { okClicked = true }
+	d.AddItem(btnOk)
+	
+	btnCancel := NewButton(10, 3, "&Cancel")
+	btnCancel.OnClick = func() { cancelClicked = true }
+	d.AddItem(btnCancel)
+	
+	// Ensure focus is on the edit field
+	d.focusIdx = 0
+	edit.SetFocus(true)
+	btnOk.SetFocus(false)
+
+	// 1. Press Enter. Since Edit doesn't have OnAction, BaseWindow should find the button.
+	d.ProcessKey(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_RETURN,
+	})
+
+	if !okClicked {
+		t.Error("Enter key should have triggered the OK button")
+	}
+	if cancelClicked {
+		t.Error("Enter key triggered the wrong button (Cancel)")
+	}
+}

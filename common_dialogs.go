@@ -203,9 +203,9 @@ func InputBox(title, prompt, defaultText string, onOk func(string)) *Dialog {
 	dlg := NewDialog(x1, y1, x1+width-1, y1+height-1, title)
 	dlg.ShowClose = true
 
-	dlg.AddItem(NewText(x1+2, y1+2, prompt, Palette[ColDialogText]))
-
 	edit := NewEdit(x1+2, y1+3, width-4, defaultText)
+	// Use NewLabel to link the prompt hotkey to the edit field
+	dlg.AddItem(NewLabel(x1+2, y1+2, prompt, edit))
 	dlg.AddItem(edit)
 
 	btnOk := NewButton(x1+8, y1+5, "&Ok")
