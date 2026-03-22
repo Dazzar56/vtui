@@ -30,6 +30,14 @@ func (d *DemoDialog) HandleCommand(cmd int, args any) bool {
 	return d.Dialog.HandleCommand(cmd, args)
 }
 
+func (d *DemoDialog) GetKeyLabels() *vtui.KeySet {
+	return &vtui.KeySet{
+		Normal: vtui.KeyBarLabels{
+			"Help", "Exit", "View", "Edit", "Copy", "Move", "MkDir", "Delete", "Menu", "Quit", "Plugin", "Screen",
+		},
+	}
+}
+
 type fileRow struct {
 	name string
 	size string
@@ -74,20 +82,10 @@ func main() {
 	// Note: We removed topMenu.OnCommand. Commands are now automatically routed down the frame stack!
 
 	// --- Status Line ---
-	sl := vtui.NewStatusLine()
-	sl.SetPosition(0, height-1, width-1, height-1)
-	sl.Default = []vtui.StatusItem{
-		{Key: "F1", Label: "Help"},
-		{Key: "F9", Label: "Menu"},
-		{Key: "F10", Label: "Quit"},
-		{Key: "Drag ↘", Label: "Resize"},
-	}
-	sl.Items["edit"] = []vtui.StatusItem{
-		{Key: "F1", Label: "Help"},
-		{Key: "F9", Label: "Menu"},
-		{Key: "Alt-Down", Label: "History"},
-		{Key: "Ctrl-C", Label: "Copy"},
-	}
+	kb := vtui.NewKeyBar()
+	kb.SetPosition(0, height-1, width-1, height-1)
+	kb.SetVisible(true)
+	vtui.FrameManager.KeyBar = kb
 
 	// --- Comprehensive Dialog ---
 	baseDlg := vtui.NewDialog(0, 0, 63, 25, " vtui demo ")
@@ -198,7 +196,7 @@ func main() {
 
 	// Assign components to the Framework to enable standard behaviors
 	vtui.FrameManager.MenuBar = topMenu
-	vtui.FrameManager.StatusLine = sl
+	// vtui.FrameManager.StatusLine = sl // StatusLine removed in favor of KeyBar
 
 	vtui.FrameManager.Push(dlg)
 

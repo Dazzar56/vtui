@@ -332,6 +332,9 @@ func (fm *frameManager) Run() {
 			if fm.MenuBar != nil && fm.MenuBar.Active {
 				fm.MenuBar.Show(fm.scr)
 			}
+			if fm.KeyBar != nil {
+				fm.KeyBar.Show(fm.scr)
+			}
 			if fm.StatusLine != nil {
 				fm.StatusLine.Show(fm.scr)
 			}

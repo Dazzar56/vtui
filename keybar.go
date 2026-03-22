@@ -7,6 +7,7 @@ import (
 
 // KeyBarLabels stores labels for F1-F12 for a specific modifier state.
 type KeyBarLabels [12]string
+
 // KeySet represents a full collection of KeyBar labels for all modifier states.
 type KeySet struct {
 	Normal KeyBarLabels
@@ -42,7 +43,7 @@ func (kb *KeyBar) SetModifiers(shift, ctrl, alt bool) {
 }
 
 func (kb *KeyBar) Show(scr *ScreenBuf) {
-	kb.ScreenObject.Show(scr)
+	kb.Bar.Show(scr)
 	kb.DisplayObject(scr)
 }
 
@@ -57,6 +58,9 @@ func (kb *KeyBar) DisplayObject(scr *ScreenBuf) {
 	} else if kb.altState {
 		labels = kb.Alt
 	}
+
+	// Double check: if all labels are empty, maybe we shouldn't show anything?
+	// But in Far, numbers 1..12 are always visible.
 
 	width := kb.X2 - kb.X1 + 1
 	slotWidth := width / 12
@@ -87,10 +91,18 @@ func (kb *KeyBar) DisplayObject(scr *ScreenBuf) {
 		if labelW > 0 {
 			label := labels[i]
 			label = runewidth.Truncate(label, labelW, "")
-			for runewidth.StringWidth(label) < labelW {
-				label += " "
+
+			// If label is not empty, use KeyBarText color
+			if label != "" {
+				// Ensure fixed width for the label part by padding it
+				for runewidth.StringWidth(label) < labelW {
+					label += " "
+				}
+				scr.Write(labelX, kb.Y1, StringToCharInfo(label, textAttr))
+			} else {
+				// For empty labels, just fill the area with the background color
+				scr.FillRect(labelX, kb.Y1, labelX+labelW-1, kb.Y1, ' ', numAttr)
 			}
-			scr.Write(labelX, kb.Y1, StringToCharInfo(label, textAttr))
 		}
 		// 3. Gap is naturally provided by DrawBackground
 	}

@@ -96,9 +96,9 @@ func SetDefaultPalette() {
 	// Desktop (Classic Blue)
 	Palette[ColDesktopBackground] = SetRGBBoth(0, lightGray, blue)
 
-	// KeyBar (Gray numbers on Black, Cyan text on Black)
-	Palette[ColKeyBarNum] = SetRGBBoth(0, darkGray, black)
-	Palette[ColKeyBarText] = SetRGBBoth(0, black, darkGray)
+	// KeyBar (Match f4/far2l defaults: LightGray on DarkGray / DarkGray on Teal)
+	Palette[ColKeyBarNum] = SetRGBBoth(0, 0xD3D7CF, 0x2E3436)
+	Palette[ColKeyBarText] = SetRGBBoth(0, 0x2E3436, 0x06989A)
 
 	// MenuBar (Black on LightGray, Green on LightGray for selection)
 	Palette[ColMenuBarItem] = SetRGBBoth(0, black, lightGray)
