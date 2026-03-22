@@ -19,11 +19,6 @@ func (d *Desktop) Show(scr *ScreenBuf) {
 	width, height := scr.width, scr.height
 	bgAttr := Palette[ColDesktopBackground]
 	scr.FillRect(0, 0, width-1, height-1, ' ', bgAttr)
-	// Add a little hint that the app is alive, but only if KeyBar is not using this line
-	if FrameManager.KeyBar == nil || !FrameManager.KeyBar.IsVisible() {
-		msg := UIStrings.DesktopWelcome
-		scr.Write((width-len(msg))/2, height-1, StringToCharInfo(msg, bgAttr))
-	}
 }
 
 // Desktop doesn't handle any specific keys, but could handle global hotkeys in the future.
