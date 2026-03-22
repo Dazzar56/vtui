@@ -241,6 +241,16 @@ func (s *ScreenBuf) Width() int {
 func (s *ScreenBuf) Height() int {
 	return s.height
 }
+// GetCell returns the character and attributes at the specified coordinates.
+// Used primarily for unit tests.
+func (s *ScreenBuf) GetCell(x, y int) CharInfo {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if x < 0 || x >= s.width || y < 0 || y >= s.height {
+		return CharInfo{}
+	}
+	return s.buf[y*s.width+x]
+}
 
 // Tables for quickly converting palettes to ANSI codes.
 var (
