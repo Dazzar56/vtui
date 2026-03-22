@@ -157,6 +157,9 @@ func (so *ScreenObject) HasShadow() bool {
 func (so *ScreenObject) GetKeyLabels() *KeySet {
 	return nil
 }
+func (so *ScreenObject) GetMenuBar() *MenuBar {
+	return nil
+}
 // HandleCommand is the default implementation for command routing.
 // It bubbles the command up to the owner.
 func (so *ScreenObject) HandleCommand(cmd int, args any) bool {

@@ -37,6 +37,7 @@ type Frame interface {
 	HandleCommand(cmd int, args any) bool // Turbo Vision style command routing
 
 	// MDI Methods
+	GetMenuBar() *MenuBar
 	SetPosition(x1, y1, x2, y2 int)
 	GetPosition() (x1, y1, x2, y2 int)
 	IsModal() bool
@@ -66,6 +67,17 @@ type frameManager struct {
 
 // FrameManager is the global instance of the frame manager.
 var FrameManager = &frameManager{}
+
+// GetActiveMenuBar returns the menu bar of the topmost frame that provides one,
+// or the global MenuBar if none do.
+func (fm *frameManager) GetActiveMenuBar() *MenuBar {
+	for i := len(fm.frames) - 1; i >= 0; i-- {
+		if mb := fm.frames[i].GetMenuBar(); mb != nil {
+			return mb
+		}
+	}
+	return fm.MenuBar
+}
 
 // Init initializes the FrameManager with a ScreenBuf.
 func (fm *frameManager) Init(scr *ScreenBuf) {
@@ -199,8 +211,9 @@ func (fm *frameManager) PostTask(task func()) {
 func (fm *frameManager) EmitCommand(cmd int, args any) bool {
 	DebugLog("COMMAND: Emitting %d", cmd)
 	// First, if MenuBar is active, give it a chance
-	if fm.MenuBar != nil && fm.MenuBar.Active {
-		if fm.MenuBar.HandleCommand(cmd, args) {
+	activeMenu := fm.GetActiveMenuBar()
+	if activeMenu != nil && activeMenu.Active {
+		if activeMenu.HandleCommand(cmd, args) {
 			DebugLog("COMMAND: Handled by MenuBar")
 			return true
 		}
@@ -329,8 +342,9 @@ func (fm *frameManager) Run() {
 			}
 
 			// Render Standard Global UI
-			if fm.MenuBar != nil && fm.MenuBar.Active {
-				fm.MenuBar.Show(fm.scr)
+			activeMenu := fm.GetActiveMenuBar()
+			if activeMenu != nil && activeMenu.Active {
+				activeMenu.Show(fm.scr)
 			}
 			if fm.KeyBar != nil {
 				fm.KeyBar.Show(fm.scr)
@@ -369,13 +383,16 @@ func (fm *frameManager) Run() {
 				}
 
 				// Menu Toggle (F9)
-				if fm.MenuBar != nil && ev.VirtualKeyCode == vtinput.VK_F9 {
-					fm.MenuBar.Active = !fm.MenuBar.Active
+				activeMenu := fm.GetActiveMenuBar()
+
+				// Menu Toggle (F9)
+				if activeMenu != nil && ev.VirtualKeyCode == vtinput.VK_F9 {
+					activeMenu.Active = !activeMenu.Active
 					return
 				}
 
 				// 1. If Menu is Active, it has priority
-				if fm.MenuBar != nil && fm.MenuBar.Active {
+				if activeMenu != nil && activeMenu.Active {
 					// Exception: if a VMenu is open, it MUST handle navigation keys
 					if fm.GetTopFrameType() == TypeMenu {
 						menuFrame := fm.frames[len(fm.frames)-1]
@@ -386,10 +403,10 @@ func (fm *frameManager) Run() {
 					}
 					// Otherwise, MenuBar processes keys (Arrows, Esc, Hotkeys)
 					if ev.VirtualKeyCode == vtinput.VK_ESCAPE || ev.VirtualKeyCode == vtinput.VK_F10 {
-						fm.MenuBar.Active = false
+						activeMenu.Active = false
 						return
 					}
-					if fm.MenuBar.ProcessKey(ev) { return }
+					if activeMenu.ProcessKey(ev) { return }
 					return // Modal-like: don't pass keys to dialog when menu active
 				}
 			}
@@ -455,10 +472,11 @@ func (fm *frameManager) Run() {
 			}
 
 			// 3. Fallback to Menu Activation (Alt+Hotkey) if top frame didn't want the key
-			if !handled && fm.MenuBar != nil && !fm.MenuBar.Active && ev.Type == vtinput.KeyEventType {
+			activeMenu := fm.GetActiveMenuBar()
+			if !handled && activeMenu != nil && !activeMenu.Active && ev.Type == vtinput.KeyEventType {
 				alt := (ev.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 				if alt && ev.Char != 0 {
-					if fm.MenuBar.ProcessKey(ev) { return }
+					if activeMenu.ProcessKey(ev) { return }
 				}
 			}
 
