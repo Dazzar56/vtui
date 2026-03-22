@@ -226,3 +226,18 @@ func TestWrapEngine_MultipleSpaces(t *testing.T) {
 		t.Errorf("Multiple spaces failed. Got %q and %q", text1, text2)
 	}
 }
+func TestWrapEngine_EndOfLineCursor(t *testing.T) {
+	pt := piecetable.New([]byte("abc"))
+	li := piecetable.NewLineIndex()
+	li.Rebuild(pt)
+	we := NewWrapEngine(pt, li)
+	we.SetWidth(10)
+
+	// The cursor is often placed at offset == length(text) to type at the end.
+	// We want to ensure LogicalToVisual correctly maps this to the end of the first row.
+	row, col := we.LogicalToVisual(3)
+
+	if row != 0 || col != 3 {
+		t.Errorf("Cursor at EOF on first line: expected (0, 3), got (%d, %d)", row, col)
+	}
+}

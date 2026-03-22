@@ -9,6 +9,27 @@ import (
 	"golang.org/x/term"
 )
 
+// DemoDialog wraps vtui.Dialog to showcase Turbo Vision-style command routing.
+type DemoDialog struct {
+	*vtui.Dialog
+}
+
+func (d *DemoDialog) HandleCommand(cmd int, args any) bool {
+	switch cmd {
+	case vtui.CmQuit:
+		vtui.FrameManager.Shutdown()
+		return true
+	case vtui.CmCopy:
+		vtui.ShowMessage(" Action ", "Copy command intercepted via HandleCommand!", []string{"&Ok"})
+		return true
+	case 1001: // Custom application command
+		vtui.ShowMessage(" Action ", "Command 1 executed via HandleCommand!", []string{"&Ok"})
+		return true
+	}
+	// Fallback to default dialog behavior (e.g. CmClose, CmZoom)
+	return d.Dialog.HandleCommand(cmd, args)
+}
+
 type fileRow struct {
 	name string
 	size string
@@ -39,18 +60,18 @@ func main() {
 	// --- Menu Bar ---
 	topMenu := vtui.NewMenuBar(nil)
 	topMenu.Items = []vtui.MenuBarItem{
-		{Label: "&Left", SubItems: []vtui.MenuItem{{Text: "Command &1"}, {Separator: true}, {Text: "E&xit"}}},
+		{Label: "&Left", SubItems: []vtui.MenuItem{
+			{Text: "Command &1", Command: 1001},
+			{Separator: true},
+			{Text: "E&xit", Command: vtui.CmQuit},
+		}},
 		{Label: "&Files", SubItems: []vtui.MenuItem{{Text: "&Open"}, {Text: "&Save"}}},
 		{Label: "&Commands", SubItems: []vtui.MenuItem{{Text: "&Search"}}},
 		{Label: "&Options", SubItems: []vtui.MenuItem{{Text: "&Colors"}}},
 		{Label: "&Right", SubItems: []vtui.MenuItem{{Text: "Command &2"}}},
 	}
 	topMenu.SetPosition(0, 0, width-1, 0)
-	topMenu.OnCommand = func(menuIdx, itemIdx int) {
-		if menuIdx == 0 && itemIdx == 2 {
-			vtui.FrameManager.Shutdown()
-		}
-	}
+	// Note: We removed topMenu.OnCommand. Commands are now automatically routed down the frame stack!
 
 	// --- Status Line ---
 	sl := vtui.NewStatusLine()
@@ -69,9 +90,12 @@ func main() {
 	}
 
 	// --- Comprehensive Dialog ---
-	dlg := vtui.NewDialog(0, 0, 63, 25, " vtui demo ")
-	dlg.ShowClose = true
-	dlg.Center(width, height)
+	baseDlg := vtui.NewDialog(0, 0, 63, 25, " vtui demo ")
+	baseDlg.ShowClose = true
+	baseDlg.Center(width, height)
+
+	// Wrap the dialog to provide our custom HandleCommand logic
+	dlg := &DemoDialog{Dialog: baseDlg}
 	x1, y1 := dlg.X1, dlg.Y1
 
 	// LEFT: Input & Options
@@ -107,7 +131,7 @@ func main() {
 
 	opMenu := vtui.NewVMenu(" Operations ")
 	opMenu.SetPosition(x1+34, y1+6, x1+58, y1+11) // Height of 5 lines
-	opMenu.AddItem(vtui.MenuItem{Text: "&Copy File"})
+	opMenu.AddItem(vtui.MenuItem{Text: "&Copy File", Command: vtui.CmCopy})
 	opMenu.AddItem(vtui.MenuItem{Text: "&Move File"})
 	opMenu.AddSeparator()
 	opMenu.AddItem(vtui.MenuItem{Text: "&Delete"})

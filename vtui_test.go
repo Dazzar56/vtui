@@ -282,6 +282,18 @@ func TestVMenu_Callbacks(t *testing.T) {
 		t.Error("OnClose callback was not triggered on Escape")
 	}
 }
+func TestVMenu_F10_ClosesMenu(t *testing.T) {
+	m := NewVMenu("Test")
+	m.ProcessKey(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_F10,
+	})
+
+	if !m.IsDone() || m.exitCode != -1 {
+		t.Error("F10 should close the VMenu with exitCode -1")
+	}
+}
 
 func TestEdit_Navigation(t *testing.T) {
 	e := NewEdit(0, 0, 20, "hello world")
