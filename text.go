@@ -31,3 +31,7 @@ func (t *Text) DisplayObject(scr *ScreenBuf) {
 	cells, _ := StringToCharInfoHighlighted(t.content, t.color, Palette[ColDialogHighlightText])
 	scr.Write(t.X1, t.Y1, cells)
 }
+
+func (t *Text) SetText(text string) {
+	t.content = text
+}

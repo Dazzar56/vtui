@@ -18,6 +18,7 @@ type UIElement interface {
 	GetHelp() string
 	ProcessKey(e *vtinput.InputEvent) bool
 	ProcessMouse(e *vtinput.InputEvent) bool
+	HandleCommand(cmd int, args any) bool
 }
 
 // Dialog is a modal container for UI elements.

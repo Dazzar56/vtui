@@ -11,6 +11,7 @@ import (
 // MenuItem represents a single menu item.
 type MenuItem struct {
 	Text      string
+	Command   int // TV-style Command ID to emit when selected
 	UserData  any
 	Separator bool
 }
@@ -128,6 +129,13 @@ func (m *VMenu) ProcessKey(e *vtinput.InputEvent) bool {
 			m.OnSelect(m.selectPos)
 		}
 		m.SetExitCode(m.selectPos)
+
+		// Turbo Vision style: automatically emit command if set
+		if m.selectPos >= 0 && m.selectPos < len(m.items) {
+			if cmd := m.items[m.selectPos].Command; cmd != 0 {
+				FrameManager.EmitCommand(cmd, m.items[m.selectPos].UserData)
+			}
+		}
 		return true
 	case vtinput.VK_UP:
 		m.SetSelectPos(m.selectPos-1, -1)
@@ -155,6 +163,10 @@ func (m *VMenu) ProcessKey(e *vtinput.InputEvent) bool {
 					m.OnSelect(i)
 				}
 				m.SetExitCode(i)
+
+				if cmd := m.items[i].Command; cmd != 0 {
+					FrameManager.EmitCommand(cmd, m.items[i].UserData)
+				}
 				return true
 			}
 		}

@@ -34,6 +34,7 @@ type Frame interface {
 	IsBusy() bool // If true, FrameManager may skip the rendering phase
 	HasShadow() bool
 	GetKeyLabels() *KeySet
+	HandleCommand(cmd int, args any) bool // Turbo Vision style command routing
 
 	// MDI Methods
 	SetPosition(x1, y1, x2, y2 int)
@@ -77,7 +78,7 @@ func (fm *frameManager) Init(scr *ScreenBuf) {
 
 	// Подписываемся на глобальную команду закрытия приложения
 	GlobalEvents.Subscribe(EvCommand, func(e Event) {
-		if cmd, ok := e.Data.(int); ok && cmd == cmQuit {
+		if cmd, ok := e.Data.(int); ok && cmd == CmQuit {
 			fm.Shutdown()
 		}
 	})
@@ -192,6 +193,23 @@ func (fm *frameManager) PostTask(task func()) {
 	if fm.TaskChan != nil {
 		fm.TaskChan <- task
 	}
+}
+// EmitCommand broadcasts a command starting from the top-most frame
+// and going down the stack until a frame handles it. (Turbo Vision style)
+func (fm *frameManager) EmitCommand(cmd int, args any) bool {
+	// First, if MenuBar is active, give it a chance (though usually menus emit, not receive)
+	if fm.MenuBar != nil && fm.MenuBar.Active {
+		if fm.MenuBar.HandleCommand(cmd, args) { return true }
+	}
+
+	// Route down the frame stack
+	for i := len(fm.frames) - 1; i >= 0; i-- {
+		if fm.frames[i].HandleCommand(cmd, args) {
+			fm.Redraw()
+			return true
+		}
+	}
+	return false
 }
 // InjectEvents adds simulated input events to the front of the queue.
 func (fm *frameManager) InjectEvents(events []*vtinput.InputEvent) {

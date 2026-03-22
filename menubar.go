@@ -123,9 +123,11 @@ func (mb *MenuBar) ActivateSubMenu(index int) {
 	}
 	m.OnSelect = func(itmIdx int) {
 		mb.Active = false
+		// Backward compatibility callback
 		if mb.OnCommand != nil {
 			mb.OnCommand(mb.SelectPos, itmIdx)
 		}
+		// The actual EmitCommand happens inside VMenu.ProcessKey now.
 	}
 	m.OnClose = func() {
 		mb.activeSubMenu = nil

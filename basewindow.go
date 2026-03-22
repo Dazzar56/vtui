@@ -402,4 +402,28 @@ func (bw *BaseWindow) MoveRelative(dx, dy int) {
 func (bw *BaseWindow) GetWindowNumber() int { return bw.Number }
 func (bw *BaseWindow) SetWindowNumber(n int) { bw.Number = n }
 func (bw *BaseWindow) RequestFocus() bool { return false } // Handled by FrameManagerfunc (bw *BaseWindow) HasShadow() bool { return true }
+// HandleCommand implements Turbo Vision style command routing for Windows/Dialogs.
+func (bw *BaseWindow) HandleCommand(cmd int, args any) bool {
+	// 1. Try to pass to the focused UI element first
+	if bw.focusIdx != -1 {
+		if bw.items[bw.focusIdx].HandleCommand(cmd, args) {
+			return true
+		}
+	}
+
+	// 2. Handle standard window commands
+	switch cmd {
+	case CmClose, CmCancel:
+		bw.Close()
+		return true
+	case CmZoom:
+		if bw.ShowZoom {
+			bw.ToggleZoom()
+			return true
+		}
+	}
+
+	// 3. Bubble up (default ScreenObject behavior)
+	return bw.ScreenObject.HandleCommand(cmd, args)
+}
 func (bw *BaseWindow) HasShadow() bool { return true }

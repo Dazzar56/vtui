@@ -42,6 +42,7 @@ func (m *mockFrame) GetHelp() string                    { return "" }
 func (m *mockFrame) IsBusy() bool                       { return false }
 func (m *mockFrame) HasShadow() bool                    { return false }
 func (m *mockFrame) GetKeyLabels() *KeySet              { return nil }
+func (m *mockFrame) HandleCommand(cmd int, args any) bool { return false }
 func (m *mockFrame) IsModal() bool                      { return m.isModal }
 func (m *mockFrame) GetWindowNumber() int               { return 0 }
 func (m *mockFrame) SetWindowNumber(n int)              {}
@@ -332,5 +333,60 @@ func TestFrameManager_ContextualLabels(t *testing.T) {
 
 	if fm.KeyBar.Normal[0] != "TestLabel" {
 		t.Errorf("KeyBar did not update from frame. Got %q", fm.KeyBar.Normal[0])
+	}
+}
+func TestFrameManager_CommandRouting(t *testing.T) {
+	fm := &frameManager{}
+	fm.Init(NewScreenBuf())
+
+	f1 := &mockFrame{}
+	f1.onProcessKey = func(e *vtinput.InputEvent) bool { return false }
+	// Override HandleCommand via a wrapper for testing
+}
+
+type cmdMockFrame struct {
+	mockFrame
+	onCmd func(cmd int, args any) bool
+}
+
+func (c *cmdMockFrame) HandleCommand(cmd int, args any) bool {
+	if c.onCmd != nil { return c.onCmd(cmd, args) }
+	return false
+}
+
+func TestFrameManager_CommandBubbling(t *testing.T) {
+	fm := &frameManager{}
+	fm.Init(NewScreenBuf())
+
+	fBottom := &cmdMockFrame{}
+	fTop := &cmdMockFrame{}
+
+	topCalled := false
+	bottomCalled := false
+
+	fTop.onCmd = func(cmd int, args any) bool {
+		topCalled = true
+		return false // Top frame doesn't handle it, should bubble down to bottom
+	}
+
+	fBottom.onCmd = func(cmd int, args any) bool {
+		bottomCalled = true
+		if cmd == 999 { return true }
+		return false
+	}
+
+	fm.Push(fBottom)
+	fm.Push(fTop)
+
+	handled := fm.EmitCommand(999, nil)
+
+	if !handled {
+		t.Error("Command should have been handled by fBottom")
+	}
+	if !topCalled {
+		t.Error("Command should have visited top frame first")
+	}
+	if !bottomCalled {
+		t.Error("Command should have bubbled down to bottom frame")
 	}
 }

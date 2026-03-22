@@ -54,7 +54,7 @@ func TestEventBus_Integration_cmQuit(t *testing.T) {
 	// Публикуем команду выхода через шину
 	GlobalEvents.Publish(Event{
 		Type: EvCommand,
-		Data: cmQuit,
+		Data: CmQuit,
 	})
 
 	if len(fm.frames) != 0 {
