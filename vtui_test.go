@@ -762,6 +762,43 @@ func TestMenuBar_SubMenuActivation(t *testing.T) {
 	}
 }
 
+func TestMenuBar_OrphanedSubMenu(t *testing.T) {
+	// Setup a local FrameManager to simulate the environment
+	fm := &frameManager{}
+	scr := NewScreenBuf()
+	scr.AllocBuf(80, 25)
+	fm.Init(scr)
+	fm.Push(NewDesktop())
+
+	oldFm := FrameManager
+	FrameManager = fm
+	defer func() { FrameManager = oldFm }()
+
+	// 1. Create a menubar with one item that has a submenu
+	mb := NewMenuBar(nil)
+	mb.Items = []MenuBarItem{{Label: "&File", SubItems: []MenuItem{{Text: "Open"}}}}
+
+	// 2. Activate the menubar and open the submenu
+	mb.Active = true
+	mb.ActivateSubMenu(0)
+
+	// At this point, the stack should be [Desktop, VMenu]
+	if len(fm.frames) != 2 || fm.GetTopFrameType() != TypeMenu {
+		t.Fatal("Submenu was not pushed to FrameManager")
+	}
+
+	// 3. Simulate losing focus: something else happens, making the menubar inactive
+	mb.Active = false
+
+	// 4. Simulate a new render cycle by calling Show(). This is where the fix should trigger.
+	mb.Show(scr)
+
+	// 5. Assert: The VMenu should have been popped from the stack.
+	if len(fm.frames) != 1 || fm.GetTopFrameType() == TypeMenu {
+		t.Errorf("MenuBar.Show() failed to close orphaned submenu. Frame count: %d", len(fm.frames))
+	}
+}
+
 func TestVMenu_GetItemCount(t *testing.T) {
 	m := NewVMenu("Test")
 	if m.GetItemCount() != 0 {

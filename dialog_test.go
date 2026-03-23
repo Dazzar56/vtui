@@ -526,8 +526,8 @@ func TestDialog_CloseButton(t *testing.T) {
 		ButtonState: vtinput.FromLeft1stButtonPressed,
 	})
 
-	if !d.IsDone() || d.exitCode != -1 {
-		t.Errorf("Close button click failed. Done: %v, ExitCode: %d", d.IsDone(), d.exitCode)
+	if !d.IsDone() || d.ExitCode != -1 {
+		t.Errorf("Close button click failed. Done: %v, ExitCode: %d", d.IsDone(), d.ExitCode)
 	}
 }
 func TestDialog_GrowModeManualResize(t *testing.T) {

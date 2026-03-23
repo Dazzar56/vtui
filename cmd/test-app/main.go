@@ -3,11 +3,29 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 	"golang.org/x/term"
 )
+
+// localVFS is a minimal stub to satisfy vtui dialogs without relying on f4's VFS.
+type localVFS struct{ path string }
+
+func (v *localVFS) GetPath() string { return v.path }
+func (v *localVFS) SetPath(p string) error { v.path = p; return nil }
+func (v *localVFS) Join(e ...string) string { return filepath.Join(e...) }
+func (v *localVFS) Dir(p string) string { return filepath.Dir(p) }
+func (v *localVFS) Base(p string) string { return filepath.Base(p) }
+func (v *localVFS) ReadDir(p string) ([]vtui.VFSItem, error) {
+	entries, _ := os.ReadDir(p)
+	var items []vtui.VFSItem
+	for _, e := range entries {
+		items = append(items, vtui.VFSItem{Name: e.Name(), IsDir: e.IsDir()})
+	}
+	return items, nil
+}
 
 // DemoDialog wraps vtui.Dialog to showcase Turbo Vision-style command routing.
 type DemoDialog struct {
@@ -170,13 +188,13 @@ func main() {
 
 	btnDir := vtui.NewButton(x1+36, y1+23, "&Dir")
 	btnDir.OnClick = func() {
-		vtui.SelectDirDialog(" Choose Directory ", ".", vtui.NewOSVFS("."))
+		vtui.SelectDirDialog(" Choose Directory ", ".", &localVFS{path: "."})
 	}
 	btnDir.SetGrowMode(vtui.GrowLoY | vtui.GrowHiY)
 
 	btnFile := vtui.NewButton(x1+44, y1+23, "&File")
 	btnFile.OnClick = func() {
-		vtui.SelectFileDialog(" Open File ", ".", vtui.NewOSVFS("."))
+		vtui.SelectFileDialog(" Open File ", ".", &localVFS{path: "."})
 	}
 	btnFile.SetGrowMode(vtui.GrowLoY | vtui.GrowHiY)
 

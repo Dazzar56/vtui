@@ -164,7 +164,9 @@ func (so *ScreenObject) GetMenuBar() *MenuBar {
 // It bubbles the command up to the owner.
 func (so *ScreenObject) HandleCommand(cmd int, args any) bool {
 	if so.owner != nil {
-		return so.owner.HandleCommand(cmd, args)
+		if so.owner.HandleCommand(cmd, args) {
+			return true
+		}
 	}
 	return false
 }

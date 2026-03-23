@@ -1,0 +1,36 @@
+package vtui
+
+// BaseFrame provides a default implementation for the Frame interface.
+// Other frames should embed this to avoid boilerplate.
+type BaseFrame struct {
+	ScreenObject
+	Done     bool
+	ExitCode int
+	Modal    bool
+	Number   int
+}
+
+func (bf *BaseFrame) SetExitCode(code int) {
+	bf.Done = true
+	bf.ExitCode = code
+}
+
+func (bf *BaseFrame) IsDone() bool         { return bf.Done }
+func (bf *BaseFrame) IsBusy() bool         { return false }
+func (bf *BaseFrame) IsModal() bool        { return bf.Modal }
+func (bf *BaseFrame) GetWindowNumber() int { return bf.Number }
+func (bf *BaseFrame) SetWindowNumber(n int) { bf.Number = n }
+func (bf *BaseFrame) RequestFocus() bool   { return true }
+func (bf *BaseFrame) Close()               { bf.SetExitCode(-1) }
+func (bf *BaseFrame) HasShadow() bool      { return false }
+func (bf *BaseFrame) GetKeyLabels() *KeySet { return nil }
+func (bf *BaseFrame) GetMenuBar() *MenuBar  { return nil }
+func (bf *BaseFrame) ResizeConsole(w, h int) {}
+
+// HandleCommand in BaseFrame bubbles the command up to the owner (e.g., from a dialog to a plugin).
+func (bf *BaseFrame) HandleCommand(cmd int, args any) bool {
+	if bf.owner != nil {
+		return bf.owner.HandleCommand(cmd, args)
+	}
+	return false
+}

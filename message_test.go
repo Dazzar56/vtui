@@ -27,8 +27,8 @@ func TestShowMessage_Structure(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		btn := dlg.items[2+i].(*Button)
 		btn.OnClick()
-		if dlg.exitCode != i {
-			t.Errorf("Button %d failed to set exit code. Got %d", i, dlg.exitCode)
+		if dlg.ExitCode != i {
+			t.Errorf("Button %d failed to set exit code. Got %d", i, dlg.ExitCode)
 		}
 	}
 }

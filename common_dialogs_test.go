@@ -2,15 +2,29 @@ package vtui
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 	"github.com/unxed/vtinput"
 )
 
+// testVFS implements VFSMinimal for testing without coupling to f4's VFS.
+type testVFS struct { currentPath string }
+func (v *testVFS) GetPath() string { return v.currentPath }
+func (v *testVFS) SetPath(p string) error { v.currentPath = p; return nil }
+func (v *testVFS) ReadDir(p string) ([]VFSItem, error) {
+	entries, _ := os.ReadDir(p)
+	items := make([]VFSItem, 0)
+	for _, e := range entries { items = append(items, VFSItem{Name: e.Name(), IsDir: e.IsDir()}) }
+	return items, nil
+}
+func (v *testVFS) Join(elem ...string) string { return filepath.Join(elem...) }
+func (v *testVFS) Dir(p string) string { return filepath.Dir(p) }
+func (v *testVFS) Base(p string) string { return filepath.Base(p) }
+
 func TestSelectDirDialog_Navigation(t *testing.T) {
 	SetDefaultPalette()
-	// Use OSVFS on a temp directory for testing
 	tmpDir := t.TempDir()
-	vfs := NewOSVFS(tmpDir)
+	vfs := &testVFS{currentPath: tmpDir}
 
 	dlg := SelectDirDialog("Test", tmpDir, vfs)
 
@@ -59,7 +73,7 @@ func TestSelectDirDialog_Navigation(t *testing.T) {
 func TestSelectDirDialog_ArrowVsEnter(t *testing.T) {
 	SetDefaultPalette()
 	tmpDir := t.TempDir()
-	vfs := NewOSVFS(tmpDir)
+	vfs := &testVFS{currentPath: tmpDir}
 
 	dlg := SelectDirDialog("Test", tmpDir, vfs)
 
@@ -119,7 +133,7 @@ func TestInputBox_OkCallback(t *testing.T) {
 func TestSelectFileDialog_Selection(t *testing.T) {
 	SetDefaultPalette()
 	tmpDir := t.TempDir()
-	vfs := NewOSVFS(tmpDir)
+	vfs := &testVFS{currentPath: tmpDir}
 
 	// Create a dummy file
 	os.WriteFile(vfs.Join(tmpDir, "dummy.txt"), []byte("data"), 0644)

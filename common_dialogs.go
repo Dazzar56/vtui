@@ -1,7 +1,24 @@
 package vtui
 
+// VFSItem represents a generic file or directory entry for UI dialogs.
+type VFSItem struct {
+	Name  string
+	IsDir bool
+}
+
+// VFSMinimal is a subset of file operations required by UI dialogs.
+// This keeps vtui independent of the actual file manager implementation.
+type VFSMinimal interface {
+	GetPath() string
+	SetPath(path string) error
+	ReadDir(path string) ([]VFSItem, error)
+	Join(elem ...string) string
+	Dir(path string) string
+	Base(path string) string
+}
+
 // SelectDirDialog creates a standard directory selection dialog.
-func SelectDirDialog(title string, initialPath string, vfs VFS) *Dialog {
+func SelectDirDialog(title string, initialPath string, vfs VFSMinimal) *Dialog {
 	width := 50
 	height := 18
 	scrW := FrameManager.GetScreenSize()
@@ -90,7 +107,7 @@ func SelectDirDialog(title string, initialPath string, vfs VFS) *Dialog {
 }
 
 // SelectFileDialog creates a standard file selection dialog.
-func SelectFileDialog(title string, initialPath string, vfs VFS) *Dialog {
+func SelectFileDialog(title string, initialPath string, vfs VFSMinimal) *Dialog {
 	width := 55
 	height := 20
 	scrW := FrameManager.GetScreenSize()

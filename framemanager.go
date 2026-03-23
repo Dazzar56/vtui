@@ -289,6 +289,14 @@ func (fm *frameManager) Run() {
 	signal.Notify(sigChan, syscall.SIGWINCH)
 
 	// --- Main application loop ---
+	// Persistent timer to avoid allocations in the drain loop
+	idleTimer := time.NewTimer(time.Hour)
+	if !idleTimer.Stop() {
+		select {
+		case <-idleTimer.C:
+		default:
+		}
+	}
 	for {
 		if len(fm.frames) == 0 {
 			return // No more frames, exit application.
@@ -529,15 +537,20 @@ func (fm *frameManager) Run() {
 		// 4. Queue "Drain"
 		// If events arrive in a dense stream (insertion), process them in a batch.
 		for {
+			idleTimer.Reset(2 * time.Millisecond)
 			select {
 			case ev, ok := <-eventChan:
+				if !idleTimer.Stop() {
+					select {
+					case <-idleTimer.C:
+					default:
+					}
+				}
 				if !ok { return }
 				dispatch(ev, false)
 				continue
-			case <-time.After(2 * time.Millisecond):
-				// If nothing arrived within 2ms, consider the burst finished.
-				// This is critical for "instant" Bracketed Paste, because the terminal
-				// sends data in chunks, and a normal drain may be interrupted too early.
+			case <-idleTimer.C:
+				// Burst finished
 			}
 			break
 		}

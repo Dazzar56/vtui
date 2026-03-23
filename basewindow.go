@@ -9,12 +9,10 @@ import (
 
 // BaseWindow provides generic windowing logic (moving, resizing, focus cycle).
 type BaseWindow struct {
-	ScreenObject
+	BaseFrame
 	items      []UIElement
 	focusIdx   int
 	frame      *BorderedFrame
-	done       bool
-	exitCode   int
 	isDragging bool
 	isResizing bool
 	dragOffX   int
@@ -25,8 +23,14 @@ type BaseWindow struct {
 	MinH       int
 	ShowClose  bool
 	ShowZoom   bool
-	Number     int
 	SavedBounds *Rect
+}
+
+func (bw *BaseWindow) GetFocusedItem() UIElement {
+	if bw.focusIdx >= 0 && bw.focusIdx < len(bw.items) {
+		return bw.items[bw.focusIdx]
+	}
+	return nil
 }
 
 func NewBaseWindow(x1, y1, x2, y2 int, title string) *BaseWindow {
@@ -257,33 +261,6 @@ func (bw *BaseWindow) ToggleZoom() {
 	}
 }
 
-func (bw *BaseWindow) SetExitCode(code int) {
-	bw.done = true
-	bw.exitCode = code
-
-	// Оповещаем систему о закрытии окна
-	GlobalEvents.Publish(Event{
-		Type:   EvWindowState,
-		Sender: bw,
-		Data:   "closed",
-	})
-}
-
-func (bw *BaseWindow) Close() {
-	bw.SetExitCode(-1)
-}
-
-func (bw *BaseWindow) IsDone() bool { return bw.done }
-
-func (bw *BaseWindow) GetFocusedItem() UIElement {
-	if bw.focusIdx >= 0 && bw.focusIdx < len(bw.items) {
-		return bw.items[bw.focusIdx]
-	}
-	return nil
-}
-
-func (bw *BaseWindow) IsBusy() bool { return false }
-
 func (bw *BaseWindow) changeFocus(direction int) {
 	if len(bw.items) == 0 { return }
 	if bw.focusIdx != -1 {
@@ -414,9 +391,6 @@ func (bw *BaseWindow) MoveRelative(dx, dy int) {
 	}
 }
 
-func (bw *BaseWindow) GetWindowNumber() int { return bw.Number }
-func (bw *BaseWindow) SetWindowNumber(n int) { bw.Number = n }
-func (bw *BaseWindow) RequestFocus() bool { return false } // Handled by FrameManagerfunc (bw *BaseWindow) HasShadow() bool { return true }
 // HandleCommand implements Turbo Vision style command routing for Windows/Dialogs.
 func (bw *BaseWindow) HandleCommand(cmd int, args any) bool {
 	// 1. Try to pass to the focused UI element first
@@ -438,7 +412,8 @@ func (bw *BaseWindow) HandleCommand(cmd int, args any) bool {
 		}
 	}
 
-	// 3. Bubble up (default ScreenObject behavior)
-	return bw.ScreenObject.HandleCommand(cmd, args)
+	// 3. Bubble up to BaseFrame (which bubbles to owner)
+	return bw.BaseFrame.HandleCommand(cmd, args)
 }
+
 func (bw *BaseWindow) HasShadow() bool { return true }
