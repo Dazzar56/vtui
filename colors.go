@@ -2,30 +2,33 @@ package vtui
 
 // Basic color and attribute constants (matching WinCompat.h)
 const (
-	ForegroundBlue      uint64 = 0x0001 // text color contains blue.
-	ForegroundGreen     uint64 = 0x0002 // text color contains green.
-	ForegroundRed       uint64 = 0x0004 // text color contains red.
-	ForegroundIntensity uint64 = 0x0008 // text color is intensified.
+	IsFgRGB             uint64 = 0x0100 // Flag: Foreground is 24-bit RGB. If false, it's an 8-bit index.
+	IsBgRGB             uint64 = 0x0200 // Flag: Background is 24-bit RGB. If false, it's an 8-bit index.
 
-	BackgroundBlue      uint64 = 0x0010 // background color contains blue.
-	BackgroundGreen     uint64 = 0x0020 // background color contains green.
-	BackgroundRed       uint64 = 0x0040 // background color contains red.
-	BackgroundIntensity uint64 = 0x0080 // background color is intensified.
+	// Deprecated aliases for compatibility
+	ForegroundTrueColor = IsFgRGB
+	BackgroundTrueColor = IsBgRGB
 
-	ForegroundTrueColor uint64 = 0x0100 // Use 24 bit RGB colors set by SetRGBFore
-	BackgroundTrueColor uint64 = 0x0200 // Use 24 bit RGB colors set by SetRGBBack
+	ForegroundIntensity uint64 = 0x0008 // Retained for SGR Bold style
+	BackgroundIntensity uint64 = 0x0080 // Retained for style flags
 
 	ExplicitLineBreak   uint64 = 0x0400 // Don't concatenate next line if this char is last
 	ImportantLineChar   uint64 = 0x0800 // Dont skip this character when recomposing
 
+	ForegroundDim       uint64 = 0x1000 // Extra flag for dim text
 	CommonLvbStrikeout  uint64 = 0x2000 // Strikeout.
 	CommonLvbReverse    uint64 = 0x4000 // Reverse fore/back ground attribute.
 	CommonLvbUnderscore uint64 = 0x8000 // Underscore.
-	ForegroundDim       uint64 = 0x1000 // Extra flag for dim text (bit 12 is free in far2l)
 
-	// Masks for basic 16-color attributes
-	ForegroundRGB = ForegroundRed | ForegroundGreen | ForegroundBlue
-	BackgroundRGB = BackgroundRed | BackgroundGreen | BackgroundBlue
+	// Deprecated legacy masks, kept temporarily to avoid build errors in unrelated files
+	ForegroundBlue      uint64 = 0x0001
+	ForegroundGreen     uint64 = 0x0002
+	ForegroundRed       uint64 = 0x0004
+	BackgroundBlue      uint64 = 0x0010
+	BackgroundGreen     uint64 = 0x0020
+	BackgroundRed       uint64 = 0x0040
+	ForegroundRGB       uint64 = ForegroundRed | ForegroundGreen | ForegroundBlue
+	BackgroundRGB       uint64 = BackgroundRed | BackgroundGreen | BackgroundBlue
 )
 
 // GetRGBFore extracts 24-bit RGB text color from attributes (bits 16-39).
@@ -52,4 +55,27 @@ func SetRGBBack(attr uint64, rgb uint32) uint64 {
 func SetRGBBoth(attr uint64, rgbFore uint32, rgbBack uint32) uint64 {
 	return (attr & 0xFFFF) | ForegroundTrueColor | BackgroundTrueColor |
 		((uint64(rgbFore) & 0xFFFFFF) << 16) | ((uint64(rgbBack) & 0xFFFFFF) << 40)
+}// GetIndexFore extracts the 8-bit foreground index from attributes.
+func GetIndexFore(attr uint64) uint8 {
+	return uint8((attr >> 16) & 0xFF)
+}
+
+// GetIndexBack extracts the 8-bit background index from attributes.
+func GetIndexBack(attr uint64) uint8 {
+	return uint8((attr >> 40) & 0xFF)
+}
+
+// SetIndexFore sets the 8-bit foreground index, clearing the IsFgRGB flag.
+func SetIndexFore(attr uint64, idx uint8) uint64 {
+	return (attr & 0xFFFFFF000000FFFF) & ^IsFgRGB | (uint64(idx) << 16)
+}
+
+// SetIndexBack sets the 8-bit background index, clearing the IsBgRGB flag.
+func SetIndexBack(attr uint64, idx uint8) uint64 {
+	return (attr & 0x000000FFFFFFFFFF) & ^IsBgRGB | (uint64(idx) << 40)
+}
+
+// SetIndexBoth sets both foreground and background 8-bit indices at once.
+func SetIndexBoth(attr uint64, idxFore, idxBack uint8) uint64 {
+	return SetIndexBack(SetIndexFore(attr, idxFore), idxBack)
 }

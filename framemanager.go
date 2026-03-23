@@ -95,8 +95,13 @@ func (fm *frameManager) Init(scr *ScreenBuf) {
 		}
 	})
 
+	fm.scr.ThemePalette = &ThemePalette
+
 	// Hide cursor globally at start
 	fm.scr.SetCursorVisible(false)
+
+	// Reset terminal palette to default to clear state from possible previous crashes
+	os.Stdout.WriteString("\x1b]104\x07")
 }
 
 // Push adds a new frame to the top of the stack and assigns a number if it's non-modal.
@@ -259,6 +264,8 @@ func (fm *frameManager) Run() {
 	defer func() {
 		fm.scr.SetCursorVisible(true)
 		fm.scr.Flush()
+		// Reset terminal palette back to user's default
+		os.Stdout.WriteString("\x1b]104\x07")
 	}()
 	// Configure channel for receiving vtinput events
 	reader := vtinput.NewReader(os.Stdin)
@@ -327,6 +334,8 @@ func (fm *frameManager) Run() {
 		// and Flush to avoid flickering and save CPU.
 		if !topFrame.IsBusy() {
 			fm.scr.SetCursorVisible(false)
+			fm.scr.ActivePalette = nil
+			fm.scr.SetOverlayMode(false) // By default false, Desktop/Terminal draw without early binding
 
 			// Render frames from bottom to top (Painter's algorithm)
 			for i, frame := range fm.frames {

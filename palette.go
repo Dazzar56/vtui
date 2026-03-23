@@ -109,14 +109,11 @@ func SetDefaultPalette() {
 	// Shadow (Solid black background)
 	Palette[ColShadow] = SetRGBBoth(0, black, black)
 }
-var rgbToXTerm = make(map[uint32]uint8)
+// ThemePalette is the host application's 256-color palette for UI indexing.
+var ThemePalette [256]uint32
 
 func init() {
-	// Populate reverse lookup for optimization.
-	// We only map indices 16-255 to avoid clashing with terminal-specific 16 colors.
-	for i := 16; i < 256; i++ {
-		rgbToXTerm[XTerm256Palette[i]] = uint8(i)
-	}
+	copy(ThemePalette[:], XTerm256Palette[:])
 }
 
 // XTerm256Palette is the standard 256-color lookup table.

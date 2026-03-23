@@ -3,7 +3,6 @@ package vtui
 import (
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 )
@@ -24,6 +23,15 @@ type ScreenBuf struct {
 	lockCount int
 	dirty     bool // Flag indicating that a full rewrite is required during the next Flush.
 	clipStack []Rect
+
+	OverlayMode      bool
+	ThemePalette     *[256]uint32
+	ActivePalette    *[256]uint32
+	Force256Colors   bool
+
+	HostPalette      [256]uint32
+	HostPaletteValid [256]bool
+	quantCache       map[uint32]uint8
 }
 
 // NewScreenBuf creates a new ScreenBuf instance.
@@ -84,6 +92,12 @@ func (s *ScreenBuf) PushClipRect(x1, y1, x2, y2 int) {
 	nx2, ny2 := min(curr.X2, x2), min(curr.Y2, y2)
 	s.clipStack = append(s.clipStack, Rect{nx1, ny1, nx2, ny2})
 }
+// SetOverlayMode enables or disables Early Binding of indexed colors to RGB.
+func (s *ScreenBuf) SetOverlayMode(overlay bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.OverlayMode = overlay
+}
 
 // PopClipRect removes the top clipping rectangle.
 func (s *ScreenBuf) PopClipRect() {
@@ -109,24 +123,36 @@ func (s *ScreenBuf) ApplyShadow(x1, y1, x2, y2 int) {
 		offset := y*s.width + x1
 		for x := 0; x <= x2-x1; x++ {
 			attr := s.buf[offset+x].Attributes
-			if attr&BackgroundTrueColor != 0 {
-				// Darken RGB background by halving the values
+			if attr&IsBgRGB != 0 {
 				bg := GetRGBBack(attr)
 				r, g, b := (bg>>16)&0xFF, (bg>>8)&0xFF, bg&0xFF
 				attr = SetRGBBack(attr, (r/2)<<16|(g/2)<<8|(b/2))
 			} else {
-				// Clear background 16-color bits to make it black
-				attr &^= (uint64(0x7) << 4) | BackgroundIntensity
+				idx := GetIndexBack(attr)
+				var bg uint32
+				if s.ThemePalette != nil {
+					bg = s.ThemePalette[idx]
+				} else {
+					bg = XTerm256Palette[idx]
+				}
+				r, g, b := (bg>>16)&0xFF, (bg>>8)&0xFF, bg&0xFF
+				attr = SetRGBBack(attr, (r/2)<<16|(g/2)<<8|(b/2))
 			}
 
-			// For shadow, set foreground to DarkGray (8) if palette based, or darken RGB
-			if attr&ForegroundTrueColor != 0 {
+			if attr&IsFgRGB != 0 {
 				fg := GetRGBFore(attr)
 				r, g, b := (fg>>16)&0xFF, (fg>>8)&0xFF, fg&0xFF
 				attr = SetRGBFore(attr, (r/2)<<16|(g/2)<<8|(b/2))
 			} else {
-				attr &^= uint64(0x7) | ForegroundIntensity
-				attr |= uint64(0x0) | ForegroundIntensity // 8 = DarkGray
+				idx := GetIndexFore(attr)
+				var fg uint32
+				if s.ThemePalette != nil {
+					fg = s.ThemePalette[idx]
+				} else {
+					fg = XTerm256Palette[idx]
+				}
+				r, g, b := (fg>>16)&0xFF, (fg>>8)&0xFF, fg&0xFF
+				attr = SetRGBFore(attr, (r/2)<<16|(g/2)<<8|(b/2))
 			}
 
 			s.buf[offset+x].Attributes = attr
@@ -166,7 +192,22 @@ func (s *ScreenBuf) Write(x, y int, text []CharInfo) {
 	}
 
 	offset := y*s.width + x
-	copy(s.buf[offset:], text)
+	if s.OverlayMode && s.ThemePalette != nil {
+		for i, ci := range text {
+			attr := ci.Attributes
+			if attr&IsFgRGB == 0 {
+				idx := GetIndexFore(attr)
+				attr = SetRGBFore(attr, s.ThemePalette[idx])
+			}
+			if attr&IsBgRGB == 0 {
+				idx := GetIndexBack(attr)
+				attr = SetRGBBack(attr, s.ThemePalette[idx])
+			}
+			s.buf[offset+i] = CharInfo{Char: ci.Char, Attributes: attr}
+		}
+	} else {
+		copy(s.buf[offset:], text)
+	}
 	// Note: not comparing with shadow yet, just copying.
 	// Comparison optimization will happen in Flush().
 }
@@ -188,6 +229,17 @@ func (s *ScreenBuf) ApplyColor(x1, y1, x2, y2 int, attributes uint64) {
 	if y2 > clip.Y2 { y2 = clip.Y2 }
 	if x1 > x2 || y1 > y2 { return }
 
+	if s.OverlayMode && s.ThemePalette != nil {
+		if attributes&IsFgRGB == 0 {
+			idx := GetIndexFore(attributes)
+			attributes = SetRGBFore(attributes, s.ThemePalette[idx])
+		}
+		if attributes&IsBgRGB == 0 {
+			idx := GetIndexBack(attributes)
+			attributes = SetRGBBack(attributes, s.ThemePalette[idx])
+		}
+	}
+
 	for y := y1; y <= y2; y++ {
 		offset := y*s.width + x1
 		for x := 0; x <= x2-x1; x++ {
@@ -207,6 +259,16 @@ func (s *ScreenBuf) FillRect(x1, y1, x2, y2 int, char rune, attributes uint64) {
 	if x2 > clip.X2 { x2 = clip.X2 }
 	if y2 > clip.Y2 { y2 = clip.Y2 }
 	if x1 > x2 || y1 > y2 { return }
+	if s.OverlayMode && s.ThemePalette != nil {
+		if attributes&IsFgRGB == 0 {
+			idx := GetIndexFore(attributes)
+			attributes = SetRGBFore(attributes, s.ThemePalette[idx])
+		}
+		if attributes&IsBgRGB == 0 {
+			idx := GetIndexBack(attributes)
+			attributes = SetRGBBack(attributes, s.ThemePalette[idx])
+		}
+	}
 	cell := CharInfo{Char: uint64(char), Attributes: attributes}
 	for y := y1; y <= y2; y++ {
 		offset := y*s.width + x1
@@ -265,60 +327,85 @@ func rgb(c uint32) (r, g, b byte) {
 
 var winToAnsi = []int{0, 4, 2, 6, 1, 5, 3, 7}
 
-func colorToANSI(isBg bool, attr uint64) string {
-	flag := ForegroundTrueColor
-	rgbVal := GetRGBFore(attr)
+func findNearestColor(rgbVal uint32, pal *[256]uint32) uint8 {
+	if pal == nil {
+		pal = &XTerm256Palette
+	}
+	r, g, b := rgb(rgbVal)
+	var bestIdx uint8 = 0
+	var bestDist int = 1000000
+
+	for i := 0; i < 256; i++ {
+		pr, pg, pb := rgb(pal[i])
+		dr := int(r) - int(pr)
+		dg := int(g) - int(pg)
+		db := int(b) - int(pb)
+		dist := dr*dr + dg*dg + db*db
+		if dist < bestDist {
+			bestDist = dist
+			bestIdx = uint8(i)
+			if dist == 0 {
+				break
+			}
+		}
+	}
+	return bestIdx
+}
+
+func colorToANSI(isBg bool, attr uint64, activePal *[256]uint32, force256 bool, quantCache map[uint32]uint8) string {
+	isRGBFlag := IsFgRGB
 	cmd := 38
+	var rgbVal uint32
+	var idxVal uint8
+
 	if isBg {
-		flag = BackgroundTrueColor
-		rgbVal = GetRGBBack(attr)
+		isRGBFlag = IsBgRGB
 		cmd = 48
 	}
 
-	if attr&flag != 0 {
-		// Optimization: Check if RGB matches 256-color palette
-		if idx, ok := rgbToXTerm[rgbVal]; ok {
-			return fmt.Sprintf("%d;5;%d", cmd, idx)
+	isRGB := (attr & isRGBFlag) != 0
+
+	if isRGB {
+		if isBg {
+			rgbVal = GetRGBBack(attr)
+		} else {
+			rgbVal = GetRGBFore(attr)
 		}
+
+		if force256 {
+			if cachedIdx, ok := quantCache[rgbVal]; ok {
+				idxVal = cachedIdx
+			} else {
+				idxVal = findNearestColor(rgbVal, activePal)
+				quantCache[rgbVal] = idxVal
+			}
+			return fmt.Sprintf("%d;5;%d", cmd, idxVal)
+		}
+
 		r, g, b := rgb(rgbVal)
 		return fmt.Sprintf("%d;2;%d;%d;%d", cmd, r, g, b)
+	} else {
+		if isBg {
+			idxVal = GetIndexBack(attr)
+		} else {
+			idxVal = GetIndexFore(attr)
+		}
+		return fmt.Sprintf("%d;5;%d", cmd, idxVal)
 	}
-
-	// Standard 16 colors (Win32 to ANSI mapping)
-	colorPart := uint8(attr & 0x7)
-	if isBg {
-		colorPart = uint8((attr >> 4) & 0x7)
-	}
-	ansiColor := winToAnsi[colorPart]
-
-	offset := 30
-	if isBg {
-		offset = 40
-	}
-	if attr&ForegroundIntensity != 0 && !isBg {
-		offset += 60 // 90-97 for bright FG
-	}
-	if attr&BackgroundIntensity != 0 && isBg {
-		offset += 60 // 100-107 for bright BG
-	}
-
-	return strconv.Itoa(offset + ansiColor)
 }
 
 // attributesToANSI generates the minimum ANSI sequence to transition from lastAttr to attr.
-func attributesToANSI(attr, lastAttr uint64) string {
+func attributesToANSI(attr, lastAttr uint64, activePal *[256]uint32, force256 bool, quantCache map[uint32]uint8) string {
 	if attr == lastAttr {
 		return ""
 	}
 
 	var params []string
 
-	// Check if we need a full reset (if any flag was removed)
-	// IMPORTANT: Mask with 0xFFFF to avoid looking at TrueColor bits (16-63)
-	const flagsMask = (ForegroundIntensity | ForegroundDim | CommonLvbUnderscore | CommonLvbReverse | CommonLvbStrikeout) & 0xFFFF
+	const flagsMask = (ForegroundIntensity | ForegroundDim | CommonLvbUnderscore | CommonLvbReverse | CommonLvbStrikeout)
 	if (lastAttr&flagsMask) & ^(attr&flagsMask) != 0 {
 		params = append(params, "0")
-		lastAttr = 0 // After reset, compare with zero state
+		lastAttr = 0
 	}
 
 	// 1. Style Flags
@@ -329,15 +416,15 @@ func attributesToANSI(attr, lastAttr uint64) string {
 	if attr&CommonLvbStrikeout != 0 && lastAttr&CommonLvbStrikeout == 0 { params = append(params, "9") }
 
 	// 2. Foreground Color
-	fgMask := ForegroundTrueColor | ForegroundIntensity | 0x7
-	if attr&fgMask != lastAttr&fgMask || (attr&ForegroundTrueColor != 0 && GetRGBFore(attr) != GetRGBFore(lastAttr)) {
-		params = append(params, colorToANSI(false, attr))
+	fgMask := IsFgRGB | (0xFF << 16)
+	if attr&fgMask != lastAttr&fgMask || (attr&IsFgRGB != 0 && GetRGBFore(attr) != GetRGBFore(lastAttr)) {
+		params = append(params, colorToANSI(false, attr, activePal, force256, quantCache))
 	}
 
 	// 3. Background Color
-	bgMask := BackgroundTrueColor | BackgroundIntensity | (0x7 << 4)
-	if attr&bgMask != lastAttr&bgMask || (attr&BackgroundTrueColor != 0 && GetRGBBack(attr) != GetRGBBack(lastAttr)) {
-		params = append(params, colorToANSI(true, attr))
+	bgMask := IsBgRGB | (0xFF << 40)
+	if attr&bgMask != lastAttr&bgMask || (attr&IsBgRGB != 0 && GetRGBBack(attr) != GetRGBBack(lastAttr)) {
+		params = append(params, colorToANSI(true, attr, activePal, force256, quantCache))
 	}
 
 	if len(params) == 0 {
@@ -357,6 +444,32 @@ func (s *ScreenBuf) Flush() {
 	}
 
 	var builder strings.Builder
+
+	var activePal *[256]uint32
+	if s.ActivePalette != nil {
+		activePal = s.ActivePalette
+	} else if s.ThemePalette != nil {
+		activePal = s.ThemePalette
+	}
+
+	cacheCleared := false
+	if activePal != nil {
+		for i := 0; i < 256; i++ {
+			if !s.HostPaletteValid[i] || s.HostPalette[i] != activePal[i] {
+				if !cacheCleared {
+					s.quantCache = make(map[uint32]uint8)
+					cacheCleared = true
+				}
+				r, g, b := rgb(activePal[i])
+				builder.WriteString(fmt.Sprintf("\x1b]4;%d;rgb:%02x/%02x/%02x\x07", i, r, g, b))
+				s.HostPalette[i] = activePal[i]
+				s.HostPaletteValid[i] = true
+			}
+		}
+	}
+	if s.quantCache == nil {
+		s.quantCache = make(map[uint32]uint8)
+	}
 
 	// 1. Hide the cursor to avoid flickering during rendering.
 	builder.WriteString("\x1b[?25l")
@@ -388,7 +501,7 @@ func (s *ScreenBuf) Flush() {
 			}
 
 			attr := s.buf[idx].Attributes
-			builder.WriteString(attributesToANSI(attr, lastAttr))
+			builder.WriteString(attributesToANSI(attr, lastAttr, activePal, s.Force256Colors, s.quantCache))
 			lastAttr = attr
 
 			charRaw := s.buf[idx].Char
