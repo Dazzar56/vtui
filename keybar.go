@@ -101,7 +101,7 @@ func (kb *KeyBar) DisplayObject(scr *ScreenBuf) {
 				scr.Write(labelX, kb.Y1, StringToCharInfo(label, textAttr))
 			} else {
 				// For empty labels, just fill the area with the background color
-				scr.FillRect(labelX, kb.Y1, labelX+labelW-1, kb.Y1, ' ', numAttr)
+				scr.FillRect(labelX, kb.Y1, labelX+labelW-1, kb.Y1, ' ', textAttr)
 			}
 		}
 		// 3. Gap is naturally provided by DrawBackground

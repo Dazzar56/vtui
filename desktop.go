@@ -16,6 +16,12 @@ func NewDesktop() *Desktop {
 }
 
 func (d *Desktop) Show(scr *ScreenBuf) {
+	// Desktop background should be rendered using indexed colors (usually Index 1)
+	// without Early Binding to RGB, to allow user terminal colors to show through.
+	prevOverlay := scr.OverlayMode
+	scr.SetOverlayMode(false)
+	defer func() { scr.SetOverlayMode(prevOverlay) }()
+
 	width, height := scr.width, scr.height
 	bgAttr := Palette[ColDesktopBackground]
 	scr.FillRect(0, 0, width-1, height-1, ' ', bgAttr)

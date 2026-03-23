@@ -335,7 +335,9 @@ func (fm *frameManager) Run() {
 		if !topFrame.IsBusy() {
 			fm.scr.SetCursorVisible(false)
 			fm.scr.ActivePalette = nil
-			fm.scr.SetOverlayMode(false) // By default false, Desktop/Terminal draw without early binding
+			// By default, we use OverlayMode (Early Binding) for host UI elements.
+			// Desktop and TerminalView will explicitly disable it during their render.
+			fm.scr.SetOverlayMode(true)
 
 			// Render frames from bottom to top (Painter's algorithm)
 			for i, frame := range fm.frames {
@@ -391,14 +393,7 @@ func (fm *frameManager) Run() {
 					return
 				}
 
-				// Menu Toggle (F9)
 				activeMenu := fm.GetActiveMenuBar()
-
-				// Menu Toggle (F9)
-				if activeMenu != nil && ev.VirtualKeyCode == vtinput.VK_F9 {
-					activeMenu.Active = !activeMenu.Active
-					return
-				}
 
 				// 1. If Menu is Active, it has priority
 				if activeMenu != nil && activeMenu.Active {
@@ -480,12 +475,18 @@ func (fm *frameManager) Run() {
 				}
 			}
 
-			// 3. Fallback to Menu Activation (Alt+Hotkey) if top frame didn't want the key
-			activeMenu := fm.GetActiveMenuBar()
-			if !handled && activeMenu != nil && !activeMenu.Active && ev.Type == vtinput.KeyEventType {
-				alt := (ev.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
-				if alt && ev.Char != 0 {
-					if activeMenu.ProcessKey(ev) { return }
+			// 3. Fallbacks (F9, Alt+Hotkey) if top frame didn't want the key
+			if !handled && ev.Type == vtinput.KeyEventType && ev.KeyDown {
+				activeMenu := fm.GetActiveMenuBar()
+				if activeMenu != nil && !activeMenu.Active {
+					if ev.VirtualKeyCode == vtinput.VK_F9 {
+						activeMenu.Active = true
+						return
+					}
+					alt := (ev.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
+					if alt && ev.Char != 0 {
+						if activeMenu.ProcessKey(ev) { return }
+					}
 				}
 			}
 
