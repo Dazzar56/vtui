@@ -848,6 +848,58 @@ func TestMenuBar_SubMenuCycling(t *testing.T) {
 		t.Errorf("Expected Menu1 to be active, got %q", newSub.title)
 	}
 }
+func TestMenuBar_SubMenuCleanup_Deep(t *testing.T) {
+	// Setup FrameManager and MenuBar
+	fm := &frameManager{}
+	scr := NewScreenBuf()
+	scr.AllocBuf(80, 25)
+	fm.Init(scr)
+	fm.Push(NewDesktop())
+
+	oldFm := FrameManager
+	FrameManager = fm
+	defer func() { FrameManager = oldFm }()
+
+	mb := NewMenuBar(nil)
+	mb.Items = []MenuBarItem{{Label: "&File", SubItems: []MenuItem{{Text: "Open"}}}}
+	fm.MenuBar = mb
+
+	// 1. Activate Menu and SubMenu
+	mb.Active = true
+	mb.ActivateSubMenu(0)
+	if fm.GetTopFrameType() != TypeMenu {
+		t.Fatal("Submenu not pushed")
+	}
+	subMenu := fm.frames[len(fm.frames)-1]
+
+	// 2. Simulate a dialog popping up ON TOP of the submenu
+	// (e.g. background task finished)
+	dlg := NewDialog(10, 10, 30, 15, "Notification")
+	fm.Push(dlg)
+
+	if len(fm.frames) != 3 { // [Desktop, VMenu, Dialog]
+		t.Errorf("Expected 3 frames, got %d", len(fm.frames))
+	}
+
+	// 3. Something makes the MenuBar inactive (e.g. focus shifted to dialog)
+	mb.Active = false
+
+	// 4. Trigger render cycle cleanup
+	mb.Show(scr)
+
+	// 5. Assert: Submenu should be removed even though it was NOT the top frame
+	for _, f := range fm.frames {
+		if f == subMenu {
+			t.Error("Submenu still exists in FrameManager after MenuBar became inactive")
+		}
+	}
+	if fm.GetTopFrameType() != TypeDialog {
+		t.Error("The top-most dialog was accidentally removed during cleanup")
+	}
+	if len(fm.frames) != 2 { // Should be [Desktop, Dialog]
+		t.Errorf("Expected 2 frames after cleanup, got %d", len(fm.frames))
+	}
+}
 
 func TestVMenu_NavigationCallbacks(t *testing.T) {
 	m := NewVMenu("Test")

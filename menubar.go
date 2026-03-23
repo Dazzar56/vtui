@@ -82,9 +82,9 @@ func (mb *MenuBar) SetSubMenu(f Frame) {
 
 func (mb *MenuBar) closeSub() {
 	if mb.activeSubMenu != nil {
-		if FrameManager.GetTopFrameType() == TypeMenu {
-			FrameManager.Pop()
-		}
+		// Use RemoveFrame instead of Pop to ensure the menu is gone
+		// even if a dialog popped up on top of it.
+		FrameManager.RemoveFrame(mb.activeSubMenu)
 		mb.activeSubMenu = nil
 	}
 }
