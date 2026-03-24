@@ -16,3 +16,11 @@ func NewWindow(x1, y1, x2, y2 int, title string) *Window {
 
 func (w *Window) IsModal() bool { return false }
 func (w *Window) GetType() FrameType { return TypeUser }
+func (w *Window) GetTitle() string { return w.frame.title }
+func (w *Window) GetProgress() int {
+	return w.progress
+}
+
+func (w *Window) SetProgress(p int) {
+	w.progress = p
+}

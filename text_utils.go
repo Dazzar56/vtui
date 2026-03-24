@@ -83,4 +83,19 @@ func WrapText(text string, maxWidth int) []string {
 	}
 
 	return result
+}// TruncateMiddle shortens a string by removing characters from the middle
+// and replacing them with "...".
+func TruncateMiddle(s string, maxLen int) string {
+	runes := []rune(s)
+	if len(runes) <= maxLen || maxLen < 5 {
+		return s
+	}
+
+	// Calculate how many characters to keep on each side
+	// Subtract 3 for the "..." ellipsis
+	half := (maxLen - 3) / 2
+	start := string(runes[:half])
+	end := string(runes[len(runes)-(maxLen-3-half):])
+
+	return start + "..." + end
 }

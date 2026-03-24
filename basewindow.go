@@ -24,6 +24,7 @@ type BaseWindow struct {
 	ShowClose  bool
 	ShowZoom   bool
 	SavedBounds *Rect
+	progress   int
 }
 
 func (bw *BaseWindow) GetFocusedItem() UIElement {
@@ -40,6 +41,7 @@ func NewBaseWindow(x1, y1, x2, y2 int, title string) *BaseWindow {
 		frame:    NewBorderedFrame(x1, y1, x2, y2, DoubleBox, title),
 		MinW:     x2 - x1 + 1,
 		MinH:     y2 - y1 + 1,
+		progress: -1,
 	}
 	bw.SetPosition(x1, y1, x2, y2)
 	bw.lastW = x2 - x1 + 1

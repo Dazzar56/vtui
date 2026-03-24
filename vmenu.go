@@ -183,6 +183,12 @@ func (m *VMenu) ProcessKey(e *vtinput.InputEvent) bool {
 func (m *VMenu) ResizeConsole(w, h int) {
 	// For standalone VMenus, we might want to keep them centered
 }
+func (m *VMenu) GetTitle() string {
+	return m.title
+}
+func (m *VMenu) GetProgress() int {
+	return -1
+}
 
 func (m *VMenu) GetType() FrameType {
 	return TypeMenu

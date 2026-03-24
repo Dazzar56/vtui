@@ -44,6 +44,12 @@ func (d *Desktop) ProcessMouse(e *vtinput.InputEvent) bool {
 func (d *Desktop) ResizeConsole(w, h int) {
 	// The desktop automatically adapts to the screen size during Show() via scr.width/height
 }
+func (d *Desktop) GetTitle() string {
+	return "Desktop"
+}
+func (d *Desktop) GetProgress() int {
+	return -1
+}
 
 func (d *Desktop) GetType() FrameType {
 	return TypeDesktop

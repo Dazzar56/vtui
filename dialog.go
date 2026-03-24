@@ -35,3 +35,13 @@ func NewDialog(x1, y1, x2, y2 int, title string) *Dialog {
 
 func (d *Dialog) IsModal() bool { return true }
 func (d *Dialog) GetType() FrameType { return TypeDialog }
+func (d *Dialog) GetTitle() string { return d.frame.title }
+func (d *Dialog) GetProgress() int {
+	// If the dialog contains a text element that looks like a percentage,
+	// or we can manually set it. For this demo, we'll allow manual override.
+	return d.progress
+}
+
+func (d *Dialog) SetProgress(p int) {
+	d.progress = p
+}

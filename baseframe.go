@@ -26,6 +26,8 @@ func (bf *BaseFrame) HasShadow() bool      { return false }
 func (bf *BaseFrame) GetKeyLabels() *KeySet { return nil }
 func (bf *BaseFrame) GetMenuBar() *MenuBar  { return nil }
 func (bf *BaseFrame) ResizeConsole(w, h int) {}
+func (bf *BaseFrame) GetTitle() string       { return "" }
+func (bf *BaseFrame) GetProgress() int       { return -1 }
 
 // HandleCommand in BaseFrame bubbles the command up to the owner (e.g., from a dialog to a plugin).
 func (bf *BaseFrame) HandleCommand(cmd int, args any) bool {

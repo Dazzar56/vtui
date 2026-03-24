@@ -51,3 +51,24 @@ func TestWrapText_Unicode(t *testing.T) {
 		t.Errorf("Unicode wrap failed. Got %v, want %v", got, want)
 	}
 }
+
+func TestTruncateMiddle(t *testing.T) {
+	tests := []struct {
+		input  string
+		max    int
+		expect string
+	}{
+		{"1234567890", 10, "1234567890"}, // No change
+		{"1234567890", 7, "12...90"},    // Middle cut
+		{"1234567890", 5, "1...0"},      // Minimal cut
+		{"12345", 2, "12345"},           // Stability check (max too small)
+		{"/home/user/project/file.txt", 15, "/home/...le.txt"},
+	}
+
+	for _, tt := range tests {
+		got := TruncateMiddle(tt.input, tt.max)
+		if got != tt.expect {
+			t.Errorf("TruncateMiddle(%q, %d): expected %q, got %q", tt.input, tt.max, tt.expect, got)
+		}
+	}
+}

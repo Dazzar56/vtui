@@ -2,6 +2,7 @@ package vtui
 
 import (
 	"testing"
+	"strings"
 	"github.com/unxed/vtinput"
 )
 
@@ -48,6 +49,8 @@ func (m *mockFrame) GetWindowNumber() int               { return 0 }
 func (m *mockFrame) SetWindowNumber(n int)              {}
 func (m *mockFrame) RequestFocus() bool                 { return true }
 func (m *mockFrame) Close()                             { m.SetExitCode(-1) }
+func (m *mockFrame) GetTitle() string                   { return "MockFrame" }
+func (m *mockFrame) GetProgress() int                   { return -1 }
 
 type busyFrame struct {
 	mockFrame
@@ -546,7 +549,7 @@ func TestFrameManager_MenuBarNavigabilityWithSubMenu(t *testing.T) {
 	// 1. Open the first submenu ("File")
 	mb.ActivateSubMenu(0)
 	if fm.GetTopFrameType() != TypeMenu {
-		t.Fatal("Submenu File not open")
+		t.Fatalf("Submenu File not open. Len: %d, TopType: %d", len(fm.frames), fm.GetTopFrameType())
 	}
 
 	// 2. Inject Right Arrow.
@@ -606,29 +609,198 @@ func TestFrameManager_F9WorksForMenuOwningModal(t *testing.T) {
 		t.Error("F9 should activate the menu because the modal frame owns it")
 	}
 }
-func TestFrameManager_CycleWindows(t *testing.T) {
+func TestFrameManager_CycleScreens(t *testing.T) {
 	fm := &frameManager{}
 	fm.Init(NewScreenBuf())
 
 	w1 := NewWindow(0, 0, 10, 10, "W1")
 	w2 := NewWindow(0, 0, 10, 10, "W2")
-	w3 := NewWindow(0, 0, 10, 10, "W3")
 
 	fm.Push(NewDesktop())
 	fm.Push(w1)
-	fm.Push(w2)
-	fm.Push(w3) // W3 is on top
+	fm.AddScreen(w2) // Creates Screen 1, ActiveIdx = 1
 
-	// Ctrl+Tab (Forward): W3 goes to bottom, W2 becomes top
-	fm.CycleWindows(true)
-	if fm.GetTopFrameType() != TypeUser || fm.frames[len(fm.frames)-1] != w2 {
-		t.Errorf("Ctrl+Tab should bring W2 to top. Top is now: %v", fm.frames[len(fm.frames)-1])
+	if fm.ActiveIdx != 1 {
+		t.Fatalf("Active index should be 1, got %d", fm.ActiveIdx)
 	}
 
-	// Ctrl+Shift+Tab (Backward): W3 comes back from bottom to top
+	// 1. Cycle forward: ActiveIdx stays 1, but switcherIdx becomes 0
+	fm.ctrlPressed = true
+	fm.CycleWindows(true)
+
+	// 2. Commit switch (release Ctrl)
+	fm.ctrlPressed = false
+	if !fm.ctrlPressed && fm.switcherActive {
+		fm.switcherActive = false
+		fm.SwitchScreen(fm.switcherIdx)
+	}
+
+	if fm.ActiveIdx != 0 {
+		t.Errorf("Expected switch to Screen 0, stayed at %d", fm.ActiveIdx)
+	}
+
+	// 3. Cycle backward: from 0 back to 1
+	fm.ctrlPressed = true
 	fm.CycleWindows(false)
-	if fm.GetTopFrameType() != TypeUser || fm.frames[len(fm.frames)-1] != w3 {
-		t.Errorf("Ctrl+Shift+Tab should bring W3 back to top. Top is now: %v", fm.frames[len(fm.frames)-1])
+	fm.ctrlPressed = false
+	if !fm.ctrlPressed && fm.switcherActive {
+		fm.switcherActive = false
+		fm.SwitchScreen(fm.switcherIdx)
+	}
+
+	if fm.ActiveIdx != 1 {
+		t.Errorf("Expected switch back to Screen 1, stayed at %d", fm.ActiveIdx)
+	}
+}
+
+func TestFrameManager_CycleSingleScreen(t *testing.T) {
+	fm := &frameManager{}
+	fm.Init(NewScreenBuf())
+	fm.Push(NewDesktop())
+	fm.Push(NewWindow(0, 0, 10, 10, "W1"))
+
+	// Should safely return false and do nothing
+	if fm.CycleWindows(true) {
+		t.Error("CycleWindows should return false when there is only 1 screen")
+	}
+}
+
+func TestFrameManager_TaskCleanup_MultiScreen(t *testing.T) {
+	fm := &frameManager{}
+	fm.Init(NewScreenBuf())
+	fm.Push(NewDesktop())
+
+	// Screen 0: Add background task window
+	w1 := NewWindow(0, 0, 10, 10, "TaskWin")
+	fm.Push(w1)
+
+	// Add Screen 1: Active workspace
+	w2 := NewWindow(0, 0, 10, 10, "ActiveWin")
+	fm.AddScreen(w2)
+
+	if fm.ActiveIdx != 1 {
+		t.Fatal("Should be on screen 1")
+	}
+
+	// Mark background task on Screen 0 as done
+	w1.SetExitCode(0)
+
+	// Trigger cleanup (this simulates what happens in fm.Run loop)
+	fm.cleanupDoneFrames()
+
+	// Verify Screen 0 is auto-closed because it only has Desktop left
+	if len(fm.Screens) != 1 {
+		t.Errorf("Expected background Screen 0 to be removed, leaving 1 screen. Got %d", len(fm.Screens))
+	}
+
+	// Verify ActiveIdx safely shifted to 0 to match the remaining screen
+	if fm.ActiveIdx != 0 {
+		t.Errorf("Expected ActiveIdx to shift to 0, got %d", fm.ActiveIdx)
+	}
+}
+func TestAppScreen_AttentionState(t *testing.T) {
+	s := &AppScreen{}
+
+	// 1. Empty screen or just Desktop (non-modal)
+	s.Frames = []Frame{NewDesktop()}
+	if s.NeedsAttention() {
+		t.Error("Desktop should not trigger attention")
+	}
+
+	// 2. Add Modal Dialog
+	dlg := NewDialog(0,0,10,10, "Modal")
+	s.Frames = append(s.Frames, dlg)
+	if !s.NeedsAttention() {
+		t.Error("Modal dialog should trigger attention flag")
+	}
+
+	// 3. Mark dialog as done (simulating user closed it)
+	dlg.SetExitCode(0)
+	// We need to simulate the cleanup logic because NeedsAttention checks the top frame
+	s.Frames = s.Frames[:len(s.Frames)-1]
+	if s.NeedsAttention() {
+		t.Error("Attention should clear after modal dialog is removed")
+	}
+}
+
+func TestFrameManager_ScreenAutoClose(t *testing.T) {
+	fm := &frameManager{}
+	fm.Init(NewScreenBuf()) // Creates Screen 0
+
+	fm.Push(NewDesktop()) // Must explicitly push Desktop
+	w1 := NewWindow(0, 0, 10, 10, "W1")
+	fm.Push(w1) // Screen 0: [Desktop, W1]
+
+	w2 := NewWindow(0, 0, 10, 10, "W2")
+	fm.AddScreen(w2) // Creates Screen 1: [Desktop, W2]. ActiveIdx becomes 1.
+
+	if len(fm.Screens) != 2 || fm.ActiveIdx != 1 {
+		t.Fatalf("Expected 2 screens, ActiveIdx 1. Got Screens=%d, ActiveIdx=%d", len(fm.Screens), fm.ActiveIdx)
+	}
+
+	w2.SetExitCode(0) // Mark W2 as done
+	fm.cleanupDoneFrames() // This should remove W2. Screen 1 will have only Desktop and auto-close.
+
+	if len(fm.Screens) != 1 {
+		t.Errorf("Expected 1 screen after auto-close, got %d", len(fm.Screens))
+	}
+	if fm.ActiveIdx != 0 {
+		t.Errorf("Expected ActiveIdx to fallback to 0, got %d", fm.ActiveIdx)
+	}
+	// Ensure fm.frames points to Screen 0
+	if len(fm.frames) != 2 || fm.frames[1] != w1 {
+		t.Errorf("Active frames slice not restored correctly to Screen 0")
+	}
+}
+
+type titleFrame struct {
+	mockFrame
+	title string
+}
+func (t *titleFrame) GetTitle() string { return t.title }
+
+func TestFrameManager_F12ScreensMenu(t *testing.T) {
+	fm := &frameManager{}
+	scr := NewScreenBuf()
+	scr.AllocBuf(80, 25)
+	fm.Init(scr)
+
+	f1 := &titleFrame{title: "Panel A"}
+	f1.SetPosition(0,0,10,10)
+	fm.Push(NewDesktop())
+	fm.Push(f1) // Screen 0
+
+	f2 := &titleFrame{title: "Editor B"}
+	f2.SetPosition(0,0,10,10)
+	fm.AddScreen(f2) // Screen 1, becomes active
+
+	oldFm := FrameManager
+	FrameManager = fm
+	defer func() { FrameManager = oldFm }()
+
+	// Inject F12
+	fm.InjectEvents([]*vtinput.InputEvent{
+		{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F12},
+		{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_Q, ControlKeyState: vtinput.LeftCtrlPressed},
+	})
+
+	fm.Run()
+
+	if fm.GetTopFrameType() != TypeMenu {
+		t.Fatalf("F12 did not open a menu. Top type: %d", fm.GetTopFrameType())
+	}
+
+	menu := fm.frames[len(fm.frames)-1].(*VMenu)
+	if menu.title != " Screens " {
+		t.Errorf("Expected menu title ' Screens ', got %q", menu.title)
+	}
+
+	if len(menu.items) != 2 {
+		t.Fatalf("Expected 2 menu items, got %d", len(menu.items))
+	}
+
+	if menu.items[1].Text != "* Editor B" {
+		t.Errorf("Expected active item to have '*' prefix, got %q", menu.items[1].Text)
 	}
 }
 
@@ -657,6 +829,94 @@ func TestFrameManager_TaskCleanup(t *testing.T) {
 		t.Error("Frame should be cleaned up immediately after task execution")
 	}
 }
+func TestFrameManager_BoundVsUnboundTask(t *testing.T) {
+	fm := &frameManager{}
+	fm.Init(NewScreenBuf())
+	fm.Push(NewDesktop())
+
+	f1 := &mockFrame{}
+	fm.Push(f1)
+
+	// 1. SCENARIO: Background Screen Creation (AddScreen)
+	fm.AddScreen(&mockFrame{})
+	if len(fm.Screens) != 2 {
+		t.Error("AddScreen should create a second screen")
+	}
+	if fm.ActiveIdx != 1 {
+		t.Error("AddScreen should automatically switch focus")
+	}
+
+	// 2. SCENARIO: Background task without focus (AddScreenBackground)
+	fm.SwitchScreen(0)
+	fm.AddScreenBackground(&mockFrame{})
+	if len(fm.Screens) != 3 {
+		t.Errorf("Expected 3 screens, got %d", len(fm.Screens))
+	}
+	if fm.ActiveIdx != 0 {
+		t.Error("AddScreenBackground should NOT switch focus")
+	}
+}
+
+func TestFrameManager_SwitcherLogic(t *testing.T) {
+	fm := &frameManager{}
+	fm.Init(NewScreenBuf())
+	fm.Push(NewDesktop()) // ActiveIdx = 0
+	fm.AddScreen(NewWindow(0,0,10,10, "W2")) // ActiveIdx = 1
+
+	// 1. Simulate Ctrl+Tab (KeyDown)
+	fm.ctrlPressed = true
+	fm.CycleWindows(true) // Should wrap: 1 -> 0
+
+	if !fm.switcherActive {
+		t.Error("Switcher should be active after Ctrl+Tab")
+	}
+	if fm.switcherIdx != 0 {
+		t.Errorf("Switcher should select screen 0 (forward from 1), got %d", fm.switcherIdx)
+	}
+
+	// 2. Simulate Ctrl release (KeyUp)
+	fm.ctrlPressed = false
+	if !fm.ctrlPressed && fm.switcherActive {
+		fm.switcherActive = false
+		fm.SwitchScreen(fm.switcherIdx)
+	}
+
+	if fm.switcherActive {
+		t.Error("Switcher should close on Ctrl release")
+	}
+	if fm.ActiveIdx != 0 {
+		t.Errorf("Screen should have switched to 0, stayed at %d", fm.ActiveIdx)
+	}
+}
+
+func TestFrameManager_SwitcherRichContent(t *testing.T) {
+	fm := &frameManager{}
+	fm.Init(NewScreenBuf())
+	fm.Push(NewDesktop())
+	
+	// Screen 1: With progress
+	w1 := NewWindow(0,0,10,10, "TaskWin")
+	w1.SetProgress(45)
+	fm.AddScreen(w1)
+	
+	// Screen 2: With attention
+	w2 := NewWindow(0,0,10,10, "AlertWin")
+	fm.AddScreen(w2)
+	fm.Push(NewDialog(0,0,5,5, "Modal"))
+
+	_, title, suf, _ := fm.getScreenInfo(1, 20)
+	if !strings.Contains(suf, "####") {
+		t.Errorf("getScreenInfo failed to produce progress bar, got %q", suf)
+	}
+	if title != "TaskWin" {
+		t.Errorf("getScreenInfo title mismatch: %q", title)
+	}
+
+	pre2, _, _, attn2 := fm.getScreenInfo(2, 20)
+	if !attn2 || pre2 != "? " {
+		t.Errorf("getScreenInfo failed to report attention. Attn:%v, Prefix:%q", attn2, pre2)
+	}
+}
 
 func TestFrameManager_ModalDialogBlocksF9(t *testing.T) {
 	fm := &frameManager{}
@@ -681,5 +941,80 @@ func TestFrameManager_ModalDialogBlocksF9(t *testing.T) {
 
 	if mb.Active {
 		t.Error("MenuBar should NOT be activated via F9 when a modal dialog is open")
+	}
+}
+func TestFrameManager_PushToFrameScreen_Active(t *testing.T) {
+	fm := &frameManager{}
+	fm.Init(NewScreenBuf())
+	fm.Push(NewDesktop())
+
+	anchor := &mockFrame{}
+	fm.Push(anchor)
+
+	newFrame := &mockFrame{}
+	fm.PushToFrameScreen(anchor, newFrame)
+
+	if fm.frames[len(fm.frames)-1] != newFrame {
+		t.Errorf("New frame was not pushed to the active screen properly")
+	}
+}
+
+func TestFrameManager_PushToFrameScreen_Background(t *testing.T) {
+	fm := &frameManager{}
+	fm.Init(NewScreenBuf())
+	fm.Push(NewDesktop())
+
+	anchor := &mockFrame{}
+	fm.Push(anchor)
+
+	// Add new screen (Screen 1 becomes active)
+	fm.AddScreen(&mockFrame{})
+
+	newFrame := &mockFrame{}
+	fm.PushToFrameScreen(anchor, newFrame)
+
+	// Active screen should NOT change
+	if fm.frames[len(fm.frames)-1] == newFrame {
+		t.Errorf("New frame should not be in the active screen")
+	}
+
+	// Background screen (Screen 0) should have the new frame
+	bgScreen := fm.Screens[0]
+	if bgScreen.Frames[len(bgScreen.Frames)-1] != newFrame {
+		t.Errorf("New frame was not pushed to the background screen")
+	}
+}
+func TestFrameManager_TargetedNotificationFlow(t *testing.T) {
+	fm := &frameManager{}
+	fm.Init(NewScreenBuf())
+	fm.Push(NewDesktop())
+
+	// 1. Screen 0: Blocking Task
+	taskDlg := NewDialog(0,0,10,10, "Task")
+	fm.Push(taskDlg)
+
+	// 2. Screen 1: Active Work
+	workWin := NewWindow(0,0,10,10, "Active")
+	fm.AddScreen(workWin)
+
+	if fm.ActiveIdx != 1 { t.Fatal("Should be on Screen 1") }
+
+	// 3. Task finishes and sends a targeted "Done" message
+	doneMsg := NewDialog(0,0,5,5, "Finished")
+	fm.PushToFrameScreen(taskDlg, doneMsg)
+
+	// 4. Assertions
+	if fm.ActiveIdx != 1 {
+		t.Error("Active screen should NOT change when background notification arrives")
+	}
+
+	bgScreen := fm.Screens[0]
+	topOfBg := bgScreen.Frames[len(bgScreen.Frames)-1]
+	if topOfBg != doneMsg {
+		t.Error("Notification did not land on the background task screen")
+	}
+
+	if !bgScreen.NeedsAttention() {
+		t.Error("Background screen should now report NeedsAttention")
 	}
 }

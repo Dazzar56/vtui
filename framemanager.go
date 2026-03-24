@@ -6,6 +6,7 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+	"strings"
 
 	"github.com/unxed/vtinput"
 	"golang.org/x/term"
@@ -45,11 +46,47 @@ type Frame interface {
 	SetWindowNumber(n int)
 	RequestFocus() bool
 	Close()
+	GetTitle() string
+	GetProgress() int // Returns 0-100, or -1 if no progress
 }
 
-// frameManager manages the stack of frames and the main application loop.
+// AppScreen represents an isolated workspace with its own frame stack.
+type AppScreen struct {
+	Frames        []Frame
+	CapturedFrame Frame
+}
+
+func (s *AppScreen) GetTitle() string {
+	for i := len(s.Frames) - 1; i >= 0; i-- {
+		if s.Frames[i].GetType() >= TypeUser {
+			return s.Frames[i].GetTitle()
+		}
+	}
+	return "Workspace"
+}
+
+func (s *AppScreen) GetProgress() int {
+	for i := len(s.Frames) - 1; i >= 0; i-- {
+		if p := s.Frames[i].GetProgress(); p >= 0 {
+			return p
+		}
+	}
+	return -1
+}
+
+func (s *AppScreen) NeedsAttention() bool {
+	if len(s.Frames) == 0 { return false }
+	top := s.Frames[len(s.Frames)-1]
+	// If the top frame is a Modal Dialog, it's waiting for user input
+	return top.IsModal() && top.GetType() != TypeMenu
+}
+
+// frameManager manages multiple screens and the main application loop.
 type frameManager struct {
-	frames         []Frame
+	Screens   []*AppScreen
+	ActiveIdx int
+
+	frames         []Frame // Points to the active screen's frame stack
 	scr            *ScreenBuf
 	RedrawChan     chan struct{}
 	TaskChan       chan func()
@@ -62,11 +99,64 @@ type frameManager struct {
 	StatusLine *StatusLine
 	KeyBar     *KeyBar
 
-	capturedFrame Frame // Frame that currently captures mouse events (during drag/resize)
+	capturedFrame Frame // Points to the active screen's captured frame
+
+	// Switcher State
+	ctrlPressed      bool
+	switcherActive   bool
+	switcherIdx      int
 }
 
 // FrameManager is the global instance of the frame manager.
 var FrameManager = &frameManager{}
+
+func (fm *frameManager) syncCurrentScreen() {
+	if len(fm.Screens) > 0 {
+		fm.Screens[fm.ActiveIdx].Frames = fm.frames
+		fm.Screens[fm.ActiveIdx].CapturedFrame = fm.capturedFrame
+	}
+}
+
+func (fm *frameManager) SwitchScreen(idx int) {
+	fm.syncCurrentScreen()
+	fm.ActiveIdx = idx
+	fm.frames = fm.Screens[idx].Frames
+	fm.capturedFrame = fm.Screens[idx].CapturedFrame
+	fm.Redraw()
+}
+
+func (fm *frameManager) AddScreen(f Frame) {
+	fm.syncCurrentScreen()
+	newScreen := &AppScreen{Frames: make([]Frame, 0, 10)}
+	newScreen.Frames = append(newScreen.Frames, NewDesktop())
+	newScreen.Frames = append(newScreen.Frames, f)
+	fm.Screens = append(fm.Screens, newScreen)
+	fm.SwitchScreen(len(fm.Screens) - 1)
+}
+func (fm *frameManager) AddScreenBackground(f Frame) {
+	fm.syncCurrentScreen()
+	newScreen := &AppScreen{Frames: make([]Frame, 0, 10)}
+	newScreen.Frames = append(newScreen.Frames, NewDesktop())
+	newScreen.Frames = append(newScreen.Frames, f)
+	fm.Screens = append(fm.Screens, newScreen)
+	// Notice: We intentionally do not call fm.SwitchScreen here
+}
+
+func (fm *frameManager) CloseActiveScreen() {
+	if len(fm.Screens) <= 1 {
+		fm.Shutdown()
+		return
+	}
+	fm.Screens = append(fm.Screens[:fm.ActiveIdx], fm.Screens[fm.ActiveIdx+1:]...)
+	newIdx := fm.ActiveIdx
+	if newIdx >= len(fm.Screens) {
+		newIdx = len(fm.Screens) - 1
+	}
+	fm.ActiveIdx = newIdx
+	fm.frames = fm.Screens[newIdx].Frames
+	fm.capturedFrame = fm.Screens[newIdx].CapturedFrame
+	fm.Redraw()
+}
 
 // GetActiveMenuBar returns the menu bar of the topmost frame that provides one,
 // or the global MenuBar if none do.
@@ -83,6 +173,8 @@ func (fm *frameManager) GetActiveMenuBar() *MenuBar {
 func (fm *frameManager) Init(scr *ScreenBuf) {
 	fm.scr = scr
 	fm.frames = make([]Frame, 0, 10)
+	fm.Screens = []*AppScreen{{Frames: fm.frames}}
+	fm.ActiveIdx = 0
 	fm.RedrawChan = make(chan struct{}, 1)
 	fm.TaskChan = make(chan func(), 64)
 	fm.injectedEvents = make([]*vtinput.InputEvent, 0)
@@ -127,7 +219,49 @@ func (fm *frameManager) Push(f Frame) {
 	}
 
 	fm.frames = append(fm.frames, f)
+	fm.syncCurrentScreen() // Ensure the Screen object is aware of the new frame immediately
 	f.ProcessKey(&vtinput.InputEvent{Type: vtinput.FocusEventType, SetFocus: true})
+}
+
+// PushToFrameScreen adds a frame to the screen that contains the anchor frame.
+func (fm *frameManager) PushToFrameScreen(anchor Frame, f Frame) {
+	fm.syncCurrentScreen()
+	for i, s := range fm.Screens {
+		for _, existing := range s.Frames {
+			if existing == anchor {
+				if i == fm.ActiveIdx {
+					// Target is active screen, use standard Push to ensure proper focus and slice update
+					fm.Push(f)
+				} else {
+					// Target is background screen
+					s.Frames = append(s.Frames, f)
+					// Initialize focus state for the new frame
+					f.ProcessKey(&vtinput.InputEvent{Type: vtinput.FocusEventType, SetFocus: true})
+				}
+				return
+			}
+		}
+	}
+	// Fallback to active screen if anchor is lost
+	fm.Push(f)
+}
+
+// Flash provides visual feedback for screen transitions (fork/close).
+func (fm *frameManager) Flash() {
+	if fm.scr == nil {
+		return
+	}
+	prevOverlay := fm.scr.OverlayMode
+	fm.scr.SetOverlayMode(false)
+
+	// Pure black blink
+	fm.scr.FillRect(0, 0, fm.scr.width-1, fm.scr.height-1, ' ', SetRGBBoth(0, 0, 0))
+	fm.scr.Flush()
+
+	time.Sleep(30 * time.Millisecond)
+
+	fm.scr.SetOverlayMode(prevOverlay)
+	fm.Redraw()
 }
 
 // RequestFocus moves the given frame to the top of the stack (brings it to front).
@@ -191,6 +325,7 @@ func (fm *frameManager) RemoveFrame(f Frame) {
 				fm.capturedFrame = nil
 			}
 			fm.frames = append(fm.frames[:i], fm.frames[i+1:]...)
+			fm.syncCurrentScreen() // Critical: update the slice header in Screens array
 			if isTop && len(fm.frames) > 0 {
 				fm.frames[len(fm.frames)-1].ProcessKey(&vtinput.InputEvent{Type: vtinput.FocusEventType, SetFocus: true})
 			}
@@ -236,76 +371,164 @@ func (fm *frameManager) EmitCommand(cmd int, args any) bool {
 	DebugLog("COMMAND: No one handled %d", cmd)
 	return false
 }
+
 // InjectEvents adds simulated input events to the front of the queue.
 func (fm *frameManager) InjectEvents(events []*vtinput.InputEvent) {
 	fm.injectedEvents = append(fm.injectedEvents, events...)
 }
+
 // Shutdown clears all frames, effectively stopping the application loop.
 func (fm *frameManager) Shutdown() {
+	fm.Screens = nil
 	fm.frames = nil
 	fm.capturedFrame = nil
 }
-// CycleWindows rotates non-modal user frames (Ctrl+Tab / Ctrl+Shift+Tab)
+
+// CycleWindows updates the selection in the switcher overlay
 func (fm *frameManager) CycleWindows(forward bool) bool {
-	if len(fm.frames) < 2 {
+	if len(fm.Screens) < 2 {
 		return false
 	}
 
-	topFrame := fm.frames[len(fm.frames)-1]
-	if topFrame.IsModal() || topFrame.GetType() == TypeMenu {
-		return false
+	if !fm.switcherActive {
+		fm.switcherActive = true
+		fm.switcherIdx = fm.ActiveIdx
 	}
-
-	var switchableIdx []int
-	for i, f := range fm.frames {
-		if !f.IsModal() && f.GetType() != TypeDesktop && f.GetType() != TypeMenu {
-			switchableIdx = append(switchableIdx, i)
-		}
-	}
-
-	if len(switchableIdx) < 2 {
-		return false
-	}
-
-	oldTop := fm.frames[len(fm.frames)-1]
 
 	if forward {
-		// Top goes to the bottom of the switchable list
-		topIdx := switchableIdx[len(switchableIdx)-1]
-		topF := fm.frames[topIdx]
-
-		// Shift others up
-		for i := len(switchableIdx) - 1; i > 0; i-- {
-			fm.frames[switchableIdx[i]] = fm.frames[switchableIdx[i-1]]
-		}
-		fm.frames[switchableIdx[0]] = topF
+		fm.switcherIdx = (fm.switcherIdx + 1) % len(fm.Screens)
 	} else {
-		// Bottom goes to the top of the switchable list
-		bottomIdx := switchableIdx[0]
-		bottomF := fm.frames[bottomIdx]
-
-		for i := 0; i < len(switchableIdx)-1; i++ {
-			fm.frames[switchableIdx[i]] = fm.frames[switchableIdx[i+1]]
-		}
-		fm.frames[switchableIdx[len(switchableIdx)-1]] = bottomF
+		fm.switcherIdx = (fm.switcherIdx - 1 + len(fm.Screens)) % len(fm.Screens)
 	}
-
-	newTop := fm.frames[len(fm.frames)-1]
-
-	if oldTop != newTop {
-		oldTop.ProcessKey(&vtinput.InputEvent{Type: vtinput.FocusEventType, SetFocus: false})
-		newTop.ProcessKey(&vtinput.InputEvent{Type: vtinput.FocusEventType, SetFocus: true})
-		fm.Redraw()
-	}
-
+	fm.Redraw()
 	return true
 }
 
-func (fm *frameManager) cleanupDoneFrames() {
-	for i := len(fm.frames) - 1; i >= 0; i-- {
-		if fm.frames[i].IsDone() {
-			fm.RemoveFrame(fm.frames[i])
+func (fm *frameManager) renderSwitcher(scr *ScreenBuf) {
+	if !fm.switcherActive || len(fm.Screens) < 2 { return }
+	
+	menuW := 60
+	menuH := len(fm.Screens) + 2
+	x := (scr.width - menuW) / 2
+	y := (scr.height - menuH) / 2
+	
+	attr := Palette[ColMenuText]
+	selAttr := Palette[ColMenuSelectedText]
+	boxAttr := Palette[ColMenuBox]
+	attnAttr := SetRGBBoth(0, 0xFFFFFF, 0xFF0000)
+
+	scr.FillRect(x, y, x+menuW-1, y+menuH-1, ' ', attr)
+	sym := getBoxSymbols(DoubleBox)
+	scr.Write(x, y, StringToCharInfo(string(sym[bsTL])+strings.Repeat(string(sym[bsH]), menuW-2)+string(sym[bsTR]), boxAttr))
+	scr.Write(x, y+menuH-1, StringToCharInfo(string(sym[bsBL])+strings.Repeat(string(sym[bsH]), menuW-2)+string(sym[bsBR]), boxAttr))
+	for i := 1; i < menuH-1; i++ {
+		scr.Write(x, y+i, StringToCharInfo(string(sym[bsV]), boxAttr))
+		scr.Write(x+menuW-1, y+i, StringToCharInfo(string(sym[bsV]), boxAttr))
+	}
+
+	maxTitleLen := menuW - 19
+	for i := range fm.Screens {
+		itemAttr := attr
+		if i == fm.switcherIdx { itemAttr = selAttr }
+		
+		pre, tit, suf, needsAttn := fm.getScreenInfo(i, maxTitleLen)
+		if i == fm.switcherIdx { pre = "> " }
+
+		rowText := pre + tit + suf
+		scr.Write(x+1, y+1+i, StringToCharInfo(rowText+strings.Repeat(" ", menuW-2-len([]rune(rowText))), itemAttr))
+		if needsAttn {
+			scr.Write(x+1, y+1+i, StringToCharInfo("!", attnAttr))
 		}
+	}
+}
+
+func (fm *frameManager) getScreenInfo(idx int, maxTitleLen int) (prefix, title, suffix string, needsAttn bool) {
+	s := fm.Screens[idx]
+	rawTitle := s.GetTitle()
+	needsAttn = s.NeedsAttention()
+	isCurrent := (idx == fm.ActiveIdx)
+
+	prefix = "  "
+	if isCurrent && needsAttn {
+		prefix = "? "
+	} else if isCurrent {
+		prefix = "* "
+	} else if needsAttn {
+		prefix = "! "
+	}
+
+	suffix = ""
+	if p := s.GetProgress(); p >= 0 {
+		barLen := 10
+		filled := (p * barLen) / 100
+		bar := "["
+		for b := 0; b < barLen; b++ {
+			if b < filled { bar += "#" } else { bar += "." }
+		}
+		suffix = " " + bar + "]"
+	}
+
+	title = TruncateMiddle(rawTitle, maxTitleLen)
+	return
+}
+
+func (fm *frameManager) showScreensMenu() {
+	fm.syncCurrentScreen()
+	menu := NewVMenu(" Screens ")
+
+	scrW := fm.GetScreenSize()
+	scrH := 25
+	if fm.scr != nil { scrH = fm.scr.height }
+
+	menuW := (scrW * 60) / 100
+	if menuW < 40 { menuW = 40 }
+	if menuW > 100 { menuW = 100 }
+
+	maxTitleLen := menuW - 19
+	if maxTitleLen < 10 { maxTitleLen = 10 }
+
+	for i := range fm.Screens {
+		pre, tit, suf, _ := fm.getScreenInfo(i, maxTitleLen)
+		menu.AddItem(MenuItem{Text: pre + tit + suf, UserData: i})
+	}
+
+	menu.OnSelect = func(idx int) {
+		fm.SwitchScreen(idx)
+	}
+
+	menuH := len(fm.Screens) + 2
+	if menuH > 15 { menuH = 15 }
+	x := (scrW - menuW) / 2
+	y := (scrH - menuH) / 2
+	menu.SetPosition(x, y, x+menuW-1, y+menuH-1)
+	fm.Push(menu)
+}
+
+func (fm *frameManager) cleanupDoneFrames() {
+	fm.syncCurrentScreen()
+
+	for sIdx := len(fm.Screens) - 1; sIdx >= 0; sIdx-- {
+		s := fm.Screens[sIdx]
+		for i := len(s.Frames) - 1; i >= 0; i-- {
+			if s.Frames[i].IsDone() {
+				if s.CapturedFrame == s.Frames[i] { s.CapturedFrame = nil }
+				s.Frames = append(s.Frames[:i], s.Frames[i+1:]...)
+			}
+		}
+		// If screen is dead (only Desktop left) and it's not the last screen
+		if len(s.Frames) <= 1 && len(fm.Screens) > 1 {
+			fm.Screens = append(fm.Screens[:sIdx], fm.Screens[sIdx+1:]...)
+			if fm.ActiveIdx >= sIdx && fm.ActiveIdx > 0 {
+				fm.ActiveIdx--
+			}
+		}
+	}
+
+	if len(fm.Screens) > 0 {
+		fm.frames = fm.Screens[fm.ActiveIdx].Frames
+		fm.capturedFrame = fm.Screens[fm.ActiveIdx].CapturedFrame
+	} else {
+		fm.Shutdown()
 	}
 }
 // GetTopFrameType returns the type of the topmost frame or -1 if empty.
@@ -423,6 +646,8 @@ func (fm *frameManager) Run() {
 				frame.Show(fm.scr)
 			}
 
+			fm.renderSwitcher(fm.scr)
+
 			// Render Standard Global UI
 			activeMenu := fm.GetActiveMenuBar()
 			if activeMenu != nil && activeMenu.Active {
@@ -438,12 +663,28 @@ func (fm *frameManager) Run() {
 			if fm.OnRender != nil {
 				fm.OnRender(fm.scr)
 			}
+
+			// Draw Global Attention Indicator [!] if background screens need input
+			hasHiddenAttention := false
+			for i, s := range fm.Screens {
+				if i != fm.ActiveIdx && s.NeedsAttention() {
+					hasHiddenAttention = true
+					break
+				}
+			}
+			if hasHiddenAttention {
+				attr := SetRGBBoth(0, 0xFFFFFF, 0xFF0000) // White on Red
+				fm.scr.Write(fm.scr.width-3, 0, StringToCharInfo("[!]", attr))
+			}
+
 			fm.scr.Flush()
 		}
 
 		// 2. Dispatch helper
 		dispatch := func(ev *vtinput.InputEvent, is_injected bool) {
-			if len(fm.frames) == 0 { return }
+			if len(fm.frames) == 0 {
+				return
+			}
 
 			topFrame := fm.frames[len(fm.frames)-1]
 			activeMenu := fm.GetActiveMenuBar()
@@ -457,20 +698,60 @@ func (fm *frameManager) Run() {
 			}
 
 			// User-defined filter has first say
-			if !is_injected && fm.EventFilter != nil && fm.EventFilter(ev) { return }
+			if !is_injected && fm.EventFilter != nil && fm.EventFilter(ev) {
+				return
+			}
+
+			// Track Ctrl state for Switcher logic
+			if ev.Type == vtinput.KeyEventType {
+				fm.ctrlPressed = (ev.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
+
+				// Commit Switcher selection on Ctrl release
+				if !fm.ctrlPressed && fm.switcherActive {
+					fm.switcherActive = false
+					fm.SwitchScreen(fm.switcherIdx)
+				}
+			}
 
 			// --- Standard Framework Event Logic ---
 			if ev.Type == vtinput.KeyEventType && ev.KeyDown {
 				// Global Quit (standard for vtui tools)
 				if ev.VirtualKeyCode == vtinput.VK_Q && (ev.ControlKeyState&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed)) != 0 {
-					fm.frames = nil
+					fm.Shutdown()
 					return
 				}
 
 				// Window Cycling (Ctrl+Tab / Ctrl+Shift+Tab)
-				if ev.VirtualKeyCode == vtinput.VK_TAB && (ev.ControlKeyState&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed)) != 0 {
+				if ev.VirtualKeyCode == vtinput.VK_TAB && fm.ctrlPressed {
 					shift := (ev.ControlKeyState & vtinput.ShiftPressed) != 0
+					// Only consume the event if cycling is actually possible
 					if fm.CycleWindows(!shift) {
+						return
+					}
+				}
+
+				// Ctrl+N - Fork Active Frame into new Screen
+				if ev.VirtualKeyCode == vtinput.VK_N && fm.ctrlPressed {
+					fm.Flash()
+					// We need a way to clone the top-level frame.
+					// For now, let's trigger a Command that Panels can handle.
+					fm.EmitCommand(CmResize, "fork") // Temporary hack or use specialized Command
+					return
+				}
+
+				// Ctrl+W - Close Active Screen
+				if ev.VirtualKeyCode == vtinput.VK_W && fm.ctrlPressed {
+					fm.Flash()
+					fm.CloseActiveScreen()
+					return
+				}
+
+				// F12 - Screens Menu (Window List)
+				// We must ignore NumLock, CapsLock, and EnhancedKey flags
+				modifierMask := uint32(vtinput.LeftAltPressed | vtinput.RightAltPressed | vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed | vtinput.ShiftPressed)
+				if ev.VirtualKeyCode == vtinput.VK_F12 && (ev.ControlKeyState&modifierMask) == 0 {
+					if fm.GetTopFrameType() != TypeMenu {
+						fm.showScreensMenu()
 						return
 					}
 				}
@@ -484,7 +765,9 @@ func (fm *frameManager) Run() {
 					if fm.GetTopFrameType() == TypeMenu {
 						menuFrame := fm.frames[len(fm.frames)-1]
 						if menuFrame.ProcessKey(ev) {
-							if menuFrame.IsDone() { fm.RemoveFrame(menuFrame) }
+							if menuFrame.IsDone() {
+								fm.RemoveFrame(menuFrame)
+							}
 							return
 						}
 					}
@@ -493,7 +776,9 @@ func (fm *frameManager) Run() {
 						activeMenu.Active = false
 						return
 					}
-					if activeMenu.ProcessKey(ev) { return }
+					if activeMenu.ProcessKey(ev) {
+						return
+					}
 					return // Don't pass keys to background frames when menu is active
 				}
 			}
@@ -558,7 +843,6 @@ func (fm *frameManager) Run() {
 			}
 
 			// 3. Fallbacks (F9, Alt+Hotkey) if top frame didn't want the key
-			// 3. Fallbacks (F9, Alt+Hotkey) if top frame didn't want the key
 			if !handled && ev.Type == vtinput.KeyEventType && ev.KeyDown {
 				// Allow F9 if not modal, OR if the modal frame itself has a menu
 				canActivateMenu := !topFrame.IsModal() || topFrame.GetMenuBar() != nil
@@ -569,7 +853,9 @@ func (fm *frameManager) Run() {
 					}
 					alt := (ev.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 					if alt && ev.Char != 0 {
-						if activeMenu.ProcessKey(ev) { return }
+						if activeMenu.ProcessKey(ev) {
+							return
+						}
 					}
 				}
 			}
@@ -578,39 +864,50 @@ func (fm *frameManager) Run() {
 			fm.cleanupDoneFrames()
 		}
 
-	// 3. Event waiting (Blocking)
-	var e *vtinput.InputEvent
-	injected := false
+		// 3. Event waiting (Blocking)
+		var e *vtinput.InputEvent
+		injected := false
+		loopAgain := false
 
-	if len(fm.injectedEvents) > 0 {
-		e = fm.injectedEvents[0]
-		fm.injectedEvents = fm.injectedEvents[1:]
-		injected = true
-	} else {
-		select {
-		case <-fm.RedrawChan: continue
-		case task := <-fm.TaskChan:
-			task()
-			fm.cleanupDoneFrames()
-			fm.Redraw()
-			continue
-		case <-sigChan:
-			width, height, _ := term.GetSize(int(os.Stdin.Fd()))
-			fm.scr.AllocBuf(width, height)
-			for _, f := range fm.frames { f.ResizeConsole(width, height) }
-			continue
-		case ev, ok := <-eventChan:
-			if !ok { return }
-			e = ev
+		if len(fm.injectedEvents) > 0 {
+			e = fm.injectedEvents[0]
+			fm.injectedEvents = fm.injectedEvents[1:]
+			injected = true
+		} else {
+			select {
+			case <-fm.RedrawChan:
+				loopAgain = true
+			case task := <-fm.TaskChan:
+				task()
+				fm.cleanupDoneFrames()
+				fm.Redraw()
+				loopAgain = true
+			case <-sigChan:
+				width, height, _ := term.GetSize(int(os.Stdin.Fd()))
+				fm.scr.AllocBuf(width, height)
+				for _, f := range fm.frames {
+					f.ResizeConsole(width, height)
+				}
+				fm.Redraw()
+				loopAgain = true
+			case ev, ok := <-eventChan:
+				if !ok {
+					return
+				}
+				e = ev
+			}
 		}
-	}
 
-	if e.Type == vtinput.KeyEventType && e.KeyDown {
-		DebugLog("KEY: Vk=%X Char=%d ActiveFrames=%d", e.VirtualKeyCode, e.Char, len(fm.frames))
-	}
+		if loopAgain {
+			continue
+		}
 
-	// Process the first received event
-	dispatch(e, injected)
+		if e.Type == vtinput.KeyEventType && e.KeyDown {
+			DebugLog("KEY: Vk=%X Char=%d ActiveFrames=%d", e.VirtualKeyCode, e.Char, len(fm.frames))
+		}
+
+		// Process the first received event
+		dispatch(e, injected)
 
 		// 4. Queue "Drain"
 		// If events arrive in a dense stream (insertion), process them in a batch.
@@ -624,7 +921,9 @@ func (fm *frameManager) Run() {
 					default:
 					}
 				}
-				if !ok { return }
+				if !ok {
+					return
+				}
 				dispatch(ev, false)
 				continue
 			case <-idleTimer.C:
