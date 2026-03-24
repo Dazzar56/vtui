@@ -984,6 +984,40 @@ func TestFrameManager_PushToFrameScreen_Background(t *testing.T) {
 		t.Errorf("New frame was not pushed to the background screen")
 	}
 }
+func TestFrameManager_SwitchScreenFocus(t *testing.T) {
+	fm := &frameManager{}
+	fm.Init(NewScreenBuf())
+
+	f1Focus := false
+	f1 := &mockFrame{}
+	f1.onProcessKey = func(e *vtinput.InputEvent) bool {
+		if e.Type == vtinput.FocusEventType { f1Focus = e.SetFocus }
+		return true
+	}
+	fm.Push(f1) // Screen 0, f1Focus = true
+
+	f2Focus := false
+	f2 := &mockFrame{}
+	f2.onProcessKey = func(e *vtinput.InputEvent) bool {
+		if e.Type == vtinput.FocusEventType { f2Focus = e.SetFocus }
+		return true
+	}
+	fm.AddScreen(f2) // Screen 1, f2Focus = true, f1Focus = false
+
+	if f1Focus || !f2Focus {
+		t.Errorf("Initial focus state error: f1=%v, f2=%v", f1Focus, f2Focus)
+	}
+
+	// Switch back to Screen 0
+	fm.SwitchScreen(0)
+
+	if !f1Focus {
+		t.Error("f1 should have received FocusIn after SwitchScreen")
+	}
+	if f2Focus {
+		t.Error("f2 should have received FocusOut after SwitchScreen")
+	}
+}
 func TestFrameManager_TargetedNotificationFlow(t *testing.T) {
 	fm := &frameManager{}
 	fm.Init(NewScreenBuf())

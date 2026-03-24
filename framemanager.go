@@ -118,10 +118,25 @@ func (fm *frameManager) syncCurrentScreen() {
 }
 
 func (fm *frameManager) SwitchScreen(idx int) {
+	if idx == fm.ActiveIdx && len(fm.frames) > 0 {
+		return
+	}
+
+	// 1. Notify current screen it's losing focus
+	if len(fm.frames) > 0 {
+		fm.frames[len(fm.frames)-1].ProcessKey(&vtinput.InputEvent{Type: vtinput.FocusEventType, SetFocus: false})
+	}
+
 	fm.syncCurrentScreen()
 	fm.ActiveIdx = idx
 	fm.frames = fm.Screens[idx].Frames
 	fm.capturedFrame = fm.Screens[idx].CapturedFrame
+
+	// 2. Notify new screen it's gaining focus
+	if len(fm.frames) > 0 {
+		fm.frames[len(fm.frames)-1].ProcessKey(&vtinput.InputEvent{Type: vtinput.FocusEventType, SetFocus: true})
+	}
+
 	fm.Redraw()
 }
 
