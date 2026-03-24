@@ -404,8 +404,11 @@ func (fm *frameManager) Run() {
 					return
 				}
 
-				// 1. If Menu is Active, it has priority UNLESS a modal dialog is on top
-				if activeMenu != nil && activeMenu.Active && !topFrame.IsModal() {
+				// 1. If Menu is Active, it has priority.
+				// We allow it even if topFrame is modal, provided topFrame IS the menu itself
+				// or the frame that owns the menu.
+				isMenuRelated := topFrame.GetType() == TypeMenu || topFrame.GetMenuBar() == activeMenu
+				if activeMenu != nil && activeMenu.Active && (!topFrame.IsModal() || isMenuRelated) {
 					// Exception: if a VMenu is open, it MUST handle navigation keys
 					if fm.GetTopFrameType() == TypeMenu {
 						menuFrame := fm.frames[len(fm.frames)-1]
@@ -486,7 +489,9 @@ func (fm *frameManager) Run() {
 			// 3. Fallbacks (F9, Alt+Hotkey) if top frame didn't want the key
 			// 3. Fallbacks (F9, Alt+Hotkey) if top frame didn't want the key
 			if !handled && ev.Type == vtinput.KeyEventType && ev.KeyDown {
-				if activeMenu != nil && !activeMenu.Active && !topFrame.IsModal() {
+				// Allow F9 if not modal, OR if the modal frame itself has a menu
+				canActivateMenu := !topFrame.IsModal() || topFrame.GetMenuBar() != nil
+				if activeMenu != nil && !activeMenu.Active && canActivateMenu {
 					if ev.VirtualKeyCode == vtinput.VK_F9 {
 						activeMenu.Active = true
 						return

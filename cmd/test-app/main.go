@@ -27,12 +27,12 @@ func (v *localVFS) ReadDir(p string) ([]vtui.VFSItem, error) {
 	return items, nil
 }
 
-// DemoDialog wraps vtui.Dialog to showcase Turbo Vision-style command routing.
-type DemoDialog struct {
-	*vtui.Dialog
+// DemoWindow wraps vtui.Window to showcase Turbo Vision-style command routing.
+type DemoWindow struct {
+	*vtui.Window
 }
 
-func (d *DemoDialog) HandleCommand(cmd int, args any) bool {
+func (d *DemoWindow) HandleCommand(cmd int, args any) bool {
 	switch cmd {
 	case vtui.CmQuit:
 		vtui.FrameManager.Shutdown()
@@ -44,11 +44,11 @@ func (d *DemoDialog) HandleCommand(cmd int, args any) bool {
 		vtui.ShowMessage(" Action ", "Command 1 executed via HandleCommand!", []string{"&Ok"})
 		return true
 	}
-	// Fallback to default dialog behavior (e.g. CmClose, CmZoom)
-	return d.Dialog.HandleCommand(cmd, args)
+	// Fallback to default window behavior (e.g. CmClose, CmZoom)
+	return d.Window.HandleCommand(cmd, args)
 }
 
-func (d *DemoDialog) GetKeyLabels() *vtui.KeySet {
+func (d *DemoWindow) GetKeyLabels() *vtui.KeySet {
 	return &vtui.KeySet{
 		Normal: vtui.KeyBarLabels{
 			"Help", "Exit", "View", "Edit", "Copy", "Move", "MkDir", "Delete", "Menu", "Quit", "Plugin", "Screen",
@@ -105,13 +105,13 @@ func main() {
 	kb.SetVisible(true)
 	vtui.FrameManager.KeyBar = kb
 
-	// --- Comprehensive Dialog ---
-	baseDlg := vtui.NewDialog(0, 0, 63, 25, " vtui demo ")
-	baseDlg.ShowClose = true
-	baseDlg.Center(width, height)
+	// --- Comprehensive Window ---
+	baseWin := vtui.NewWindow(0, 0, 63, 25, " vtui demo ")
+	baseWin.ShowClose = true
+	baseWin.Center(width, height)
 
-	// Wrap the dialog to provide our custom HandleCommand logic
-	dlg := &DemoDialog{Dialog: baseDlg}
+	// Wrap the window to provide our custom HandleCommand logic
+	dlg := &DemoWindow{Window: baseWin}
 	x1, y1 := dlg.X1, dlg.Y1
 
 	// LEFT: Input & Options
