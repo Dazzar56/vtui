@@ -9,6 +9,8 @@ type BaseFrame struct {
 	Modal    bool
 	Number   int
 	OnResult func(int)
+	Busy     bool
+	AttentionSuppressed bool
 }
 
 func (bf *BaseFrame) SetExitCode(code int) {
@@ -20,7 +22,8 @@ func (bf *BaseFrame) SetExitCode(code int) {
 }
 
 func (bf *BaseFrame) IsDone() bool         { return bf.Done }
-func (bf *BaseFrame) IsBusy() bool         { return false }
+func (bf *BaseFrame) IsBusy() bool         { return bf.Busy }
+func (bf *BaseFrame) IsAttentionSuppressed() bool { return bf.AttentionSuppressed }
 func (bf *BaseFrame) IsModal() bool        { return bf.Modal }
 func (bf *BaseFrame) GetWindowNumber() int { return bf.Number }
 func (bf *BaseFrame) SetWindowNumber(n int) { bf.Number = n }

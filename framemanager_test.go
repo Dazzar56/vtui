@@ -9,10 +9,11 @@ import (
 
 type mockFrame struct {
 	ScreenObject
-	isModal        bool
-	isDone         bool
-	onProcessMouse func(e *vtinput.InputEvent) bool
-	onProcessKey   func(e *vtinput.InputEvent) bool
+	isModal             bool
+	isDone              bool
+	attentionSuppressed bool
+	onProcessMouse      func(e *vtinput.InputEvent) bool
+	onProcessKey        func(e *vtinput.InputEvent) bool
 }
 
 func newMockFrame(x, y, w, h int, modal bool) *mockFrame {
@@ -52,6 +53,7 @@ func (m *mockFrame) RequestFocus() bool                 { return true }
 func (m *mockFrame) Close()                             { m.SetExitCode(-1) }
 func (m *mockFrame) GetTitle() string                   { return "MockFrame" }
 func (m *mockFrame) GetProgress() int                   { return -1 }
+func (m *mockFrame) IsAttentionSuppressed() bool        { return m.attentionSuppressed }
 
 type busyFrame struct {
 	mockFrame
@@ -578,6 +580,82 @@ type modalOwnerFrame struct {
 }
 
 func (m *modalOwnerFrame) GetMenuBar() *MenuBar { return m.mb }
+func TestFrameManager_HeadlessTransparency(t *testing.T) {
+	fm := &frameManager{}
+	fm.Init(NewScreenBuf())
+
+	f := &mockFrame{}
+	fm.AddScreenHeadless(f)
+
+	idx := fm.ActiveIdx
+	s := fm.Screens[idx]
+
+	if !s.Transparent {
+		t.Error("AddScreenHeadless should create a transparent screen")
+	}
+
+	// Проверяем, что Desktop (Type 0) НЕ был добавлен
+	for _, frame := range s.Frames {
+		if frame.GetType() == TypeDesktop {
+			t.Error("Headless screen should not contain a Desktop frame")
+		}
+	}
+
+	if len(s.Frames) != 1 {
+		t.Errorf("Expected 1 frame in headless stack, got %d", len(s.Frames))
+	}
+}
+
+func TestFrameManager_NeedsAttention_Suppression(t *testing.T) {
+	fm := &frameManager{}
+	fm.Init(NewScreenBuf())
+
+	// Используем mockFrame, так как BaseFrame не реализует интерфейс Frame полностью
+	dlg := &mockFrame{isModal: true}
+	s := &AppScreen{Frames: []Frame{dlg}}
+
+	// 1. По умолчанию внимание требуется
+	if !s.NeedsAttention() {
+		t.Error("Modal dialog should require attention by default")
+	}
+
+	// 2. С подавлением — не требуется
+	dlg.attentionSuppressed = true
+	if s.NeedsAttention() {
+		t.Error("NeedsAttention should be false when attentionSuppressed is true")
+	}
+}
+
+func TestFrameManager_NoAutoCloseForHeadless(t *testing.T) {
+	fm := &frameManager{}
+	fm.Init(NewScreenBuf())
+
+	// Добавляем фоновый экран 0
+	fm.Push(NewDesktop())
+
+	// Создаем Headless экран 1 (в нем 1 фрейм, и это НЕ Desktop)
+	dlg := &mockFrame{isModal: true}
+	fm.AddScreenHeadless(dlg)
+
+	if len(fm.Screens) != 2 {
+		t.Fatalf("Expected 2 screens, got %d", len(fm.Screens))
+	}
+
+	// Выполняем очистку (раньше она бы удалила экран 1, т.к. там 1 фрейм)
+	fm.cleanupDoneFrames()
+
+	if len(fm.Screens) != 2 {
+		t.Error("cleanupDoneFrames erroneously closed a headless screen with a live dialog")
+	}
+
+	// А теперь помечаем диалог как Done
+	dlg.SetExitCode(0)
+	fm.cleanupDoneFrames()
+
+	if len(fm.Screens) != 1 {
+		t.Error("Screen was not closed after its last frame was marked Done")
+	}
+}
 
 func TestFrameManager_F9WorksForMenuOwningModal(t *testing.T) {
 	fm := &frameManager{}

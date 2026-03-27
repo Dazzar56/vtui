@@ -54,6 +54,7 @@ type Frame interface {
 type AppScreen struct {
 	Frames        []Frame
 	CapturedFrame Frame
+	Transparent   bool // Если true, под этим экраном будет рисоваться предыдущий
 }
 
 func (s *AppScreen) GetTitle() string {
@@ -77,8 +78,12 @@ func (s *AppScreen) GetProgress() int {
 func (s *AppScreen) NeedsAttention() bool {
 	if len(s.Frames) == 0 { return false }
 	top := s.Frames[len(s.Frames)-1]
-	// If the top frame is a Modal Dialog, it's waiting for user input
-	return top.IsModal() && top.GetType() != TypeMenu
+	// Проверяем флаг подавления внимания
+	suppressed := false
+	if bf, ok := top.(interface{ IsAttentionSuppressed() bool }); ok {
+		suppressed = bf.IsAttentionSuppressed()
+	}
+	return top.IsModal() && !suppressed && top.GetType() != TypeMenu
 }
 
 // frameManager manages multiple screens and the main application loop.
@@ -111,11 +116,22 @@ type frameManager struct {
 // FrameManager is the global instance of the frame manager.
 var FrameManager = &frameManager{}
 
-func (fm *frameManager) syncCurrentScreen() {
+func (fm *frameManager) SyncCurrentScreen() {
 	if len(fm.Screens) > 0 {
 		fm.Screens[fm.ActiveIdx].Frames = fm.frames
 		fm.Screens[fm.ActiveIdx].CapturedFrame = fm.capturedFrame
+		DebugLog("FM: SyncCurrentScreen() - Screen %d has %d frames", fm.ActiveIdx, len(fm.frames))
 	}
+}
+
+func (fm *frameManager) GetActiveFrames(sIdx int) []Frame {
+	if sIdx == fm.ActiveIdx {
+		return fm.frames
+	}
+	if sIdx >= 0 && sIdx < len(fm.Screens) {
+		return fm.Screens[sIdx].Frames
+	}
+	return nil
 }
 
 func (fm *frameManager) SwitchScreen(idx int) {
@@ -128,7 +144,7 @@ func (fm *frameManager) SwitchScreen(idx int) {
 		fm.frames[len(fm.frames)-1].ProcessKey(&vtinput.InputEvent{Type: vtinput.FocusEventType, SetFocus: false})
 	}
 
-	fm.syncCurrentScreen()
+	fm.SyncCurrentScreen()
 	fm.ActiveIdx = idx
 	fm.frames = fm.Screens[idx].Frames
 	fm.capturedFrame = fm.Screens[idx].CapturedFrame
@@ -142,15 +158,37 @@ func (fm *frameManager) SwitchScreen(idx int) {
 }
 
 func (fm *frameManager) AddScreen(f Frame) {
-	fm.syncCurrentScreen()
+	// If we are already shutting down or in an inconsistent state, bail out.
+	if fm.Screens == nil { return }
+
+	fm.SyncCurrentScreen()
 	newScreen := &AppScreen{Frames: make([]Frame, 0, 10)}
 	newScreen.Frames = append(newScreen.Frames, NewDesktop())
 	newScreen.Frames = append(newScreen.Frames, f)
 	fm.Screens = append(fm.Screens, newScreen)
 	fm.SwitchScreen(len(fm.Screens) - 1)
+	fm.Redraw()
 }
+
+func (fm *frameManager) AddScreenHeadless(f Frame) {
+	if fm.Screens == nil { return }
+	fm.SyncCurrentScreen()
+	// Создаем абсолютно чистый стэк без Desktop
+	newScreen := &AppScreen{
+		Frames:      make([]Frame, 0, 5),
+		Transparent: true,
+	}
+	newScreen.Frames = append(newScreen.Frames, f)
+	fm.Screens = append(fm.Screens, newScreen)
+	fm.ActiveIdx = len(fm.Screens) - 1
+	fm.frames = newScreen.Frames
+	fm.capturedFrame = nil
+	f.ProcessKey(&vtinput.InputEvent{Type: vtinput.FocusEventType, SetFocus: true})
+	fm.Redraw()
+}
+
 func (fm *frameManager) AddScreenBackground(f Frame) {
-	fm.syncCurrentScreen()
+	fm.SyncCurrentScreen()
 	newScreen := &AppScreen{Frames: make([]Frame, 0, 10)}
 	newScreen.Frames = append(newScreen.Frames, NewDesktop())
 	newScreen.Frames = append(newScreen.Frames, f)
@@ -235,13 +273,13 @@ func (fm *frameManager) Push(f Frame) {
 	}
 
 	fm.frames = append(fm.frames, f)
-	fm.syncCurrentScreen() // Ensure the Screen object is aware of the new frame immediately
+	fm.SyncCurrentScreen() // Ensure the Screen object is aware of the new frame immediately
 	f.ProcessKey(&vtinput.InputEvent{Type: vtinput.FocusEventType, SetFocus: true})
 }
 
 // PushToFrameScreen adds a frame to the screen that contains the anchor frame.
 func (fm *frameManager) PushToFrameScreen(anchor Frame, f Frame) {
-	fm.syncCurrentScreen()
+	fm.SyncCurrentScreen()
 	for i, s := range fm.Screens {
 		for _, existing := range s.Frames {
 			if existing == anchor {
@@ -341,7 +379,7 @@ func (fm *frameManager) RemoveFrame(f Frame) {
 				fm.capturedFrame = nil
 			}
 			fm.frames = append(fm.frames[:i], fm.frames[i+1:]...)
-			fm.syncCurrentScreen() // Critical: update the slice header in Screens array
+			fm.SyncCurrentScreen() // Critical: update the slice header in Screens array
 			if isTop && len(fm.frames) > 0 {
 				fm.frames[len(fm.frames)-1].ProcessKey(&vtinput.InputEvent{Type: vtinput.FocusEventType, SetFocus: true})
 			}
@@ -493,7 +531,7 @@ func (fm *frameManager) getScreenInfo(idx int, maxTitleLen int) (prefix, title, 
 }
 
 func (fm *frameManager) showScreensMenu() {
-	fm.syncCurrentScreen()
+	fm.SyncCurrentScreen()
 	menu := NewVMenu(" Screens ")
 
 	scrW := fm.GetScreenSize()
@@ -525,18 +563,31 @@ func (fm *frameManager) showScreensMenu() {
 }
 
 func (fm *frameManager) cleanupDoneFrames() {
-	fm.syncCurrentScreen()
+	fm.SyncCurrentScreen()
 
 	for sIdx := len(fm.Screens) - 1; sIdx >= 0; sIdx-- {
 		s := fm.Screens[sIdx]
+		wasModified := false
 		for i := len(s.Frames) - 1; i >= 0; i-- {
 			if s.Frames[i].IsDone() {
 				if s.CapturedFrame == s.Frames[i] { s.CapturedFrame = nil }
 				s.Frames = append(s.Frames[:i], s.Frames[i+1:]...)
+				wasModified = true
+				DebugLog("FM: Frame removed from Screen %d. Remaining: %d", sIdx, len(s.Frames))
 			}
 		}
-		// If screen is dead (only Desktop left) and it's not the last screen
-		if len(s.Frames) <= 1 && len(fm.Screens) > 1 {
+
+		// Экран считается мертвым, если:
+		// 1. В нем вообще нет фреймов.
+		// 2. В нем остался только Desktop, и МЫ ТОЛЬКО ЧТО закрыли в нем
+		//    последнее окно (wasModified), и это НЕ единственный экран.
+		isDead := len(s.Frames) == 0
+		if !isDead && wasModified && len(s.Frames) == 1 && s.Frames[0].GetType() == TypeDesktop && len(fm.Screens) > 1 {
+			isDead = true
+		}
+
+		if isDead && len(fm.Screens) > 1 {
+			DebugLog("FM: Closing dead Screen %d (Active was %d)", sIdx, fm.ActiveIdx)
 			fm.Screens = append(fm.Screens[:sIdx], fm.Screens[sIdx+1:]...)
 			if fm.ActiveIdx >= sIdx && fm.ActiveIdx > 0 {
 				fm.ActiveIdx--
@@ -545,6 +596,9 @@ func (fm *frameManager) cleanupDoneFrames() {
 	}
 
 	if len(fm.Screens) > 0 {
+		if fm.ActiveIdx >= len(fm.Screens) {
+			fm.ActiveIdx = len(fm.Screens) - 1
+		}
 		fm.frames = fm.Screens[fm.ActiveIdx].Frames
 		fm.capturedFrame = fm.Screens[fm.ActiveIdx].CapturedFrame
 	} else {
@@ -696,17 +750,26 @@ func (fm *frameManager) Run(reader *vtinput.Reader) {
 			// Desktop and TerminalView will explicitly disable it during their render.
 			fm.scr.SetOverlayMode(true)
 
-			// Render frames from bottom to top (Painter's algorithm)
-			for i, frame := range fm.frames {
-				if frame.HasShadow() {
-					x1, y1, x2, y2 := frame.GetPosition()
-					// Fullscreen check
-					if i > 0 && (x1 > 0 || y1 > 0 || x2 < fm.scr.width-1 || y2 < fm.scr.height-1) {
-						fm.scr.ApplyShadow(x1+2, y2+1, x2+2, y2+1)
-						fm.scr.ApplyShadow(x2+1, y1+1, x2+2, y2)
+			// 1. Находим "базовый" экран (первый непрозрачный, идя назад от активного)
+			baseIdx := fm.ActiveIdx
+			for baseIdx > 0 && fm.Screens[baseIdx].Transparent {
+				baseIdx--
+			}
+
+			// 2. Отрисовываем стэк экранов от базового до текущего
+			for sIdx := baseIdx; sIdx <= fm.ActiveIdx; sIdx++ {
+				frames := fm.GetActiveFrames(sIdx)
+				for _, frame := range frames {
+					if frame.HasShadow() {
+						x1, y1, x2, y2 := frame.GetPosition()
+						isFullScreen := x1 <= 0 && y1 <= 0 && x2 >= fm.scr.width-1 && y2 >= fm.scr.height-1
+						if !isFullScreen {
+							fm.scr.ApplyShadow(x1+2, y2+1, x2+2, y2+1)
+							fm.scr.ApplyShadow(x2+1, y1+1, x2+2, y2)
+						}
 					}
+					frame.Show(fm.scr)
 				}
-				frame.Show(fm.scr)
 			}
 
 			fm.renderSwitcher(fm.scr)

@@ -41,3 +41,21 @@ func TestParseAmpersandString(t *testing.T) {
 		t.Errorf("Hotkey pos mismatch: got %d", pos)
 	}
 }
+
+func TestParseAmpersandString_DoubleAmpersand(t *testing.T) {
+	// && должен превращаться в одиночный &, не создавая хоткея
+	clean, hk, pos := ParseAmpersandString("Fish && &Chips")
+
+	if clean != "Fish & Chips" {
+		t.Errorf("Double ampersand failed: expected 'Fish & Chips', got %q", clean)
+	}
+
+	if hk != 'c' {
+		t.Errorf("Expected hotkey 'c', got %c", hk)
+	}
+
+	// 'F','i','s','h',' ','&',' ','C' -> индекс 'C' это 7
+	if pos != 7 {
+		t.Errorf("Wrong hotkey position: expected 7, got %d", pos)
+	}
+}
