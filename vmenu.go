@@ -11,7 +11,8 @@ import (
 // MenuItem represents a single menu item.
 type MenuItem struct {
 	Text      string
-	Command   int // TV-style Command ID to emit when selected
+	Shortcut  string // Optional right-aligned hotkey hint (e.g. "F3")
+	Command   int    // TV-style Command ID to emit when selected
 	UserData  any
 	Separator bool
 }
@@ -339,17 +340,26 @@ func (m *VMenu) DisplayObject(scr *ScreenBuf) {
 		} else {
 			fullItemText := " " + item.Text
 			clean, _, _ := ParseAmpersandString(fullItemText)
-			vLen := runewidth.StringWidth(clean)
-			padding := interiorWidth - vLen
+			vLenText := runewidth.StringWidth(clean)
+
+			shortcutText := ""
+			vLenShortcut := 0
+			if item.Shortcut != "" {
+				shortcutText = item.Shortcut + " "
+				vLenShortcut = runewidth.StringWidth(shortcutText)
+			}
+
+			padding := interiorWidth - vLenText - vLenShortcut
 			if padding > 0 {
 				fullItemText += strings.Repeat(" ", padding)
 			}
-			
+			fullItemText += shortcutText
+
 			finalHighAttr := colHigh
 			if itemIdx == m.selectPos {
 				finalHighAttr = colSelHigh
 			}
-			
+
 			cells, _ := StringToCharInfoHighlighted(fullItemText, attr, finalHighAttr)
 			scr.Write(m.X1+1, currY, cells)
 		}

@@ -109,8 +109,24 @@ func (mb *MenuBar) ActivateSubMenu(index int) {
 	}
 
 	x := mb.GetItemX(index)
-	// Default positioning and width for submenus
-	m.SetPosition(x, mb.Y1+1, x+24, mb.Y1+1+m.GetItemCount()+1)
+
+	// Dynamically calculate required width for the submenu
+	maxWidth := 24
+	for _, itm := range items {
+		if !itm.Separator {
+			clean, _, _ := ParseAmpersandString(" " + itm.Text)
+			w := runewidth.StringWidth(clean)
+			if itm.Shortcut != "" {
+				w += runewidth.StringWidth(itm.Shortcut + " ")
+			}
+			w += 4 // Minimum visual padding between text and shortcut/border
+			if w > maxWidth {
+				maxWidth = w
+			}
+		}
+	}
+
+	m.SetPosition(x, mb.Y1+1, x+maxWidth-1, mb.Y1+1+m.GetItemCount()+1)
 
 	m.OnLeft = func() {
 		newIdx := mb.SelectPos - 1
