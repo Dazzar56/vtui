@@ -288,8 +288,8 @@ func (t *Table) ProcessMouse(e *vtinput.InputEvent) bool {
 		return true
 	}
 
-	if e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
-		if t.ShowScrollBar && len(t.Rows) > t.ViewHeight && int(e.MouseX) == t.X2 {
+	if e.ButtonState != 0 && e.KeyDown {
+		if e.ButtonState == vtinput.FromLeft1stButtonPressed && t.ShowScrollBar && len(t.Rows) > t.ViewHeight && int(e.MouseX) == t.X2 {
 			return t.ScrollBar.ProcessMouse(e)
 		}
 		clickIdx := t.TopPos + (int(e.MouseY) - t.Y1 - headerOffset)
@@ -309,6 +309,7 @@ func (t *Table) ProcessMouse(e *vtinput.InputEvent) bool {
 			return true
 		}
 	}
+	return false
 	return false
 }
 

@@ -15,6 +15,7 @@ type HelpView struct {
 	current     *HelpTopic
 	scrollTop   int
 	selectedIdx int // Index of selected link in current.Links
+	scrollBar   *ScrollBar
 }
 
 func NewHelpView(engine *HelpEngine, startTopic string) *HelpView {
@@ -23,6 +24,8 @@ func NewHelpView(engine *HelpEngine, startTopic string) *HelpView {
 		engine:     engine,
 		selectedIdx: -1,
 	}
+	hv.scrollBar = NewScrollBar(0, 0, 0)
+	hv.scrollBar.OnScroll = func(v int) { hv.scrollTop = v }
 	hv.Modal = true
 	hv.ShowClose = true
 	hv.SwitchTopic(startTopic)
@@ -84,6 +87,10 @@ func (hv *HelpView) Show(scr *ScreenBuf) {
 	width := x2 - x1 + 1
 	height := y2 - y1 + 1
 
+	if hv.scrollBar != nil {
+		width--
+	}
+
 	// Fill background
 	scr.FillRect(x1, y1, x2, y2, ' ', Palette[ColHelpText])
 
@@ -99,6 +106,15 @@ func (hv *HelpView) Show(scr *ScreenBuf) {
 		lineIdx := i + hv.scrollTop + hv.current.StickyRows
 		if lineIdx >= len(hv.current.Lines) { break }
 		hv.renderLine(scr, x1, contentY+i, hv.current.Lines[lineIdx], width, lineIdx)
+	}
+
+	if hv.scrollBar != nil {
+		totalScrollable := len(hv.current.Lines) - hv.current.StickyRows
+		if totalScrollable > contentH {
+			hv.scrollBar.SetParams(hv.scrollTop, 0, totalScrollable-contentH)
+			hv.scrollBar.SetPosition(hv.X2-1, hv.Y1+1+hv.current.StickyRows, hv.X2-1, hv.Y2-1)
+			hv.scrollBar.Show(scr)
+		}
 	}
 }
 
@@ -166,9 +182,11 @@ func (hv *HelpView) renderLine(scr *ScreenBuf, x, y int, line string, width int,
 }
 
 func (hv *HelpView) ProcessKey(e *vtinput.InputEvent) bool {
-	if !e.KeyDown {
-		// Pass Focus events to BaseWindow
+	if e.Type == vtinput.FocusEventType {
 		return hv.BaseWindow.ProcessKey(e)
+	}
+	if !e.KeyDown {
+		return false
 	}
 
 	// 1. Handle Help-specific navigation BEFORE BaseWindow focus cycling
@@ -251,3 +269,30 @@ func (hv *HelpView) ensureLinkVisible() {
 }
 
 func (hv *HelpView) GetType() FrameType { return TypeUser }
+
+func (hv *HelpView) ProcessMouse(e *vtinput.InputEvent) bool {
+	if e.Type != vtinput.MouseEventType {
+		return false
+	}
+
+	if hv.scrollBar != nil && int(e.MouseX) == hv.scrollBar.X1 {
+		contentH := (hv.Y2 - hv.Y1 + 1) - 2 - hv.current.StickyRows
+		totalScrollable := len(hv.current.Lines) - hv.current.StickyRows
+		if totalScrollable > contentH {
+			if hv.scrollBar.ProcessMouse(e) {
+				return true
+			}
+		}
+	}
+
+	if e.WheelDirection != 0 {
+		if e.WheelDirection > 0 {
+			hv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_UP})
+		} else {
+			hv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
+		}
+		return true
+	}
+
+	return hv.BaseWindow.ProcessMouse(e)
+}
