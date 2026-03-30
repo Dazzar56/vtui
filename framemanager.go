@@ -983,6 +983,12 @@ func (fm *frameManager) Run(reader *vtinput.Reader) {
 					} else {
 						DebugLog("FM: F9 accepted, activating menu")
 						activeMenu.Active = true
+						if len(activeMenu.Items) > 0 {
+							if activeMenu.SelectPos < 0 || activeMenu.SelectPos >= len(activeMenu.Items) {
+								activeMenu.SelectPos = 0
+							}
+							activeMenu.ActivateSubMenu(activeMenu.SelectPos)
+						}
 						return
 					}
 				}

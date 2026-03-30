@@ -31,6 +31,21 @@ func (m mockSelectableRow) GetCellText(col int) string {
 func (m mockSelectableRow) IsSelected() bool {
 	return m.selected
 }
+type mockMultiColSelectableRow struct {
+	col1     string
+	col2     string
+	selected [2]bool
+}
+
+func (m mockMultiColSelectableRow) GetCellText(col int) string {
+	if col == 0 { return m.col1 }
+	return m.col2
+}
+
+func (m mockMultiColSelectableRow) IsColSelected(col int) bool {
+	if col >= 0 && col < 2 { return m.selected[col] }
+	return false
+}
 
 func TestTable_SelectableRowRendering(t *testing.T) {
 	SetDefaultPalette()
@@ -62,6 +77,70 @@ func TestTable_SelectableRowRendering(t *testing.T) {
 
 	// row2 (selected, cursor) -> ColorItemSelectCursorIdx
 	checkCell(t, scr, 0, 2, 'S', Palette[ColDialogHighlightSelectedButton])
+}
+func TestTable_CellSelection(t *testing.T) {
+	SetDefaultPalette()
+	scr := NewScreenBuf()
+	scr.AllocBuf(20, 5)
+
+	cols := []TableColumn{
+		{Title: "C1", Width: 5, Alignment: AlignLeft},
+		{Title: "C2", Width: 5, Alignment: AlignLeft},
+	}
+	tbl := NewTable(0, 0, 11, 3, cols)
+	tbl.CellSelection = true
+	tbl.ColorItemSelectTextIdx = ColDialogHighlightText
+	tbl.ColorItemSelectCursorIdx = ColDialogHighlightSelectedButton
+
+	row1 := mockMultiColSelectableRow{"L1", "R1", [2]bool{false, true}}
+	row2 := mockMultiColSelectableRow{"L2", "R2", [2]bool{true, false}}
+	tbl.SetRows([]TableRow{row1, row2})
+
+	tbl.SetFocus(true)
+	tbl.SelectPos = 0
+	tbl.SelectCol = 0
+	tbl.Show(scr)
+
+	// row1 col1 (unselected, cursor) -> ColTableSelectedText
+	checkCell(t, scr, 0, 1, 'L', Palette[ColTableSelectedText])
+	// row1 col2 (selected, no cursor) -> ColorItemSelectTextIdx
+	checkCell(t, scr, 6, 1, 'R', Palette[ColDialogHighlightText])
+
+	// Navigate right
+	tbl.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT})
+
+	if tbl.SelectCol != 1 || tbl.SelectPos != 0 {
+		t.Errorf("Right navigation failed: pos=%d, col=%d", tbl.SelectPos, tbl.SelectCol)
+	}
+
+	tbl.Show(scr)
+	// row1 col2 (selected, cursor) -> ColorItemSelectCursorIdx
+	checkCell(t, scr, 6, 1, 'R', Palette[ColDialogHighlightSelectedButton])
+
+	// Navigate right across row boundary
+	tbl.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT})
+
+	if tbl.SelectCol != 0 || tbl.SelectPos != 1 {
+		t.Errorf("Right wrapping navigation failed: pos=%d, col=%d", tbl.SelectPos, tbl.SelectCol)
+	}
+
+	// Navigate left across row boundary
+	tbl.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_LEFT})
+
+	if tbl.SelectCol != 1 || tbl.SelectPos != 0 {
+		t.Errorf("Left wrapping navigation failed: pos=%d, col=%d", tbl.SelectPos, tbl.SelectCol)
+	}
+}
+func TestTable_EmptyGeometry(t *testing.T) {
+	// Ensure table can be sized before data is provided
+	tbl := NewTable(0, 0, 10, 10, []TableColumn{{Title: "Test", Width: 5}})
+
+	tbl.SetPosition(5, 5, 25, 15)
+
+	x1, y1, x2, y2 := tbl.GetPosition()
+	if x1 != 5 || y1 != 5 || x2 != 25 || y2 != 15 {
+		t.Errorf("Table failed to update bounds when empty: got (%d,%d)-(%d,%d)", x1, y1, x2, y2)
+	}
 }
 
 func TestTable_Navigation(t *testing.T) {

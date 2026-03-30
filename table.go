@@ -32,6 +32,10 @@ type TableRow interface {
 type SelectableRow interface {
 	IsSelected() bool
 }
+// MultiColSelectableRow is an interface for multi-column rows where selection is cell-specific.
+type MultiColSelectableRow interface {
+	IsColSelected(col int) bool
+}
 
 // Table is a generic control for displaying tabular data.
 type Table struct {
@@ -40,6 +44,8 @@ type Table struct {
 	Rows           []TableRow
 	SelectPos      int
 	TopPos         int
+	SelectCol      int
+	CellSelection  bool
 	ShowHeader     bool
 	ShowSeparators bool
 	ShowScrollBar  bool
@@ -110,31 +116,9 @@ func (t *Table) DisplayObject(scr *ScreenBuf) {
 		currY := t.Y1 + yOffset + i
 
 		if rowIdx < len(t.Rows) {
-			isSelected := false
-			if selRow, ok := t.Rows[rowIdx].(SelectableRow); ok {
-				isSelected = selRow.IsSelected()
-			}
-
+			//isSelected := false
+			// Calculate standard attribute as a fallback (passed into drawRow)
 			attr := Palette[t.ColorTextIdx]
-			if isSelected {
-				attr = Palette[t.ColorItemSelectTextIdx]
-			}
-
-			if rowIdx == t.SelectPos {
-				if t.IsFocused() {
-					if isSelected {
-						attr = Palette[t.ColorItemSelectCursorIdx]
-					} else {
-						attr = Palette[t.ColorSelectedTextIdx]
-					}
-				} else {
-					if isSelected {
-						attr = Palette[t.ColorItemSelectTextIdx]
-					} else {
-						attr = Palette[t.ColorTextIdx]
-					}
-				}
-			}
 			t.drawRow(scr, currY, rowIdx, attr)
 		} else {
 			// Fill empty space with background color
@@ -182,9 +166,43 @@ func (t *Table) drawRow(scr *ScreenBuf, y int, rowIdx int, attr uint64) {
 			text = t.Rows[rowIdx].GetCellText(colIdx)
 		}
 
+		isSelected := false
+		if rowIdx != -1 && rowIdx < len(t.Rows) {
+			if mcsr, ok := t.Rows[rowIdx].(MultiColSelectableRow); ok {
+				isSelected = mcsr.IsColSelected(colIdx)
+			} else if selRow, ok := t.Rows[rowIdx].(SelectableRow); ok {
+				isSelected = selRow.IsSelected()
+			}
+		}
+
+		isCursorHere := rowIdx == t.SelectPos && (!t.CellSelection || colIdx == t.SelectCol)
+
+		cellAttr := attr
+		if rowIdx != -1 {
+			cellAttr = Palette[t.ColorTextIdx]
+			if isSelected {
+				cellAttr = Palette[t.ColorItemSelectTextIdx]
+			}
+			if isCursorHere {
+				if t.IsFocused() {
+					if isSelected {
+						cellAttr = Palette[t.ColorItemSelectCursorIdx]
+					} else {
+						cellAttr = Palette[t.ColorSelectedTextIdx]
+					}
+				} else {
+					if isSelected {
+						cellAttr = Palette[t.ColorItemSelectTextIdx]
+					} else {
+						cellAttr = Palette[t.ColorTextIdx]
+					}
+				}
+			}
+		}
+
 		// Prepare cell text with alignment
 		cellText := t.formatCell(text, col.Width, col.Alignment)
-		scr.Write(currX, y, StringToCharInfo(cellText, attr))
+		scr.Write(currX, y, StringToCharInfo(cellText, cellAttr))
 		currX += col.Width
 
 		// Skip separator space if not the last column
@@ -235,8 +253,31 @@ func (t *Table) ProcessKey(e *vtinput.InputEvent) bool {
 	if !e.KeyDown {
 		return false
 	}
-
 	switch e.VirtualKeyCode {
+	case vtinput.VK_LEFT:
+		if t.CellSelection {
+			if t.SelectCol > 0 {
+				t.SelectCol--
+				return true
+			} else if t.SelectPos > 0 {
+				t.SelectPos--
+				t.SelectCol = len(t.Columns) - 1
+				t.EnsureVisible()
+				return true
+			}
+		}
+	case vtinput.VK_RIGHT:
+		if t.CellSelection {
+			if t.SelectCol < len(t.Columns)-1 {
+				t.SelectCol++
+				return true
+			} else if t.SelectPos < len(t.Rows)-1 {
+				t.SelectPos++
+				t.SelectCol = 0
+				t.EnsureVisible()
+				return true
+			}
+		}
 	case vtinput.VK_UP:
 		if t.SelectPos > 0 {
 			t.SelectPos--
@@ -356,9 +397,21 @@ func (t *Table) ProcessMouse(e *vtinput.InputEvent) bool {
 
 	if e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
 		my := int(e.MouseY)
+		mx := int(e.MouseX)
 		clickIdx := t.TopPos + (my - t.Y1 - headerOffset)
 		if my >= t.Y1+headerOffset && my <= t.Y2 && clickIdx >= 0 && clickIdx < len(t.Rows) {
 			t.SelectPos = clickIdx
+			if t.CellSelection {
+				currX := t.X1
+				for i, col := range t.Columns {
+					if mx >= currX && mx < currX+col.Width {
+						t.SelectCol = i
+						break
+					}
+					currX += col.Width
+					if i < len(t.Columns)-1 { currX++ }
+				}
+			}
 			return true
 		}
 	}

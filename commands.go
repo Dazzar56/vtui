@@ -27,4 +27,8 @@ const (
 	CmSearch = 105
 	CmBackground = 106
 	CmMkDir      = 107
+	CmLeftMedium    = 200
+	CmLeftDetailed  = 201
+	CmRightMedium   = 202
+	CmRightDetailed = 203
 )
