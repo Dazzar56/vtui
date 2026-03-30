@@ -191,52 +191,43 @@ func (bw *BaseWindow) ToggleZoom() {
 }
 
 func (bw *BaseWindow) ProcessMouse(e *vtinput.InputEvent) bool {
+	// 1. Сначала пробуем обработать клик элементами внутри окна
+	if bw.rootGroup.ProcessMouse(e) {
+		return true
+	}
+	// 2. Если элементы не обработали, пробуем операции с самим окном
+	return bw.handleWindowOperations(e)
+}
+
+func (bw *BaseWindow) handleWindowOperations(e *vtinput.InputEvent) bool {
 	mx, my := int(e.MouseX), int(e.MouseY)
 
 	if bw.isDragging {
-		if !e.KeyDown && e.ButtonState == 0 {
+		if e.ButtonState == 0 {
 			bw.isDragging = false
-			return true
-		}
-		dx := mx - bw.dragOffX
-		dy := my - bw.dragOffY
-		if dx != bw.X1 || dy != bw.Y1 {
-			bw.MoveRelative(dx-bw.X1, dy-bw.Y1)
+		} else {
+			bw.MoveRelative(mx-bw.dragOffX-bw.X1, my-bw.dragOffY-bw.Y1)
 		}
 		return true
 	}
 
 	if bw.isResizing {
-		if !e.KeyDown && e.ButtonState == 0 {
+		if e.ButtonState == 0 {
 			bw.isResizing = false
-			return true
+		} else {
+			bw.ChangeSize(mx-bw.X1+1, my-bw.Y1+1)
 		}
-		newW := mx - bw.X1 + 1
-		newH := my - bw.Y1 + 1
-		if newW < bw.MinW {
-			newW = bw.MinW
-		}
-		if newH < bw.MinH {
-			newH = bw.MinH
-		}
-		bw.ChangeSize(newW, newH)
-		return true
-	}
-
-	// Delegate to root group for hit-testing children
-	if bw.rootGroup.ProcessMouse(e) {
 		return true
 	}
 
 	if e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
+		// Border clicks
 		if bw.ShowClose && my == bw.Y1 && mx >= bw.X2-4 && mx <= bw.X2-2 {
 			bw.Close()
 			return true
 		}
 		offset := 4
-		if bw.ShowClose {
-			offset += 3
-		}
+		if bw.ShowClose { offset += 3 }
 		if bw.ShowZoom && my == bw.Y1 && mx >= bw.X2-offset && mx <= bw.X2-offset+2 {
 			bw.ToggleZoom()
 			return true
@@ -247,8 +238,7 @@ func (bw *BaseWindow) ProcessMouse(e *vtinput.InputEvent) bool {
 		}
 		if mx >= bw.X1 && mx <= bw.X2 && my >= bw.Y1 && my <= bw.Y2 {
 			bw.isDragging = true
-			bw.dragOffX = mx - bw.X1
-			bw.dragOffY = my - bw.Y1
+			bw.dragOffX, bw.dragOffY = mx-bw.X1, my-bw.Y1
 			return true
 		}
 	}
