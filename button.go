@@ -26,7 +26,8 @@ func NewButton(x, y int, text string) *Button {
 }
 
 func (b *Button) Show(scr *ScreenBuf) {
-	b.SafeRender(scr, b.DisplayObject)
+	b.ScreenObject.Show(scr)
+	b.DisplayObject(scr)
 }
 
 func (b *Button) DisplayObject(scr *ScreenBuf) {
