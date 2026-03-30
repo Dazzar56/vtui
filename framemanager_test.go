@@ -426,15 +426,35 @@ func TestFrameManager_Broadcast(t *testing.T) {
 	}
 }
 
-func TestFrameManager_BroadcastWithItems(t *testing.T) {
+func TestFrameManager_Broadcast_RedrawTrigger(t *testing.T) {
 	fm := &frameManager{}
 	fm.Init(NewScreenBuf())
+	
+	f := &cmdMockFrame{onCmd: func(cmd int, args any) bool { return true }}
+	fm.Push(f)
 
-	//win := NewWindow(0,0,10,10, "BroadcastTarget")
+	// Clear redraw channel
+	select { case <-fm.RedrawChan: default: }
 
-	//itemHandled := false
-	//edit := NewEdit(1,1,5, "")
-	// Мы еще не реализовали HandleBroadcast в Edit, сделаем это через Id или кастомный тип для теста
+	fm.Broadcast(123, nil)
+
+	select {
+	case <-fm.RedrawChan:
+		// Success
+	default:
+		t.Error("Broadcast should trigger Redraw if handled")
+	}
+}
+
+func TestFrameManager_Broadcast_Shutdown(t *testing.T) {
+	fm := &frameManager{}
+	fm.Screens = nil // Simulate shutdown
+	
+	// Should not panic
+	res := fm.Broadcast(1, nil)
+	if res {
+		t.Error("Broadcast should return false when manager is shut down")
+	}
 }
 
 func TestFrameManager_CommandBubbling(t *testing.T) {

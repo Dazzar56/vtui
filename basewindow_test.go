@@ -151,3 +151,45 @@ func TestBaseWindow_DataMapping_EdgeCases(t *testing.T) {
 	missing := MissingIdStruct{UnknownField: "val"}
 	bw.SetData(missing) // Ничего не должно произойти
 }
+
+type broadcastMockElement struct {
+	ScreenObject
+	handled bool
+}
+
+func (m *broadcastMockElement) HandleBroadcast(cmd int, args any) bool {
+	if cmd == 42 {
+		m.handled = true
+		return true
+	}
+	return false
+}
+
+// Implement remaining UIElement methods with stubs
+func (m *broadcastMockElement) GetPosition() (int, int, int, int) { return 0,0,0,0 }
+func (m *broadcastMockElement) SetPosition(x1, y1, x2, y2 int) {}
+func (m *broadcastMockElement) GetGrowMode() GrowMode { return 0 }
+func (m *broadcastMockElement) Show(scr *ScreenBuf) {}
+func (m *broadcastMockElement) Hide(scr *ScreenBuf) {}
+func (m *broadcastMockElement) GetHotkey() rune { return 0 }
+func (m *broadcastMockElement) GetHelp() string { return "" }
+func (m *broadcastMockElement) ProcessKey(e *vtinput.InputEvent) bool { return false }
+func (m *broadcastMockElement) ProcessMouse(e *vtinput.InputEvent) bool { return false }
+func (m *broadcastMockElement) HandleCommand(cmd int, args any) bool { return false }
+
+func TestBaseWindow_HandleBroadcast_Propagation(t *testing.T) {
+	bw := NewBaseWindow(0, 0, 10, 10, "Test")
+	el1 := &broadcastMockElement{}
+	el2 := &broadcastMockElement{}
+	bw.AddItem(el1)
+	bw.AddItem(el2)
+
+	res := bw.HandleBroadcast(42, nil)
+
+	if !res {
+		t.Error("BaseWindow should return true if items handled the broadcast")
+	}
+	if !el1.handled || !el2.handled {
+		t.Error("Broadcast was not propagated to all items")
+	}
+}
