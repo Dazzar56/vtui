@@ -267,6 +267,24 @@ func TestMenuBar_ProcessMouse(t *testing.T) {
 		t.Error("MenuBar should become active and select correct item")
 	}
 }
+func TestMenuBar_MouseEdgeCases(t *testing.T) {
+	mb := NewMenuBar([]string{"A"})
+	mb.SetPosition(0, 0, 10, 0)
+
+	// Click outside on Y axis (Y=1)
+	handled := mb.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: true,
+		ButtonState: vtinput.FromLeft1stButtonPressed, MouseX: 0, MouseY: 1,
+	})
+	if handled { t.Error("MenuBar should ignore out of bounds Y clicks") }
+
+	// Click outside on X axis (X=20)
+	handled = mb.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: true,
+		ButtonState: vtinput.FromLeft1stButtonPressed, MouseX: 20, MouseY: 0,
+	})
+	if handled { t.Error("MenuBar should ignore out of bounds X clicks") }
+}
 
 func TestVMenu_Callbacks(t *testing.T) {
 	m := NewVMenu("Test")

@@ -152,3 +152,80 @@ func TestTreeView_Rendering(t *testing.T) {
 	checkCell(t, scr, 4, 2, '[', Palette[ColTableText])
 	checkCell(t, scr, 5, 2, '-', Palette[ColTableText])
 }
+
+func TestTreeView_FullCoverage(t *testing.T) {
+	SetDefaultPalette()
+	scr := NewScreenBuf()
+	scr.AllocBuf(30, 10)
+
+	// 1. Parent() check
+	root := createTestTree()
+	if root.Children[0].Parent() != root {
+		t.Error("TreeNode.Parent() failed")
+	}
+
+	// 2. Empty Tree rendering & input
+	tvEmpty := NewTreeView(0, 0, 10, 10, nil)
+	tvEmpty.Show(scr) // Should not panic, renders background
+	if tvEmpty.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN}) {
+		t.Error("Empty tree should not process keys")
+	}
+	if tvEmpty.ProcessMouse(&vtinput.InputEvent{Type: vtinput.MouseEventType, KeyDown: true, ButtonState: 1}) {
+		t.Error("Empty tree should not process mouse")
+	}
+
+	// 3. ShowRoot = false
+	tvNoRoot := NewTreeView(0, 0, 10, 10, root)
+	tvNoRoot.ShowRoot = false
+	tvNoRoot.Flatten()
+	if len(tvNoRoot.flatNodes) == 0 || tvNoRoot.flatNodes[0].node != root.Children[0] {
+		t.Error("ShowRoot = false flattening failed")
+	}
+
+	// 4. Truncation & ScrollBar (Render branches)
+	// Create a very narrow tree to force truncation (width 6, height 3)
+	tvTrunc := NewTreeView(0, 0, 5, 2, root)
+	tvTrunc.Show(scr)
+
+	// 5. Navigation: PgUp, PgDn, Home, End
+	// Height 3, Nodes = 4 (Root, Child1, Child2, Leaf2.1). So it needs to scroll to see the last item.
+	tvNav := NewTreeView(0, 0, 20, 3, root)
+
+	tvNav.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_END})
+	if tvNav.SelectPos != 3 { t.Errorf("End navigation failed, got %d", tvNav.SelectPos) }
+
+	tvNav.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_HOME})
+	if tvNav.SelectPos != 0 { t.Error("Home navigation failed") }
+
+	tvNav.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_NEXT}) // PgDn
+	if tvNav.SelectPos != 3 { t.Errorf("PgDn failed, got %d", tvNav.SelectPos) }
+
+	tvNav.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_PRIOR}) // PgUp
+	if tvNav.SelectPos != 0 { t.Errorf("PgUp failed, got %d", tvNav.SelectPos) }
+
+	// 6. Action (Enter/Space) on a leaf node
+	actionCalled := false
+	tvNav.OnAction = func(n *TreeNode) { actionCalled = true }
+	tvNav.SelectPos = 3 // Node 3 is Leaf 2.1
+	tvNav.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_SPACE})
+	if !actionCalled { t.Error("OnAction failed to trigger on leaf via Space") }
+
+	// 7. Mouse: Wheel scrolling
+	tvNav.TopPos = 0
+	tvNav.ProcessMouse(&vtinput.InputEvent{Type: vtinput.MouseEventType, WheelDirection: -1}) // Down
+	if tvNav.TopPos != 1 { t.Errorf("Mouse wheel down failed, got %d", tvNav.TopPos) }
+	tvNav.ProcessMouse(&vtinput.InputEvent{Type: vtinput.MouseEventType, WheelDirection: 1}) // Up
+	if tvNav.TopPos != 0 { t.Errorf("Mouse wheel up failed, got %d", tvNav.TopPos) }
+
+	// 8. Mouse: Scrollbar click bounds
+	// Width 20 -> X2=19. Y1=0. Height is 3. len(flatNodes) is 4.
+	handled := tvNav.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: true,
+		ButtonState: vtinput.FromLeft1stButtonPressed, MouseX: 19, MouseY: 0,
+	})
+	if !handled { t.Error("Scrollbar click area was not handled") }
+
+	// 9. EnsureVisible edge case (height <= 0)
+	tvZero := NewTreeView(0, 0, 10, -1, root)
+	tvZero.EnsureVisible() // Should safely return without panicking
+}

@@ -33,3 +33,16 @@ func TestRadioGroup_ProcessMouse(t *testing.T) {
 		t.Error("OnChange should be called")
 	}
 }
+func TestRadioGroup_MouseEdgeCases(t *testing.T) {
+	rg := NewRadioGroup(0, 0, 1, []string{"A"})
+
+	// Click completely outside the RadioGroup
+	handled := rg.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: true,
+		ButtonState: vtinput.FromLeft1stButtonPressed, MouseX: 10, MouseY: 10,
+	})
+
+	if handled {
+		t.Error("RadioGroup should ignore out-of-bounds clicks")
+	}
+}

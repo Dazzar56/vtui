@@ -104,6 +104,7 @@ func (m *VMenu) SetSelectPos(pos int, direct int) {
 
 // ProcessKey processes navigation keys.
 func (m *VMenu) ProcessKey(e *vtinput.InputEvent) bool {
+	if m.IsDisabled() { return false }
 	if e.Type != vtinput.KeyEventType || !e.KeyDown {
 		return false
 	}
@@ -228,6 +229,7 @@ func (m *VMenu) ClearDone() {
 
 // ProcessMouse handles mouse wheel scrolling and menu item clicks.
 func (m *VMenu) ProcessMouse(e *vtinput.InputEvent) bool {
+	if m.IsDisabled() { return false }
 	if e.Type != vtinput.MouseEventType {
 		return false
 	}

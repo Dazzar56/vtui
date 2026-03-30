@@ -305,8 +305,17 @@ func (t *TreeView) ProcessMouse(e *vtinput.InputEvent) bool {
 	if e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
 		if mx >= t.X1 && mx <= t.X2 && my >= t.Y1 && my <= t.Y2 {
 			if len(t.flatNodes) > height && mx == t.X2 {
-				// Scrollbar click processing could be added here
-				// Same as ListBox
+				if my == t.Y1 {
+					t.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_UP})
+				} else if my == t.Y2 {
+					t.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
+				} else {
+					if my < t.Y1+height/2 {
+						t.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_PRIOR})
+					} else {
+						t.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_NEXT})
+					}
+				}
 				return true
 			}
 

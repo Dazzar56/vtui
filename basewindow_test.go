@@ -309,6 +309,58 @@ func TestWidget_DisabledInput(t *testing.T) {
 		t.Error("Disabled button should not process mouse")
 	}
 }
+func TestAllWidgets_DisabledState(t *testing.T) {
+	SetDefaultPalette()
+	scr := NewScreenBuf()
+	scr.AllocBuf(80, 25)
+
+	widgets := []UIElement{
+		NewButton(0, 0, "Btn"),
+		NewCheckbox(0, 0, "Chk", false),
+		NewCheckGroup(0, 0, 1, []string{"Chk1"}),
+		NewComboBox(0, 0, 10, []string{"A"}),
+		NewEdit(0, 0, 10, "Edit"),
+		NewListBox(0, 0, 10, 5, []string{"A"}),
+		NewRadioButton(0, 0, "Rad"),
+		NewRadioGroup(0, 0, 1, []string{"Rad1"}),
+		NewText(0, 0, "Txt", Palette[ColDialogText]),
+		NewVMenu("Menu"),
+		NewTreeView(0, 0, 10, 10, &TreeNode{Text: "Node"}),
+		NewMenuBar([]string{"Menu"}),
+	}
+
+	keyEv := &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN}
+	mouseEv := &vtinput.InputEvent{Type: vtinput.MouseEventType, KeyDown: true, ButtonState: vtinput.FromLeft1stButtonPressed, MouseX: 0, MouseY: 0}
+
+	for _, w := range widgets {
+		// Set focus first to ensure SetDisabled(true) removes it
+		w.SetFocus(true)
+		if !w.IsFocused() {
+			t.Errorf("%T failed to set focus initially", w)
+		}
+
+		w.SetDisabled(true)
+
+		if w.IsFocused() {
+			t.Errorf("%T should not be focused after SetDisabled(true)", w)
+		}
+		if !w.IsDisabled() {
+			t.Errorf("%T IsDisabled() returned false", w)
+		}
+
+		if w.ProcessKey(keyEv) {
+			t.Errorf("%T processed key while disabled", w)
+		}
+
+		if w.ProcessMouse(mouseEv) {
+			t.Errorf("%T processed mouse while disabled", w)
+		}
+
+		// Render the disabled widget. This exercises the `DimColor` paths in DisplayObject.
+		// If anything panics here, the test will naturally fail.
+		w.Show(scr)
+	}
+}
 
 func TestBaseWindow_Validation_CmDefault(t *testing.T) {
 	SetDefaultPalette()
