@@ -28,7 +28,13 @@ func (t *Text) Show(scr *ScreenBuf) {
 
 func (t *Text) DisplayObject(scr *ScreenBuf) {
 	if !t.IsVisible() { return }
-	cells, _ := StringToCharInfoHighlighted(t.content, t.color, Palette[ColDialogHighlightText])
+	attr := t.color
+	highAttr := Palette[ColDialogHighlightText]
+	if t.IsDisabled() {
+		attr = DimColor(attr)
+		highAttr = DimColor(highAttr)
+	}
+	cells, _ := StringToCharInfoHighlighted(t.content, attr, highAttr)
 	scr.Write(t.X1, t.Y1, cells)
 }
 

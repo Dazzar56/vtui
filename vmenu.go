@@ -334,8 +334,8 @@ func (m *VMenu) DisplayObject(scr *ScreenBuf) {
 
 		attr := colText
 		if isDisabled {
-			// Gray out the text by halving RGB values
-			attr = SetRGBFore(attr, GetRGBFore(attr)/2)
+			// Gray out the text
+			attr = DimColor(attr)
 		} else if itemIdx == m.selectPos {
 			attr = colSel
 		}

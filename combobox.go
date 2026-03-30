@@ -54,12 +54,17 @@ func (cb *ComboBox) DisplayObject(scr *ScreenBuf) {
 	if cb.focused {
 		attr = Palette[ColDialogSelectedButton]
 	}
+	if cb.IsDisabled() {
+		attr = DimColor(attr)
+	}
 	// Use symbol ↓ (U+2193)
 	scr.Write(cb.X2, cb.Y1, StringToCharInfo("↓", attr))
 }
 
 func (cb *ComboBox) ProcessKey(e *vtinput.InputEvent) bool {
+
 	if !e.KeyDown { return false }
+	if cb.IsDisabled() { return false }
 
 	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 
@@ -86,6 +91,7 @@ func (cb *ComboBox) ProcessKey(e *vtinput.InputEvent) bool {
 }
 
 func (cb *ComboBox) ProcessMouse(e *vtinput.InputEvent) bool {
+	if cb.IsDisabled() { return false }
 	if e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
 		mx := int(e.MouseX)
 		// If arrow clicked
@@ -112,4 +118,9 @@ func (cb *ComboBox) Open() {
 func (cb *ComboBox) SetFocus(f bool) {
 	cb.focused = f
 	cb.Edit.SetFocus(f)
+}
+
+func (cb *ComboBox) SetDisabled(d bool) {
+	cb.ScreenObject.SetDisabled(d)
+	cb.Edit.SetDisabled(d)
 }

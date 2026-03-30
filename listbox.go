@@ -73,6 +73,9 @@ func (lb *ListBox) DisplayObject(scr *ScreenBuf) {
 				attr = colSel
 			}
 		}
+		if lb.IsDisabled() {
+			attr = DimColor(attr)
+		}
 
 		if idx < len(lb.Items) {
 			text := lb.Items[idx]
@@ -98,6 +101,7 @@ func (lb *ListBox) DisplayObject(scr *ScreenBuf) {
 
 func (lb *ListBox) ProcessKey(e *vtinput.InputEvent) bool {
 	if !e.KeyDown { return false }
+	if lb.IsDisabled() { return false }
 
 	height := lb.Y2 - lb.Y1 + 1
 	oldPos := lb.SelectPos
@@ -157,6 +161,7 @@ func (lb *ListBox) EnsureVisible() {
 
 func (lb *ListBox) ProcessMouse(e *vtinput.InputEvent) bool {
 	if e.Type != vtinput.MouseEventType { return false }
+	if lb.IsDisabled() { return false }
 
 	mx, my := int(e.MouseX), int(e.MouseY)
 	height := lb.Y2 - lb.Y1 + 1

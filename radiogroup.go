@@ -92,6 +92,10 @@ func (rg *RadioGroup) DisplayObject(scr *ScreenBuf) {
 		attr = Palette[ColDialogSelectedButton]
 		highAttr = Palette[ColDialogHighlightSelectedButton]
 	}
+	if rg.IsDisabled() {
+		attr = DimColor(attr)
+		highAttr = DimColor(highAttr)
+	}
 
 	for i, itm := range rg.Items {
 		prefix := "( ) "
@@ -121,6 +125,8 @@ func (rg *RadioGroup) ProcessKey(e *vtinput.InputEvent) bool {
 	if !e.KeyDown {
 		return false
 	}
+
+	if rg.IsDisabled() { return false }
 
 	newIdx, moved := gridNav(rg.Selected, len(rg.Items), rg.Columns, e.VirtualKeyCode)
 	if moved {
@@ -166,3 +172,34 @@ func (rg *RadioGroup) ProcessKey(e *vtinput.InputEvent) bool {
 
 	return false
 }
+
+func (rg *RadioGroup) ProcessMouse(e *vtinput.InputEvent) bool {
+	if rg.IsDisabled() { return false }
+	if e.Type == vtinput.MouseEventType && e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
+		my, mx := int(e.MouseY), int(e.MouseX)
+		if my >= rg.Y1 && my <= rg.Y2 && mx >= rg.X1 && mx <= rg.X2 {
+			row := my - rg.Y1
+			col := 0
+			cx := rg.X1
+			for c := 0; c < rg.Columns; c++ {
+				if mx >= cx && mx < cx+rg.colWidths[c] {
+					col = c
+					break
+				}
+				cx += rg.colWidths[c]
+			}
+			idx := row*rg.Columns + col
+			if idx >= 0 && idx < len(rg.Items) {
+				if rg.Selected != idx {
+					rg.Selected = idx
+					if rg.OnChange != nil {
+						rg.OnChange(rg.Selected)
+					}
+				}
+				return true
+			}
+		}
+	}
+	return false
+}
+

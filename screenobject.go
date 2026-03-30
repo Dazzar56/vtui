@@ -15,6 +15,7 @@ type ScreenObject struct {
 	growMode       GrowMode
 	hotkey         rune
 	Id             string
+	disabled       bool
 }
 
 // GetHotkey returns the assigned hotkey rune for the object.
@@ -92,6 +93,18 @@ func (so *ScreenObject) SetCanFocus(c bool) {
 // CanFocus returns true if the object can be focused.
 func (so *ScreenObject) CanFocus() bool {
 	return so.canFocus
+}
+// IsDisabled returns true if the object is explicitly disabled.
+func (so *ScreenObject) IsDisabled() bool {
+	return so.disabled
+}
+
+// SetDisabled enables or disables the object.
+func (so *ScreenObject) SetDisabled(d bool) {
+	so.disabled = d
+	if d {
+		so.focused = false
+	}
 }
 
 // Lock increases the lock counter. A locked object is not redrawn.

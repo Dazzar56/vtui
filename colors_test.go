@@ -41,3 +41,19 @@ func TestColors_IndexAndRGB(t *testing.T) {
 		t.Error("SetIndexBoth should not set RGB flags")
 	}
 }
+
+func TestDimColor(t *testing.T) {
+	// RGB Test
+	rgbAttr := SetRGBFore(0, 0xAA6622)
+	dimmed := DimColor(rgbAttr)
+	if GetRGBFore(dimmed) != 0x553311 {
+		t.Errorf("DimColor RGB failed, got %X", GetRGBFore(dimmed))
+	}
+
+	// Index Test (ANSI fallback)
+	idxAttr := SetIndexFore(0, 15) // White
+	dimmedIdx := DimColor(idxAttr)
+	if GetIndexFore(dimmedIdx) != 8 { // Should become DarkGray (8)
+		t.Errorf("DimColor Index failed, got %d", GetIndexFore(dimmedIdx))
+	}
+}

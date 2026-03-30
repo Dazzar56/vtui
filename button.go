@@ -38,6 +38,10 @@ func (b *Button) DisplayObject(scr *ScreenBuf) {
 		attr = Palette[ColDialogSelectedButton]
 		highAttr = Palette[ColDialogHighlightSelectedButton]
 	}
+	if b.IsDisabled() {
+		attr = DimColor(attr)
+		highAttr = DimColor(highAttr)
+	}
 	cells, _ := StringToCharInfoHighlighted(b.text, attr, highAttr)
 	scr.Write(b.X1, b.Y1, cells)
 }
@@ -51,6 +55,9 @@ func (b *Button) ProcessKey(e *vtinput.InputEvent) bool {
 	if !e.KeyDown {
 		return false
 	}
+	if b.IsDisabled() {
+		return false
+	}
 	if e.VirtualKeyCode == vtinput.VK_RETURN || e.VirtualKeyCode == vtinput.VK_SPACE {
 		if b.OnClick != nil {
 			b.OnClick()
@@ -61,6 +68,9 @@ func (b *Button) ProcessKey(e *vtinput.InputEvent) bool {
 }
 
 func (b *Button) ProcessMouse(e *vtinput.InputEvent) bool {
+	if b.IsDisabled() {
+		return false
+	}
 	if e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
 		if b.OnClick != nil {
 			b.OnClick()

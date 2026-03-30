@@ -39,6 +39,10 @@ func (rb *RadioButton) DisplayObject(scr *ScreenBuf) {
 		attr = Palette[ColDialogSelectedButton]
 		highAttr = Palette[ColDialogHighlightSelectedButton]
 	}
+	if rb.IsDisabled() {
+		attr = DimColor(attr)
+		highAttr = DimColor(highAttr)
+	}
 
 	state := "( ) "
 	if rb.Selected {
@@ -51,6 +55,7 @@ func (rb *RadioButton) DisplayObject(scr *ScreenBuf) {
 
 func (rb *RadioButton) ProcessKey(e *vtinput.InputEvent) bool {
 	if !e.KeyDown { return false }
+	if rb.IsDisabled() { return false }
 	if e.VirtualKeyCode == vtinput.VK_SPACE || e.VirtualKeyCode == vtinput.VK_RETURN {
 		// The button itself doesn't change state directly; Dialog will handle that.
 		return false // Return false so Dialog catches the event and updates the group
@@ -59,6 +64,7 @@ func (rb *RadioButton) ProcessKey(e *vtinput.InputEvent) bool {
 }
 
 func (rb *RadioButton) ProcessMouse(e *vtinput.InputEvent) bool {
+	if rb.IsDisabled() { return false }
 	if e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
 		return false // Let the dialog handle the click and update the group
 	}

@@ -75,6 +75,9 @@ func (cg *CheckGroup) DisplayObject(scr *ScreenBuf) {
 		if cg.IsFocused() && i == cg.focusIdx {
 			curAttr, curHigh = selAttr, selHighAttr
 		}
+		if cg.IsDisabled() {
+			curAttr, curHigh = DimColor(curAttr), DimColor(curHigh)
+		}
 
 		prefix := "[ ] "
 		if cg.States[i] { prefix = "[x] " }
@@ -93,6 +96,7 @@ func (cg *CheckGroup) ProcessKey(e *vtinput.InputEvent) bool {
 	if !e.KeyDown {
 		return false
 	}
+	if cg.IsDisabled() { return false }
 
 	newIdx, moved := gridNav(cg.focusIdx, len(cg.Items), cg.Columns, e.VirtualKeyCode)
 	if moved {
@@ -137,6 +141,7 @@ func (cg *CheckGroup) ProcessKey(e *vtinput.InputEvent) bool {
 }
 
 func (cg *CheckGroup) ProcessMouse(e *vtinput.InputEvent) bool {
+	if cg.IsDisabled() { return false }
 	if e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
 		my, mx := int(e.MouseY), int(e.MouseX)
 		if my >= cg.Y1 && my <= cg.Y2 && mx >= cg.X1 && mx <= cg.X2 {

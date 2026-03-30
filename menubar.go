@@ -223,3 +223,28 @@ func (mb *MenuBar) ProcessKey(e *vtinput.InputEvent) bool {
 
 	return false
 }
+
+func (mb *MenuBar) ProcessMouse(e *vtinput.InputEvent) bool {
+	if mb.IsDisabled() { return false }
+	if e.Type == vtinput.MouseEventType && e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
+		my, mx := int(e.MouseY), int(e.MouseX)
+		if my == mb.Y1 && mx >= mb.X1 && mx <= mb.X2 {
+			for i := range mb.Items {
+				x1 := mb.GetItemX(i)
+				var x2 int
+				if i < len(mb.Items)-1 {
+					x2 = mb.GetItemX(i+1) - 1
+				} else {
+					clean, _, _ := ParseAmpersandString(mb.Items[i].Label)
+					x2 = x1 + runewidth.StringWidth("  " + clean + "  ") - 1
+				}
+				if mx >= x1 && mx <= x2 {
+					mb.Active = true
+					mb.ActivateSubMenu(i)
+					return true
+				}
+			}
+		}
+	}
+	return false
+}

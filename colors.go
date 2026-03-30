@@ -79,3 +79,12 @@ func SetIndexBack(attr uint64, idx uint8) uint64 {
 func SetIndexBoth(attr uint64, idxFore, idxBack uint8) uint64 {
 	return SetIndexBack(SetIndexFore(attr, idxFore), idxBack)
 }
+// DimColor reduces the brightness of the foreground color to visually indicate a disabled state.
+func DimColor(attr uint64) uint64 {
+	if attr&IsFgRGB != 0 {
+		fg := GetRGBFore(attr)
+		r, g, b := (fg>>16)&0xFF, (fg>>8)&0xFF, fg&0xFF
+		return SetRGBFore(attr, (r/2)<<16|(g/2)<<8|(b/2))
+	}
+	return SetIndexFore(attr, 8) // 8 is DarkGray in standard ANSI
+}

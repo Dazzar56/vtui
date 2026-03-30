@@ -41,6 +41,10 @@ func (cb *Checkbox) DisplayObject(scr *ScreenBuf) {
 		attr = Palette[ColDialogSelectedButton]
 		highAttr = Palette[ColDialogHighlightSelectedButton]
 	}
+	if cb.IsDisabled() {
+		attr = DimColor(attr)
+		highAttr = DimColor(highAttr)
+	}
 
 	char := " "
 	switch cb.State {
@@ -56,6 +60,7 @@ func (cb *Checkbox) DisplayObject(scr *ScreenBuf) {
 
 func (cb *Checkbox) ProcessKey(e *vtinput.InputEvent) bool {
 	if !e.KeyDown { return false }
+	if cb.IsDisabled() { return false }
 
 	if e.VirtualKeyCode == vtinput.VK_SPACE || e.VirtualKeyCode == vtinput.VK_RETURN {
 		cb.Toggle()
@@ -65,6 +70,7 @@ func (cb *Checkbox) ProcessKey(e *vtinput.InputEvent) bool {
 }
 
 func (cb *Checkbox) ProcessMouse(e *vtinput.InputEvent) bool {
+	if cb.IsDisabled() { return false }
 	if e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
 		cb.Toggle()
 		return true

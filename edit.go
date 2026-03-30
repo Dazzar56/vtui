@@ -102,6 +102,9 @@ func (e *Edit) DisplayObject(scr *ScreenBuf) {
 		if e.selStart != -1 && i >= e.selStart && i < e.selEnd {
 			attr = Palette[e.ColorSelectedIdx]
 		}
+		if e.IsDisabled() {
+			attr = DimColor(attr)
+		}
 
 		// Write rune (handles WideCharFiller automatically)
 		cells := StringToCharInfo(string(r), attr)
@@ -172,6 +175,7 @@ func (e *Edit) InsertString(text string) {
 
 func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 	if !event.KeyDown { return false }
+	if e.IsDisabled() { return false }
 
 	// Navigation with selection reset or set
 	DebugLog("  Edit.ProcessKey: VK=%X Char=%d", event.VirtualKeyCode, event.Char)
@@ -423,6 +427,7 @@ func (e *Edit) AddHistory(text string) {
 }
 
 func (e *Edit) ProcessMouse(ev *vtinput.InputEvent) bool {
+	if e.IsDisabled() { return false }
 	if ev.ButtonState == vtinput.FromLeft1stButtonPressed && ev.KeyDown {
 		if e.ShowHistoryButton && int(ev.MouseX) == e.X2 && int(ev.MouseY) == e.Y1 {
 			e.OpenHistory()

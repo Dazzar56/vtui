@@ -15,6 +15,8 @@ type UIElement interface {
 	SetFocus(bool)
 	IsFocused() bool
 	CanFocus() bool
+	IsDisabled() bool
+	SetDisabled(bool)
 	GetHotkey() rune
 	GetId() string
 	GetHelp() string

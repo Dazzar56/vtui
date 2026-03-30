@@ -263,6 +263,52 @@ func TestBaseWindow_Validation_Recursive(t *testing.T) {
 		t.Error("Dialog should be invalid if ANY item is invalid")
 	}
 }
+func TestBaseWindow_DisabledFocus(t *testing.T) {
+	bw := NewBaseWindow(0, 0, 20, 10, "Test")
+	btn1 := NewButton(1, 1, "Btn1")
+	btn2 := NewButton(1, 2, "Btn2")
+	btn3 := NewButton(1, 3, "Btn3")
+
+	btn2.SetDisabled(true)
+
+	bw.AddItem(btn1)
+	bw.AddItem(btn2)
+	bw.AddItem(btn3)
+
+	// Initial focus should be btn1
+	if bw.focusIdx != 0 {
+		t.Fatalf("Expected focus on 0, got %d", bw.focusIdx)
+	}
+
+	// Tab should skip btn2 and go to btn3
+	bw.changeFocus(1)
+	if bw.focusIdx != 2 {
+		t.Errorf("Expected focus to skip disabled btn2 and land on 2, got %d", bw.focusIdx)
+	}
+
+	// Shift+Tab should skip btn2 backwards and go to btn1
+	bw.changeFocus(-1)
+	if bw.focusIdx != 0 {
+		t.Errorf("Expected focus to skip disabled btn2 and land on 0, got %d", bw.focusIdx)
+	}
+}
+
+func TestWidget_DisabledInput(t *testing.T) {
+	btn := NewButton(0, 0, "OK")
+	clicked := false
+	btn.OnClick = func() { clicked = true }
+	btn.SetDisabled(true)
+
+	handled := btn.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN})
+	if handled || clicked {
+		t.Error("Disabled button should not process keys")
+	}
+
+	handled = btn.ProcessMouse(&vtinput.InputEvent{Type: vtinput.MouseEventType, KeyDown: true, ButtonState: vtinput.FromLeft1stButtonPressed})
+	if handled || clicked {
+		t.Error("Disabled button should not process mouse")
+	}
+}
 
 func TestBaseWindow_Validation_CmDefault(t *testing.T) {
 	SetDefaultPalette()

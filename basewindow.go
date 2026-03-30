@@ -57,7 +57,7 @@ func (bw *BaseWindow) AddItem(item UIElement) {
 	reqH := iy2 - bw.Y1 + 1
 	if reqW > bw.MinW { bw.MinW = reqW }
 	if reqH > bw.MinH { bw.MinH = reqH }
-	if bw.focusIdx == -1 && item.CanFocus() {
+	if bw.focusIdx == -1 && item.CanFocus() && !item.IsDisabled() {
 		bw.focusIdx = len(bw.items) - 1
 		item.SetFocus(true)
 	}
@@ -157,7 +157,7 @@ func (bw *BaseWindow) ProcessKey(e *vtinput.InputEvent) bool {
 						}
 						break
 					}
-					if target.CanFocus() {
+					if target.CanFocus() && !target.IsDisabled() {
 						if bw.focusIdx != -1 {
 							bw.items[bw.focusIdx].SetFocus(false)
 						}
@@ -293,7 +293,7 @@ func (bw *BaseWindow) changeFocus(direction int) {
 		if bw.focusIdx < 0 { bw.focusIdx = len(bw.items) - 1 }
 		if bw.focusIdx >= len(bw.items) { bw.focusIdx = 0 }
 
-		if bw.items[bw.focusIdx].CanFocus() {
+		if bw.items[bw.focusIdx].CanFocus() && !bw.items[bw.focusIdx].IsDisabled() {
 			bw.items[bw.focusIdx].SetFocus(true)
 			return
 		}
@@ -350,7 +350,7 @@ func (bw *BaseWindow) ProcessMouse(e *vtinput.InputEvent) bool {
 		x1, y1, x2, y2 := item.GetPosition()
 		if mx >= x1 && mx <= x2 && my >= y1 && my <= y2 {
 			if e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
-				if item.CanFocus() && bw.focusIdx != i {
+				if item.CanFocus() && !item.IsDisabled() && bw.focusIdx != i {
 					if bw.focusIdx != -1 {
 						bw.items[bw.focusIdx].SetFocus(false)
 					}

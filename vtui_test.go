@@ -246,6 +246,27 @@ func TestMenuBar_Geometry(t *testing.T) {
 		t.Errorf("Expected second item at X=%d, got %d", expectedX1, x1)
 	}
 }
+func TestMenuBar_ProcessMouse(t *testing.T) {
+	mb := NewMenuBar([]string{"&Left", "&Right"})
+	mb.SetPosition(0, 0, 80, 0)
+
+	// Click on "Right" (Item 1).
+	// Item 0 is "  Left  " -> 8 chars. Starts at 2. Ends at 9.
+	// Item 1 starts at 10.
+	handled := mb.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType,
+		KeyDown: true,
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+		MouseX: 11, MouseY: 0,
+	})
+
+	if !handled {
+		t.Error("MenuBar should handle valid mouse click")
+	}
+	if !mb.Active || mb.SelectPos != 1 {
+		t.Error("MenuBar should become active and select correct item")
+	}
+}
 
 func TestVMenu_Callbacks(t *testing.T) {
 	m := NewVMenu("Test")
