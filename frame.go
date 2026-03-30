@@ -48,11 +48,7 @@ func (f *BorderedFrame) IsBorderClick(x, y int) bool {
 
 // Show saves the background and calls the object's drawing method.
 func (f *BorderedFrame) Show(scr *ScreenBuf) {
-	if f.IsLocked() {
-		return
-	}
-	f.ScreenObject.Show(scr) // Call embedded structure method
-	f.DisplayObject(scr)
+	f.SafeRender(scr, f.DisplayObject)
 }
 
 // DisplayObject renders the frame and title into ScreenBuf.
