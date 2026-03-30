@@ -43,6 +43,9 @@ func (d *DemoWindow) HandleCommand(cmd int, args any) bool {
 	case 1001: // Custom application command
 		vtui.ShowMessage(" Action ", "Command 1 executed via HandleCommand!", []string{"&Ok"})
 		return true
+	case 1002: // Showcase dialog
+		showShowcaseDialog()
+		return true
 	}
 	// Fallback to default window behavior (e.g. CmClose, CmZoom)
 	return d.Window.HandleCommand(cmd, args)
@@ -64,6 +67,61 @@ type fileRow struct {
 func (f fileRow) GetCellText(col int) string {
 	if col == 0 { return f.name }
 	return f.size
+}
+
+func showShowcaseDialog() {
+	w := vtui.FrameManager.GetScreenSize()
+	h := 25
+
+	dlg := vtui.NewDialog(0, 0, 56, 18, " UI Showcase ")
+	dlg.Center(w, h)
+	dlg.ShowClose = true
+
+	x, y := dlg.X1, dlg.Y1
+
+	// Left side: TreeView demonstration
+	dlg.AddItem(vtui.NewGroupBox(x+2, y+1, x+25, y+14, "TreeView"))
+	
+	root := &vtui.TreeNode{Text: "System", Expanded: true}
+	etc := &vtui.TreeNode{Text: "etc", Expanded: false}
+	etc.AddChild(&vtui.TreeNode{Text: "passwd"})
+	etc.AddChild(&vtui.TreeNode{Text: "hosts"})
+	
+	usr := &vtui.TreeNode{Text: "usr", Expanded: true}
+	bin := &vtui.TreeNode{Text: "bin", Expanded: true}
+	bin.AddChild(&vtui.TreeNode{Text: "bash"})
+	bin.AddChild(&vtui.TreeNode{Text: "cat"})
+	usr.AddChild(bin)
+	usr.AddChild(&vtui.TreeNode{Text: "lib", Expanded: false})
+	
+	root.AddChild(etc)
+	root.AddChild(usr)
+
+	tree := vtui.NewTreeView(x+3, y+2, 21, 11, root)
+	dlg.AddItem(tree)
+
+	// Right side: Disabled states demonstration
+	dlg.AddItem(vtui.NewGroupBox(x+27, y+1, x+53, y+14, "Disabled State"))
+
+	edit := vtui.NewEdit(x+29, y+4, 20, "Locked text")
+	edit.SetDisabled(true)
+	dlg.AddItem(vtui.NewLabel(x+29, y+3, "Disabled Edit:", edit))
+	dlg.AddItem(edit)
+
+	rg := vtui.NewRadioGroup(x+29, y+7, 1, []string{"Option 1", "Option 2"})
+	rg.SetDisabled(true)
+	dlg.AddItem(rg)
+
+	btnDisabled := vtui.NewButton(x+29, y+11, "Disabled Btn")
+	btnDisabled.SetDisabled(true)
+	dlg.AddItem(btnDisabled)
+
+	// Bottom: Close button
+	btnClose := vtui.NewButton(x+23, y+15, "&Close")
+	btnClose.OnClick = func() { dlg.Close() }
+	dlg.AddItem(btnClose)
+
+	vtui.FrameManager.Push(dlg)
 }
 
 func main() {
@@ -93,7 +151,11 @@ func main() {
 		}},
 		{Label: "&Files", SubItems: []vtui.MenuItem{{Text: "&Open"}, {Text: "&Save"}}},
 		{Label: "&Commands", SubItems: []vtui.MenuItem{{Text: "&Search"}}},
-		{Label: "&Options", SubItems: []vtui.MenuItem{{Text: "&Colors"}}},
+		{Label: "&Options", SubItems: []vtui.MenuItem{
+			{Text: "&Colors"},
+			{Separator: true},
+			{Text: "UI S&howcase", Command: 1002},
+		}},
 		{Label: "&Right", SubItems: []vtui.MenuItem{{Text: "Command &2"}}},
 	}
 	topMenu.SetPosition(0, 0, width-1, 0)
