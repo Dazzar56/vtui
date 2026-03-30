@@ -118,7 +118,7 @@ func showShowcaseDialog() {
 	dlg.AddItem(btnDisabled)
 
 	// Bottom: Live clock using DynamicText
-	clock := vtui.NewDynamicText(x+29, y+15, 20, vtui.Palette[vtui.ColDialogText], func() string {
+	clock := vtui.NewDynamicText(x+21, y+16, 20, vtui.Palette[vtui.ColDialogText], func() string {
 		return "Time: " + time.Now().Format("15:04:05")
 	})
 	dlg.AddItem(clock)
@@ -291,6 +291,17 @@ func main() {
 	// vtui.FrameManager.StatusLine = sl // StatusLine removed in favor of KeyBar
 
 	vtui.FrameManager.Push(dlg)
+
+	// Background goroutine to update the clock every second
+	go func() {
+		for {
+			time.Sleep(1 * time.Second)
+			if vtui.FrameManager.IsShutdown() {
+				break
+			}
+			vtui.FrameManager.Redraw()
+		}
+	}()
 
 	reader := vtinput.NewReader(os.Stdin)
 	vtui.FrameManager.Run(reader)
