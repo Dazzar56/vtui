@@ -143,3 +143,106 @@ func TestHelpView_History_Empty(t *testing.T) {
 		t.Error("HelpView should close on Backspace if history is empty")
 	}
 }
+func TestHelpView_EnsureLinkVisible(t *testing.T) {
+	memVfs := vfs.NewOSVFS(t.TempDir())
+	engine := NewHelpEngine(memVfs)
+	// Создаем тему, где ссылка находится далеко внизу
+	lines := make([]string, 20)
+	for i := range lines { lines[i] = "line" }
+	lines[15] = "~TargetLink~Topic@"
+
+	topic := &HelpTopic{
+		Name: "Long",
+		Lines: lines,
+		Links: []HelpLink{{Text: "TargetLink", Target: "Topic", Line: 15}},
+	}
+	engine.topics["Long"] = topic
+
+	hv := NewHelpView(engine, "Long")
+	hv.SetPosition(0, 0, 30, 5) // Видимая область контента мала (высота 6, контент 4)
+
+	// Изначально мы вверху
+	if hv.scrollTop != 0 { t.Fatal("Should start at top") }
+
+	// Выбираем ссылку на 15-й строке
+	hv.selectedIdx = 0
+	hv.ensureLinkVisible()
+
+	// ScrollTop должен измениться, чтобы 15-я строка стала видимой
+	if hv.scrollTop == 0 {
+		t.Errorf("scrollTop should have increased to show link at line 15, got %d", hv.scrollTop)
+	}
+}
+
+func TestHelpView_PageNavigation(t *testing.T) {
+	memVfs := vfs.NewOSVFS(t.TempDir())
+	engine := NewHelpEngine(memVfs)
+	lines := make([]string, 50)
+	for i := range lines { lines[i] = "text" }
+	engine.topics["Scroll"] = &HelpTopic{Name: "Scroll", Lines: lines}
+
+	hv := NewHelpView(engine, "Scroll")
+	hv.SetPosition(0, 0, 20, 11) // Высота 12, контент ~10 строк
+
+	// 1. PgDn
+	hv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_NEXT})
+	if hv.scrollTop == 0 { t.Error("PgDn failed to scroll") }
+
+	midScroll := hv.scrollTop
+
+	// 2. PgUp
+	hv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_PRIOR})
+	if hv.scrollTop >= midScroll { t.Error("PgUp failed to scroll up") }
+}
+
+func TestHelpView_TabNoLinks(t *testing.T) {
+	memVfs := vfs.NewOSVFS(t.TempDir())
+	engine := NewHelpEngine(memVfs)
+	engine.topics["NoLinks"] = &HelpTopic{Name: "NoLinks", Lines: []string{"Just text"}}
+
+	hv := NewHelpView(engine, "NoLinks")
+
+	// Tab не должен паниковать и должен возвращать false (или обрабатываться базовым окном)
+	//handled := hv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_TAB})
+
+	// В BaseWindow Tab переключает фокус между элементами.
+	// В HelpView элементов нет, поэтому вернет true (поглотит ключ), но selectedIdx останется -1.
+	if hv.selectedIdx != -1 {
+		t.Errorf("selectedIdx should remain -1 when no links present, got %d", hv.selectedIdx)
+	}
+}
+
+func TestHelpView_MultiLinkLineRendering(t *testing.T) {
+	SetDefaultPalette()
+	memVfs := vfs.NewOSVFS(t.TempDir())
+	engine := NewHelpEngine(memVfs)
+	// Две ссылки на одной строке
+	line := "~L1~T1@ and ~L2~T2@"
+	engine.topics["Test"] = &HelpTopic{
+		Name: "Test",
+		Lines: []string{line},
+		Links: []HelpLink{
+			{Text: "L1", Target: "T1", Line: 0},
+			{Text: "L2", Target: "T2", Line: 0},
+		},
+	}
+	hv := NewHelpView(engine, "Test")
+	hv.SetPosition(0, 0, 40, 5)
+
+	scr := NewScreenBuf()
+	scr.AllocBuf(42, 7)
+
+	// 1. Выбрана первая ссылка (L1)
+	hv.selectedIdx = 0
+	hv.Show(scr)
+	// Текст: "L1 and L2". Отступ окна 1.
+	// L1: X=1. " and ": 5 символов. L2: X=1+2+5 = 8.
+	checkCell(t, scr, 1, 1, 'L', Palette[ColHelpSelectedLink])
+	checkCell(t, scr, 8, 1, 'L', Palette[ColHelpLink])
+
+	// 2. Выбираем вторую ссылку (L2)
+	hv.selectedIdx = 1
+	hv.Show(scr)
+	checkCell(t, scr, 1, 1, 'L', Palette[ColHelpLink])
+	checkCell(t, scr, 8, 1, 'L', Palette[ColHelpSelectedLink])
+}

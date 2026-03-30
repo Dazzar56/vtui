@@ -209,10 +209,29 @@ func (hv *HelpView) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 
 	case vtinput.VK_DOWN:
-		// Height available for scrolling content (Window height - 2 borders - sticky rows)
 		viewHeight := (hv.Y2 - hv.Y1 + 1) - 2 - hv.current.StickyRows
 		if hv.scrollTop < (len(hv.current.Lines)-hv.current.StickyRows)-viewHeight {
 			hv.scrollTop++
+		}
+		return true
+
+	case vtinput.VK_PRIOR: // PgUp
+		viewHeight := (hv.Y2 - hv.Y1 + 1) - 2 - hv.current.StickyRows
+		hv.scrollTop -= viewHeight
+		if hv.scrollTop < 0 {
+			hv.scrollTop = 0
+		}
+		return true
+
+	case vtinput.VK_NEXT: // PgDn
+		viewHeight := (hv.Y2 - hv.Y1 + 1) - 2 - hv.current.StickyRows
+		maxScroll := (len(hv.current.Lines) - hv.current.StickyRows) - viewHeight
+		hv.scrollTop += viewHeight
+		if hv.scrollTop > maxScroll {
+			hv.scrollTop = maxScroll
+		}
+		if hv.scrollTop < 0 {
+			hv.scrollTop = 0
 		}
 		return true
 	}
