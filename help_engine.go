@@ -27,6 +27,8 @@ type HelpEngine struct {
 	vfs    vfs.VFS
 	topics map[string]*HelpTopic
 }
+// GlobalHelpEngine is the default engine used by the framework for F1 lookups.
+var GlobalHelpEngine *HelpEngine
 
 func NewHelpEngine(v vfs.VFS) *HelpEngine {
 	return &HelpEngine{

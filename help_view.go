@@ -1,6 +1,8 @@
 package vtui
 
 import (
+	"os/exec"
+	"runtime"
 	"strings"
 	"github.com/unxed/vtinput"
 	"github.com/mattn/go-runewidth"
@@ -28,9 +30,26 @@ func NewHelpView(engine *HelpEngine, startTopic string) *HelpView {
 }
 
 func (hv *HelpView) SwitchTopic(name string) {
+	// 1. Handle External URLs
+	if strings.HasPrefix(name, "http://") || strings.HasPrefix(name, "https://") {
+		var err error
+		switch runtime.GOOS {
+		case "linux":
+			err = exec.Command("xdg-open", name).Start()
+		case "windows":
+			err = exec.Command("rundll32", "url.dll,FileProtocolHandler", name).Start()
+		case "darwin":
+			err = exec.Command("open", name).Start()
+		}
+		if err != nil {
+			DebugLog("HELP: Failed to open URL %s: %v", name, err)
+		}
+		return
+	}
+
+	// 2. Handle internal topics
 	topic := hv.engine.GetTopic(name)
 	if topic == nil {
-		// Fallback or error topic
 		return
 	}
 	if hv.current != nil {

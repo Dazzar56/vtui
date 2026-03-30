@@ -991,6 +991,19 @@ func (fm *frameManager) Run(reader *vtinput.Reader) {
 				// F12 - Screens Menu (Window List)
 				// We must ignore NumLock, CapsLock, and EnhancedKey flags
 				modifierMask := uint32(vtinput.LeftAltPressed | vtinput.RightAltPressed | vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed | vtinput.ShiftPressed)
+				if ev.VirtualKeyCode == vtinput.VK_F1 && (ev.ControlKeyState&modifierMask) == 0 {
+					topic := topFrame.GetHelp()
+					if dlg, ok := topFrame.(*Dialog); ok {
+						if foc := dlg.GetFocusedItem(); foc != nil && foc.GetHelp() != "" {
+							topic = foc.GetHelp()
+						}
+					}
+					if topic != "" && GlobalHelpEngine != nil {
+						hv := NewHelpView(GlobalHelpEngine, topic)
+						fm.Push(hv)
+						return
+					}
+				}
 				if ev.VirtualKeyCode == vtinput.VK_F12 && (ev.ControlKeyState&modifierMask) == 0 {
 					if fm.GetTopFrameType() != TypeMenu {
 						fm.showScreensMenu()
