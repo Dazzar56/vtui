@@ -730,349 +730,7 @@ func (fm *frameManager) Run(reader *vtinput.Reader) {
 		}
 
 		// 1. Rendering
-		if len(fm.frames) == 0 {
-			return
-		}
-		topFrame := fm.frames[len(fm.frames)-1]
-
-		// Update global status line context automatically
-		if fm.StatusLine != nil {
-			topic := ""
-			// Priority: Focused item's help -> Frame's help -> Menu context
-			if fm.MenuBar != nil && fm.MenuBar.Active {
-				topic = "menu"
-			} else {
-				if dlg, ok := topFrame.(*Dialog); ok {
-					if foc := dlg.GetFocusedItem(); foc != nil {
-						topic = foc.GetHelp()
-					}
-				}
-				if topic == "" {
-					topic = topFrame.GetHelp()
-				}
-			}
-			fm.StatusLine.UpdateContext(topic)
-		}
-
-		// Update KeyBar content from the active frame
-		if fm.KeyBar != nil {
-			// Find the topmost frame that provides key labels
-			for i := len(fm.frames) - 1; i >= 0; i-- {
-				if ks := fm.frames[i].GetKeyLabels(); ks != nil {
-					fm.KeyBar.Normal = ks.Normal
-					fm.KeyBar.Shift = ks.Shift
-					fm.KeyBar.Ctrl = ks.Ctrl
-					fm.KeyBar.Alt = ks.Alt
-					break
-				}
-			}
-		}
-
-		// If the frame is "busy" (e.g., mass insertion in progress), skip drawing
-		// and Flush to avoid flickering and save CPU.
-		if !topFrame.IsBusy() {
-			// Cleanup orphaned menus safely outside the frames iteration loop
-			// to avoid "index out of range" during rendering.
-			fm.cleanupOrphanedMenus()
-
-			fm.scr.SetCursorVisible(false)
-			fm.scr.ActivePalette = nil
-			// By default, we use OverlayMode (Early Binding) for host UI elements.
-			// Desktop and TerminalView will explicitly disable it during their render.
-			fm.scr.SetOverlayMode(true)
-
-			// 1. Находим "базовый" экран (первый непрозрачный, идя назад от активного)
-			baseIdx := fm.ActiveIdx
-			for baseIdx > 0 && fm.Screens[baseIdx].Transparent {
-				baseIdx--
-			}
-
-			// 2. Отрисовываем стэк экранов от базового до текущего
-			for sIdx := baseIdx; sIdx <= fm.ActiveIdx; sIdx++ {
-				frames := fm.GetActiveFrames(sIdx)
-				for _, frame := range frames {
-					if frame.HasShadow() {
-						x1, y1, x2, y2 := frame.GetPosition()
-						isFullScreen := x1 <= 0 && y1 <= 0 && x2 >= fm.scr.width-1 && y2 >= fm.scr.height-1
-						if !isFullScreen {
-							fm.scr.ApplyShadow(x1+2, y2+1, x2+2, y2+1)
-							fm.scr.ApplyShadow(x2+1, y1+1, x2+2, y2)
-						}
-					}
-					frame.Show(fm.scr)
-				}
-			}
-
-			fm.renderSwitcher(fm.scr)
-
-			// Render Standard Global UI
-			// Render Standard Global UI
-			activeMenu := fm.GetActiveMenuBar()
-			if activeMenu != nil && activeMenu.Active {
-				activeMenu.Show(fm.scr)
-			}
-			if fm.KeyBar != nil {
-				fm.KeyBar.Show(fm.scr)
-			}
-			if fm.StatusLine != nil {
-				fm.StatusLine.Show(fm.scr)
-			}
-
-			if fm.OnRender != nil {
-				fm.OnRender(fm.scr)
-			}
-
-			// Draw Global Attention Indicator [!] if background screens need input
-			hasHiddenAttention := false
-			for i, s := range fm.Screens {
-				if i != fm.ActiveIdx && s.NeedsAttention() {
-					hasHiddenAttention = true
-					break
-				}
-			}
-			if hasHiddenAttention {
-				attr := SetRGBBoth(0, 0xFFFFFF, 0xFF0000) // White on Red
-				fm.scr.Write(fm.scr.width-3, 0, StringToCharInfo("[!]", attr))
-			}
-
-			fm.scr.Flush()
-		}
-
-		// 2. Dispatch helper
-		dispatch := func(ev *vtinput.InputEvent, is_injected bool) {
-			if len(fm.frames) == 0 {
-				return
-			}
-
-			// Generate DoubleClick flag from sequence of clicks
-			if ev.Type == vtinput.MouseEventType && ev.ButtonState != 0 && ev.KeyDown {
-				now := time.Now()
-				if ev.ButtonState == fm.lastMouseButton && int(ev.MouseX) == fm.lastMouseX && int(ev.MouseY) == fm.lastMouseY && now.Sub(fm.lastMouseClickTime) < 400*time.Millisecond {
-					ev.MouseEventFlags |= vtinput.DoubleClick
-					fm.lastMouseButton = 0 // prevent triple click
-					DebugLog("FM: DoubleClick generated at (%d,%d)", ev.MouseX, ev.MouseY)
-				} else {
-					fm.lastMouseButton = ev.ButtonState
-					fm.lastMouseX = int(ev.MouseX)
-					fm.lastMouseY = int(ev.MouseY)
-					fm.lastMouseClickTime = now
-				}
-			}
-
-			topFrame := fm.frames[len(fm.frames)-1]
-			activeMenu := fm.GetActiveMenuBar()
-
-			// Update KeyBar modifiers automatically if present
-			if fm.KeyBar != nil {
-				shift := (ev.ControlKeyState & vtinput.ShiftPressed) != 0
-				ctrl := (ev.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
-				alt := (ev.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
-				fm.KeyBar.SetModifiers(shift, ctrl, alt)
-			}
-
-			// User-defined filter has first say
-			if !is_injected && fm.EventFilter != nil && fm.EventFilter(ev) {
-				return
-			}
-
-			// Track Ctrl state for Switcher logic
-			if ev.Type == vtinput.KeyEventType {
-				fm.ctrlPressed = (ev.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
-
-				// Commit Switcher selection on Ctrl release
-				if !fm.ctrlPressed && fm.switcherActive {
-					fm.switcherActive = false
-					fm.SwitchScreen(fm.switcherIdx)
-				}
-			}
-
-			// --- Menu Interception ---
-			if ev.Type == vtinput.KeyEventType && ev.KeyDown {
-				// 1. If Menu is Active, it has priority.
-				// We allow it even if topFrame is modal, provided topFrame IS the menu itself
-				// or the frame that owns the menu.
-				isMenuRelated := topFrame.GetType() == TypeMenu || topFrame.GetMenuBar() == activeMenu
-				if activeMenu != nil && activeMenu.Active && (!topFrame.IsModal() || isMenuRelated) {
-					// Exception: if a VMenu is open, it MUST handle navigation keys
-					if fm.GetTopFrameType() == TypeMenu {
-						menuFrame := fm.frames[len(fm.frames)-1]
-						if menuFrame.ProcessKey(ev) {
-							if menuFrame.IsDone() {
-								fm.RemoveFrame(menuFrame)
-							}
-							return
-						}
-					}
-					// Otherwise, MenuBar processes keys (Arrows, Esc, Hotkeys)
-					if ev.VirtualKeyCode == vtinput.VK_ESCAPE || ev.VirtualKeyCode == vtinput.VK_F10 {
-						activeMenu.Active = false
-						return
-					}
-					if activeMenu.ProcessKey(ev) {
-						return
-					}
-					return // Don't pass keys to background frames when menu is active
-				}
-			}
-
-			// 3. Regular Dispatch (MDI Hit-Testing)
-			handled := false
-
-			if ev.Type == vtinput.KeyEventType || ev.Type == vtinput.PasteEventType || ev.Type == vtinput.FocusEventType {
-				handled = topFrame.ProcessKey(ev)
-			} else if ev.Type == vtinput.MouseEventType {
-				mx, my := int(ev.MouseX), int(ev.MouseY)
-				if ev.ButtonState != 0 || ev.WheelDirection != 0 {
-					DebugLog("FM: Mouse Event at (%d,%d) State:%X Wheel:%d", mx, my, ev.ButtonState, ev.WheelDirection)
-				}
-
-				// 3.1. Active Mouse Capture (Dragging/Resizing)
-				if fm.capturedFrame != nil {
-					handled = fm.capturedFrame.ProcessMouse(ev)
-					if ev.ButtonState == 0 {
-						fm.capturedFrame = nil // Release capture
-					}
-				} else {
-					// 3.2. Mouse Hit-Testing: check frames from top to bottom
-					for i := len(fm.frames) - 1; i >= 0; i-- {
-						f := fm.frames[i]
-
-						// Desktop always gets mouse if nothing above it handled it
-						if f.GetType() == TypeDesktop {
-							handled = f.ProcessMouse(ev)
-							if handled && ev.ButtonState != 0 {
-								fm.capturedFrame = f
-							}
-							break
-						}
-
-						x1, y1, x2, y2 := f.GetPosition()
-						if mx >= x1 && mx <= x2+2 && my >= y1 && my <= y2+1 {
-							DebugLog("FM: Hit-test SUCCESS for frame %d type %d. Pos: (%d,%d)-(%d,%d)", i, f.GetType(), x1, y1, x2, y2)
-							// Click is within this frame (or its shadow)
-							if i != len(fm.frames)-1 {
-								// Try to bring it to front before passing the event
-								if fm.RequestFocus(f) {
-									handled = f.ProcessMouse(ev)
-								}
-							} else {
-								handled = f.ProcessMouse(ev)
-							}
-
-							// If a frame handled a click, it captures the mouse until release
-							if handled && ev.ButtonState != 0 {
-								fm.capturedFrame = f
-							}
-
-							// If the frame is modal, it eats the click even if it didn't handle it
-							// (to prevent clicking on windows behind it)
-							if f.IsModal() || handled {
-								break
-							}
-						} else {
-							// For troubleshooting sizing issues
-							if ev.ButtonState != 0 {
-								// DebugLog("FM: Hit-test miss for frame %d type %d. Bounds: (%d,%d)-(%d,%d)", i, f.GetType(), x1, y1, x2, y2)
-							}
-						}
-
-						if f.IsModal() {
-							break
-						}
-					}
-				}
-			}
-
-			// 3. Fallbacks (F9, Alt+Hotkey, Global Shortcuts) if top frame didn't want the key
-			if !handled && ev.Type == vtinput.KeyEventType && ev.KeyDown {
-				// Global Quit (standard for vtui tools)
-				if ev.VirtualKeyCode == vtinput.VK_Q && fm.ctrlPressed {
-					fm.Shutdown()
-					return
-				}
-
-				// Window Cycling (Ctrl+Tab / Ctrl+Shift+Tab)
-				if ev.VirtualKeyCode == vtinput.VK_TAB && (fm.ctrlPressed || fm.switcherActive) {
-					shift := (ev.ControlKeyState & vtinput.ShiftPressed) != 0
-					// Only consume the event if cycling is actually possible
-					if fm.CycleWindows(!shift) {
-						return
-					}
-				}
-
-				// Ctrl+N - Fork Active Frame into new Screen
-				if ev.VirtualKeyCode == vtinput.VK_N && fm.ctrlPressed {
-					fm.Flash()
-					// We need a way to clone the top-level frame.
-					// For now, let's trigger a Command that Panels can handle.
-					fm.EmitCommand(CmResize, "fork") // Temporary hack or use specialized Command
-					return
-				}
-
-				// Ctrl+W - Close Active Screen
-				if ev.VirtualKeyCode == vtinput.VK_W && fm.ctrlPressed {
-					fm.Flash()
-					fm.CloseActiveScreen()
-					return
-				}
-
-				// F12 - Screens Menu (Window List)
-				// We must ignore NumLock, CapsLock, and EnhancedKey flags
-				modifierMask := uint32(vtinput.LeftAltPressed | vtinput.RightAltPressed | vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed | vtinput.ShiftPressed)
-				if ev.VirtualKeyCode == vtinput.VK_F1 && (ev.ControlKeyState&modifierMask) == 0 {
-					topic := topFrame.GetHelp()
-					if dlg, ok := topFrame.(*Dialog); ok {
-						if foc := dlg.GetFocusedItem(); foc != nil && foc.GetHelp() != "" {
-							topic = foc.GetHelp()
-						}
-					}
-					if topic != "" && GlobalHelpEngine != nil {
-						hv := NewHelpView(GlobalHelpEngine, topic)
-						fm.Push(hv)
-						return
-					}
-				}
-				if ev.VirtualKeyCode == vtinput.VK_F12 && (ev.ControlKeyState&modifierMask) == 0 {
-					if fm.GetTopFrameType() != TypeMenu {
-						fm.showScreensMenu()
-						return
-					}
-				}
-
-				// Allow F9 if not modal, OR if the modal frame itself has a menu
-				canActivateMenu := !topFrame.IsModal() || topFrame.GetMenuBar() != nil
-				if ev.VirtualKeyCode == vtinput.VK_F9 {
-					if activeMenu == nil {
-						DebugLog("FM: F9 pressed but activeMenu is NIL")
-					} else if activeMenu.Active {
-						DebugLog("FM: F9 pressed but Menu is already active")
-					} else if !canActivateMenu {
-						DebugLog("FM: F9 pressed but Menu activation blocked by modal frame")
-					} else {
-						DebugLog("FM: F9 accepted, activating menu")
-						activeMenu.Active = true
-						if len(activeMenu.Items) > 0 {
-							if activeMenu.SelectPos < 0 || activeMenu.SelectPos >= len(activeMenu.Items) {
-								activeMenu.SelectPos = 0
-							}
-							activeMenu.ActivateSubMenu(activeMenu.SelectPos)
-						}
-						return
-					}
-				}
-				if activeMenu != nil && !activeMenu.Active && canActivateMenu {
-					alt := (ev.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
-					if alt && ev.Char != 0 {
-						if activeMenu.ProcessKey(ev) {
-							return
-						}
-					}
-				}
-			}
-
-			// 4. Cleanup: Remove all frames that are marked as done.
-			fm.cleanupDoneFrames()
-		}
+		fm.renderPhase()
 
 		// 3. Event waiting (Blocking)
 		var e *vtinput.InputEvent
@@ -1117,7 +775,7 @@ func (fm *frameManager) Run(reader *vtinput.Reader) {
 			DebugLog("KEY: Vk=%X Char=%d ActiveFrames=%d", e.VirtualKeyCode, e.Char, len(fm.frames))
 		}
 
-		dispatch(e, injected)
+		fm.dispatchEvent(e, injected)
 
 		// 4. Queue "Drain"
 		// Burst process pending events (e.g. fast typing or paste)
@@ -1132,7 +790,7 @@ func (fm *frameManager) Run(reader *vtinput.Reader) {
 
 				// If previous event in this burst closed the window/app, stop immediately.
 				if len(fm.frames) > 0 {
-					dispatch(ev, false)
+					fm.dispatchEvent(ev, false)
 				}
 				continue
 			case <-idleTimer.C:
@@ -1140,4 +798,343 @@ func (fm *frameManager) Run(reader *vtinput.Reader) {
 			break
 		}
 	}
+}
+
+func (fm *frameManager) renderPhase() {
+	if len(fm.frames) == 0 {
+		return
+	}
+	topFrame := fm.frames[len(fm.frames)-1]
+
+	// Update global status line context automatically
+	if fm.StatusLine != nil {
+		topic := ""
+		// Priority: Focused item's help -> Frame's help -> Menu context
+		if fm.MenuBar != nil && fm.MenuBar.Active {
+			topic = "menu"
+		} else {
+			if dlg, ok := topFrame.(*Dialog); ok {
+				if foc := dlg.GetFocusedItem(); foc != nil {
+					topic = foc.GetHelp()
+				}
+			}
+			if topic == "" {
+				topic = topFrame.GetHelp()
+			}
+		}
+		fm.StatusLine.UpdateContext(topic)
+	}
+
+	// Update KeyBar content from the active frame
+	if fm.KeyBar != nil {
+		// Find the topmost frame that provides key labels
+		for i := len(fm.frames) - 1; i >= 0; i-- {
+			if ks := fm.frames[i].GetKeyLabels(); ks != nil {
+				fm.KeyBar.Normal = ks.Normal
+				fm.KeyBar.Shift = ks.Shift
+				fm.KeyBar.Ctrl = ks.Ctrl
+				fm.KeyBar.Alt = ks.Alt
+				break
+			}
+		}
+	}
+
+	// If the frame is "busy" (e.g., mass insertion in progress), skip drawing
+	// and Flush to avoid flickering and save CPU.
+	if !topFrame.IsBusy() {
+		// Cleanup orphaned menus safely outside the frames iteration loop
+		// to avoid "index out of range" during rendering.
+		fm.cleanupOrphanedMenus()
+
+		fm.scr.SetCursorVisible(false)
+		fm.scr.ActivePalette = nil
+		// By default, we use OverlayMode (Early Binding) for host UI elements.
+		// Desktop and TerminalView will explicitly disable it during their render.
+		fm.scr.SetOverlayMode(true)
+
+		// 1. Находим "базовый" экран (первый непрозрачный, идя назад от активного)
+		baseIdx := fm.ActiveIdx
+		for baseIdx > 0 && fm.Screens[baseIdx].Transparent {
+			baseIdx--
+		}
+
+		// 2. Отрисовываем стэк экранов от базового до текущего
+		for sIdx := baseIdx; sIdx <= fm.ActiveIdx; sIdx++ {
+			frames := fm.GetActiveFrames(sIdx)
+			for _, frame := range frames {
+				if frame.HasShadow() {
+					x1, y1, x2, y2 := frame.GetPosition()
+					isFullScreen := x1 <= 0 && y1 <= 0 && x2 >= fm.scr.width-1 && y2 >= fm.scr.height-1
+					if !isFullScreen {
+						fm.scr.ApplyShadow(x1+2, y2+1, x2+2, y2+1)
+						fm.scr.ApplyShadow(x2+1, y1+1, x2+2, y2)
+					}
+				}
+				frame.Show(fm.scr)
+			}
+		}
+
+		fm.renderSwitcher(fm.scr)
+
+		// Render Standard Global UI
+		activeMenu := fm.GetActiveMenuBar()
+		if activeMenu != nil && activeMenu.Active {
+			activeMenu.Show(fm.scr)
+		}
+		if fm.KeyBar != nil {
+			fm.KeyBar.Show(fm.scr)
+		}
+		if fm.StatusLine != nil {
+			fm.StatusLine.Show(fm.scr)
+		}
+
+		if fm.OnRender != nil {
+			fm.OnRender(fm.scr)
+		}
+
+		// Draw Global Attention Indicator [!] if background screens need input
+		hasHiddenAttention := false
+		for i, s := range fm.Screens {
+			if i != fm.ActiveIdx && s.NeedsAttention() {
+				hasHiddenAttention = true
+				break
+			}
+		}
+		if hasHiddenAttention {
+			attr := SetRGBBoth(0, 0xFFFFFF, 0xFF0000) // White on Red
+			fm.scr.Write(fm.scr.width-3, 0, StringToCharInfo("[!]", attr))
+		}
+
+		fm.scr.Flush()
+	}
+}
+
+func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) {
+	if len(fm.frames) == 0 {
+		return
+	}
+
+	// Generate DoubleClick flag from sequence of clicks
+	if ev.Type == vtinput.MouseEventType && ev.ButtonState != 0 && ev.KeyDown {
+		now := time.Now()
+		if ev.ButtonState == fm.lastMouseButton && int(ev.MouseX) == fm.lastMouseX && int(ev.MouseY) == fm.lastMouseY && now.Sub(fm.lastMouseClickTime) < 400*time.Millisecond {
+			ev.MouseEventFlags |= vtinput.DoubleClick
+			fm.lastMouseButton = 0 // prevent triple click
+			DebugLog("FM: DoubleClick generated at (%d,%d)", ev.MouseX, ev.MouseY)
+		} else {
+			fm.lastMouseButton = ev.ButtonState
+			fm.lastMouseX = int(ev.MouseX)
+			fm.lastMouseY = int(ev.MouseY)
+			fm.lastMouseClickTime = now
+		}
+	}
+
+	topFrame := fm.frames[len(fm.frames)-1]
+	activeMenu := fm.GetActiveMenuBar()
+
+	// Update KeyBar modifiers automatically if present
+	if fm.KeyBar != nil {
+		shift := (ev.ControlKeyState & vtinput.ShiftPressed) != 0
+		ctrl := (ev.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
+		alt := (ev.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
+		fm.KeyBar.SetModifiers(shift, ctrl, alt)
+	}
+
+	// User-defined filter has first say
+	if !is_injected && fm.EventFilter != nil && fm.EventFilter(ev) {
+		return
+	}
+
+	// Track Ctrl state for Switcher logic
+	if ev.Type == vtinput.KeyEventType {
+		fm.ctrlPressed = (ev.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
+
+		// Commit Switcher selection on Ctrl release
+		if !fm.ctrlPressed && fm.switcherActive {
+			fm.switcherActive = false
+			fm.SwitchScreen(fm.switcherIdx)
+		}
+	}
+
+	// --- Menu Interception ---
+	if ev.Type == vtinput.KeyEventType && ev.KeyDown {
+		// 1. If Menu is Active, it has priority.
+		// We allow it even if topFrame is modal, provided topFrame IS the menu itself
+		// or the frame that owns the menu.
+		isMenuRelated := topFrame.GetType() == TypeMenu || topFrame.GetMenuBar() == activeMenu
+		if activeMenu != nil && activeMenu.Active && (!topFrame.IsModal() || isMenuRelated) {
+			// Exception: if a VMenu is open, it MUST handle navigation keys
+			if fm.GetTopFrameType() == TypeMenu {
+				menuFrame := fm.frames[len(fm.frames)-1]
+				if menuFrame.ProcessKey(ev) {
+					if menuFrame.IsDone() {
+						fm.RemoveFrame(menuFrame)
+					}
+					return
+				}
+			}
+			// Otherwise, MenuBar processes keys (Arrows, Esc, Hotkeys)
+			if ev.VirtualKeyCode == vtinput.VK_ESCAPE || ev.VirtualKeyCode == vtinput.VK_F10 {
+				activeMenu.Active = false
+				return
+			}
+			if activeMenu.ProcessKey(ev) {
+				return
+			}
+			return // Don't pass keys to background frames when menu is active
+		}
+	}
+
+	// 3. Regular Dispatch (MDI Hit-Testing)
+	handled := false
+
+	if ev.Type == vtinput.KeyEventType || ev.Type == vtinput.PasteEventType || ev.Type == vtinput.FocusEventType {
+		handled = topFrame.ProcessKey(ev)
+	} else if ev.Type == vtinput.MouseEventType {
+		mx, my := int(ev.MouseX), int(ev.MouseY)
+		if ev.ButtonState != 0 || ev.WheelDirection != 0 {
+			DebugLog("FM: Mouse Event at (%d,%d) State:%X Wheel:%d", mx, my, ev.ButtonState, ev.WheelDirection)
+		}
+
+		// 3.1. Active Mouse Capture (Dragging/Resizing)
+		if fm.capturedFrame != nil {
+			handled = fm.capturedFrame.ProcessMouse(ev)
+			if ev.ButtonState == 0 {
+				fm.capturedFrame = nil // Release capture
+			}
+		} else {
+			// 3.2. Mouse Hit-Testing: check frames from top to bottom
+			for i := len(fm.frames) - 1; i >= 0; i-- {
+				f := fm.frames[i]
+
+				// Desktop always gets mouse if nothing above it handled it
+				if f.GetType() == TypeDesktop {
+					handled = f.ProcessMouse(ev)
+					if handled && ev.ButtonState != 0 {
+						fm.capturedFrame = f
+					}
+					break
+				}
+
+				x1, y1, x2, y2 := f.GetPosition()
+				if mx >= x1 && mx <= x2+2 && my >= y1 && my <= y2+1 {
+					DebugLog("FM: Hit-test SUCCESS for frame %d type %d. Pos: (%d,%d)-(%d,%d)", i, f.GetType(), x1, y1, x2, y2)
+					// Click is within this frame (or its shadow)
+					if i != len(fm.frames)-1 {
+						// Try to bring it to front before passing the event
+						if fm.RequestFocus(f) {
+							handled = f.ProcessMouse(ev)
+						}
+					} else {
+						handled = f.ProcessMouse(ev)
+					}
+
+					// If a frame handled a click, it captures the mouse until release
+					if handled && ev.ButtonState != 0 {
+						fm.capturedFrame = f
+					}
+
+					// If the frame is modal, it eats the click even if it didn't handle it
+					// (to prevent clicking on windows behind it)
+					if f.IsModal() || handled {
+						break
+					}
+				}
+
+				if f.IsModal() {
+					break
+				}
+			}
+		}
+	}
+
+	// 3. Fallbacks (F9, Alt+Hotkey, Global Shortcuts) if top frame didn't want the key
+	if !handled && ev.Type == vtinput.KeyEventType && ev.KeyDown {
+		// Global Quit (standard for vtui tools)
+		if ev.VirtualKeyCode == vtinput.VK_Q && fm.ctrlPressed {
+			fm.Shutdown()
+			return
+		}
+
+		// Window Cycling (Ctrl+Tab / Ctrl+Shift+Tab)
+		if ev.VirtualKeyCode == vtinput.VK_TAB && (fm.ctrlPressed || fm.switcherActive) {
+			shift := (ev.ControlKeyState & vtinput.ShiftPressed) != 0
+			// Only consume the event if cycling is actually possible
+			if fm.CycleWindows(!shift) {
+				return
+			}
+		}
+
+		// Ctrl+N - Fork Active Frame into new Screen
+		if ev.VirtualKeyCode == vtinput.VK_N && fm.ctrlPressed {
+			fm.Flash()
+			// We need a way to clone the top-level frame.
+			// For now, let's trigger a Command that Panels can handle.
+			fm.EmitCommand(CmResize, "fork") // Temporary hack or use specialized Command
+			return
+		}
+
+		// Ctrl+W - Close Active Screen
+		if ev.VirtualKeyCode == vtinput.VK_W && fm.ctrlPressed {
+			fm.Flash()
+			fm.CloseActiveScreen()
+			return
+		}
+
+		// F12 - Screens Menu (Window List)
+		// We must ignore NumLock, CapsLock, and EnhancedKey flags
+		modifierMask := uint32(vtinput.LeftAltPressed | vtinput.RightAltPressed | vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed | vtinput.ShiftPressed)
+		if ev.VirtualKeyCode == vtinput.VK_F1 && (ev.ControlKeyState&modifierMask) == 0 {
+			topic := topFrame.GetHelp()
+			if dlg, ok := topFrame.(*Dialog); ok {
+				if foc := dlg.GetFocusedItem(); foc != nil && foc.GetHelp() != "" {
+					topic = foc.GetHelp()
+				}
+			}
+			if topic != "" && GlobalHelpEngine != nil {
+				hv := NewHelpView(GlobalHelpEngine, topic)
+				fm.Push(hv)
+				return
+			}
+		}
+		if ev.VirtualKeyCode == vtinput.VK_F12 && (ev.ControlKeyState&modifierMask) == 0 {
+			if fm.GetTopFrameType() != TypeMenu {
+				fm.showScreensMenu()
+				return
+			}
+		}
+
+		// Allow F9 if not modal, OR if the modal frame itself has a menu
+		canActivateMenu := !topFrame.IsModal() || topFrame.GetMenuBar() != nil
+		if ev.VirtualKeyCode == vtinput.VK_F9 {
+			if activeMenu == nil {
+				DebugLog("FM: F9 pressed but activeMenu is NIL")
+			} else if activeMenu.Active {
+				DebugLog("FM: F9 pressed but Menu is already active")
+			} else if !canActivateMenu {
+				DebugLog("FM: F9 pressed but Menu activation blocked by modal frame")
+			} else {
+				DebugLog("FM: F9 accepted, activating menu")
+				activeMenu.Active = true
+				if len(activeMenu.Items) > 0 {
+					if activeMenu.SelectPos < 0 || activeMenu.SelectPos >= len(activeMenu.Items) {
+						activeMenu.SelectPos = 0
+					}
+					activeMenu.ActivateSubMenu(activeMenu.SelectPos)
+				}
+				return
+			}
+		}
+		if activeMenu != nil && !activeMenu.Active && canActivateMenu {
+			alt := (ev.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
+			if alt && ev.Char != 0 {
+				if activeMenu.ProcessKey(ev) {
+					return
+				}
+			}
+		}
+	}
+
+	// 4. Cleanup: Remove all frames that are marked as done.
+	fm.cleanupDoneFrames()
 }
