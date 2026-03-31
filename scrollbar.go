@@ -1,6 +1,10 @@
 package vtui
 
-import "github.com/unxed/vtinput"
+import (
+	"time"
+
+	"github.com/unxed/vtinput"
+)
 
 // Symbols for the scrollbar, similar to Oem2Unicode from far2l
 const (
@@ -67,6 +71,7 @@ func CalcScrollBar(length, topItem, itemsCount int) (caretPos, caretLength int) 
 		cPos = MathRound(top*maxCaret, maxTop)
 	}
 
+
 	return int(cPos), int(cLen)
 }
 
@@ -109,10 +114,15 @@ type ScrollBar struct {
 	Min, Max int
 	PgStep   int
 	OnScroll func(int)
+	// OnStep is called for relative movements: -1 (Up), 1 (Down), -2 (PgUp), 2 (PgDown)
+	OnStep   func(int)
 
 	isDragging   bool
 	dragStartVal int
 	dragStartY   int
+
+	repeatTimer  *time.Timer
+	repeatAction int // -1, 1, -2, 2
 }
 
 func NewScrollBar(x, y, h int) *ScrollBar {
@@ -144,59 +154,90 @@ func (sb *ScrollBar) ProcessMouse(e *vtinput.InputEvent) bool {
 	mx, my := int(e.MouseX), int(e.MouseY)
 	h := sb.Y2 - sb.Y1 + 1
 
-	if sb.isDragging {
-		if e.ButtonState == 0 {
+	// 1. Handle Release
+	if e.ButtonState == 0 {
+		if sb.isDragging {
 			sb.isDragging = false
-			return true
 		}
-		
+		if sb.repeatTimer != nil {
+			sb.repeatTimer.Stop()
+			sb.repeatTimer = nil
+		}
+		return false
+	}
+
+	// 2. Handle Active Dragging
+	if sb.isDragging {
 		trackLen := h - 2
-		itemsCount := sb.Max + h // sb.Max is effectively MaxTopPos
+		itemsCount := sb.Max + h
 		_, caretLen := CalcScrollBar(h, sb.Value, itemsCount)
 		dragRange := trackLen - caretLen
 		if dragRange <= 0 { return true }
 
 		dy := my - sb.dragStartY
 		itemsPerPixel := float64(sb.Max) / float64(dragRange)
-		
+
 		newValue := sb.dragStartVal + int(float64(dy)*itemsPerPixel)
 		sb.scroll(newValue)
 		return true
 	}
 
+	// 3. Hit-test for initial click
 	if mx != sb.X1 || my < sb.Y1 || my > sb.Y2 {
 		return false
 	}
 
-	if e.ButtonState != vtinput.FromLeft1stButtonPressed || !e.KeyDown {
+	if !e.KeyDown {
 		return false
 	}
 
-	if my == sb.Y1 {
-		sb.scroll(sb.Value - 1)
-	} else if my == sb.Y2 {
-		sb.scroll(sb.Value + 1)
-	} else {
-		trackLen := h - 2
-		if trackLen <= 0 { return true }
-		
-		itemsCount := sb.Max + h
-		caretPos, caretLen := CalcScrollBar(h, sb.Value, itemsCount)
-		clickRelY := my - (sb.Y1 + 1)
+	itemsCount := sb.Max + h
+	cPos, cLen := CalcScrollBar(h, sb.Value, itemsCount)
+	clickRelY := my - (sb.Y1 + 1)
 
-		if clickRelY >= caretPos && clickRelY < caretPos+caretLen {
-			sb.isDragging = true
-			sb.dragStartY = my
-			sb.dragStartVal = sb.Value
-		} else {
-			if my < sb.Y1+h/2 {
-				sb.scroll(sb.Value - sb.PgStep)
-			} else {
-				sb.scroll(sb.Value + sb.PgStep)
-			}
-		}
+	action := 0
+	if my == sb.Y1 {
+		action = -1 // Up arrow
+	} else if my == sb.Y2 {
+		action = 1  // Down arrow
+	} else if clickRelY >= cPos && clickRelY < cPos+cLen {
+		sb.isDragging = true
+		sb.dragStartY = my
+		sb.dragStartVal = sb.Value
+		return true
+	} else {
+		if clickRelY < cPos { action = -2 } else { action = 2 } // PgUp/PgDown
 	}
+
+	if action != 0 {
+		sb.repeatAction = action
+		sb.triggerStep()
+		// Start auto-repeat
+		sb.repeatTimer = time.AfterFunc(400*time.Millisecond, sb.doRepeat)
+	}
+
 	return true
+}
+
+func (sb *ScrollBar) triggerStep() {
+	switch sb.repeatAction {
+	case -1:
+		if sb.OnStep != nil { sb.OnStep(-1) } else { sb.scroll(sb.Value - 1) }
+	case 1:
+		if sb.OnStep != nil { sb.OnStep(1) } else { sb.scroll(sb.Value + 1) }
+	case -2:
+		if sb.OnStep != nil { sb.OnStep(-2) } else { sb.scroll(sb.Value - sb.PgStep) }
+	case 2:
+		if sb.OnStep != nil { sb.OnStep(2) } else { sb.scroll(sb.Value + sb.PgStep) }
+	}
+}
+
+func (sb *ScrollBar) doRepeat() {
+	FrameManager.PostTask(func() {
+		if sb.repeatTimer == nil { return }
+		sb.triggerStep()
+		sb.repeatTimer = time.AfterFunc(50*time.Millisecond, sb.doRepeat)
+	})
 }
 
 func (sb *ScrollBar) scroll(v int) {
