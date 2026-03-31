@@ -134,15 +134,15 @@ func (lb *ListBox) ProcessKey(e *vtinput.InputEvent) bool {
 
 func (lb *ListBox) ProcessMouse(e *vtinput.InputEvent) bool {
 	if lb.IsDisabled() { return false }
+	if lb.ScrollBar != nil && lb.ScrollBar.ProcessMouse(e) {
+		return true
+	}
 	if e.WheelDirection != 0 {
 		if e.WheelDirection > 0 && lb.TopPos > 0 { lb.TopPos-- }
 		if e.WheelDirection < 0 && lb.TopPos < len(lb.Items)-lb.ViewHeight { lb.TopPos++ }
 		return true
 	}
 	if e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
-		if int(e.MouseX) == lb.X2 && len(lb.Items) > lb.ViewHeight {
-			return lb.ScrollBar.ProcessMouse(e)
-		}
 		clickIdx := lb.TopPos + (int(e.MouseY) - lb.Y1)
 		if clickIdx >= 0 && clickIdx < len(lb.Items) {
 			lb.SelectPos = clickIdx

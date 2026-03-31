@@ -280,6 +280,8 @@ func (t *Table) ProcessKey(e *vtinput.InputEvent) bool {
 
 func (t *Table) ProcessMouse(e *vtinput.InputEvent) bool {
 	if t.IsDisabled() || e.Type != vtinput.MouseEventType { return false }
+	if t.ShowScrollBar && t.ScrollBar != nil && t.ScrollBar.ProcessMouse(e) { return true }
+
 	headerOffset := map[bool]int{true: 1, false: 0}[t.ShowHeader]
 
 	if e.WheelDirection != 0 {
@@ -297,9 +299,6 @@ func (t *Table) ProcessMouse(e *vtinput.InputEvent) bool {
 	}
 
 	if e.ButtonState != 0 && e.KeyDown {
-		if e.ButtonState == vtinput.FromLeft1stButtonPressed && t.ShowScrollBar && len(t.Rows) > t.ViewHeight && int(e.MouseX) == t.X2 {
-			return t.ScrollBar.ProcessMouse(e)
-		}
 		clickIdx := t.TopPos + (int(e.MouseY) - t.Y1 - headerOffset)
 		if int(e.MouseY) >= t.Y1+headerOffset && int(e.MouseY) <= t.Y2 && clickIdx >= 0 && clickIdx < len(t.Rows) {
 			t.SelectPos = clickIdx

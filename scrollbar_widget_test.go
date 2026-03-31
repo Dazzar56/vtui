@@ -9,6 +9,7 @@ func TestScrollBar_WidgetMouse(t *testing.T) {
 	val := -1
 	sb := NewScrollBar(0, 0, 10) // height 10, Y: 0..9
 	sb.SetParams(5, 0, 20)
+	sb.SetVisible(true) // Required for internal hit-testing to pass
 	sb.OnScroll = func(v int) { val = v }
 
 	// 1. Click top arrow (Y=0)

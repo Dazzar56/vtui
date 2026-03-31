@@ -137,7 +137,11 @@ func (sb *ScrollBar) Show(scr *ScreenBuf) {
 }
 
 func (sb *ScrollBar) ProcessMouse(e *vtinput.InputEvent) bool {
-	my := int(e.MouseY)
+	if !sb.IsVisible() || sb.Max <= sb.Min {
+		return false
+	}
+
+	mx, my := int(e.MouseX), int(e.MouseY)
 	h := sb.Y2 - sb.Y1 + 1
 
 	if sb.isDragging {
@@ -158,6 +162,10 @@ func (sb *ScrollBar) ProcessMouse(e *vtinput.InputEvent) bool {
 		newValue := sb.dragStartVal + int(float64(dy)*itemsPerPixel)
 		sb.scroll(newValue)
 		return true
+	}
+
+	if mx != sb.X1 || my < sb.Y1 || my > sb.Y2 {
+		return false
 	}
 
 	if e.ButtonState != vtinput.FromLeft1stButtonPressed || !e.KeyDown {

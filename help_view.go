@@ -277,14 +277,8 @@ func (hv *HelpView) ProcessMouse(e *vtinput.InputEvent) bool {
 		return false
 	}
 
-	if hv.scrollBar != nil && int(e.MouseX) == hv.scrollBar.X1 {
-		contentH := (hv.Y2 - hv.Y1 + 1) - 2 - hv.current.StickyRows
-		totalScrollable := len(hv.current.Lines) - hv.current.StickyRows
-		if totalScrollable > contentH {
-			if hv.scrollBar.ProcessMouse(e) {
-				return true
-			}
-		}
+	if hv.scrollBar != nil && hv.scrollBar.ProcessMouse(e) {
+		return true
 	}
 
 	if e.WheelDirection != 0 {

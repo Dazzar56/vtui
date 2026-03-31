@@ -19,16 +19,6 @@ const (
 	CommonLvbStrikeout  uint64 = 0x2000 // Strikeout.
 	CommonLvbReverse    uint64 = 0x4000 // Reverse fore/back ground attribute.
 	CommonLvbUnderscore uint64 = 0x8000 // Underscore.
-
-	// Deprecated legacy masks, kept temporarily to avoid build errors in unrelated files
-	ForegroundBlue      uint64 = 0x0001
-	ForegroundGreen     uint64 = 0x0002
-	ForegroundRed       uint64 = 0x0004
-	BackgroundBlue      uint64 = 0x0010
-	BackgroundGreen     uint64 = 0x0020
-	BackgroundRed       uint64 = 0x0040
-	ForegroundRGB       uint64 = ForegroundRed | ForegroundGreen | ForegroundBlue
-	BackgroundRGB       uint64 = BackgroundRed | BackgroundGreen | BackgroundBlue
 )
 
 // GetRGBFore extracts 24-bit RGB text color from attributes (bits 16-39).
