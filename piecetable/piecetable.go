@@ -1,6 +1,24 @@
 package piecetable
 
 // BufferType indicates which buffer a text fragment is in.
+type Buffer interface {
+	Size() int
+	Read(offset, length int) []byte
+}
+
+type MemoryBuffer []byte
+
+func (m MemoryBuffer) Size() int { return len(m) }
+func (m MemoryBuffer) Read(offset, length int) []byte {
+	if offset < 0 || offset >= len(m) || length <= 0 {
+		return nil
+	}
+	end := offset + length
+	if end > len(m) {
+		end = len(m)
+	}
+	return m[offset:end]
+}
 type BufferType int
 
 const (
@@ -17,7 +35,7 @@ type Piece struct {
 
 // PieceTable is a structure for efficient editing of large texts.
 type PieceTable struct {
-	orig   []byte  // Original (Read-only) buffer
+	orig   Buffer  // Original (Read-only) buffer
 	add    []byte  // Additive (Append-only) buffer
 	pieces []Piece // Piece table
 	size   int     // Current logical length of the entire text
@@ -26,7 +44,7 @@ type PieceTable struct {
 // New creates a new piece table from original text.
 func New(text []byte) *PieceTable {
 	pt := &PieceTable{
-		orig: text,
+		orig: MemoryBuffer(text),
 		size: len(text),
 	}
 	if len(text) > 0 {
@@ -154,7 +172,7 @@ func (pt *PieceTable) Bytes() []byte {
 	res := make([]byte, 0, pt.size)
 	for _, p := range pt.pieces {
 		if p.Buf == Original {
-			res = append(res, pt.orig[p.Start:p.Start+p.Length]...)
+			res = append(res, pt.orig.Read(p.Start, p.Length)...)
 		} else {
 			res = append(res, pt.add[p.Start:p.Start+p.Length]...)
 		}
@@ -179,7 +197,7 @@ func (pt *PieceTable) AppendRange(dest []byte, offset, length int) []byte {
 		}
 
 		if p.Buf == Original {
-			dest = append(dest, pt.orig[p.Start+offInPiece : p.Start+offInPiece+take]...)
+			dest = append(dest, pt.orig.Read(p.Start+offInPiece, take)...)
 		} else {
 			dest = append(dest, pt.add[p.Start+offInPiece : p.Start+offInPiece+take]...)
 		}
@@ -201,7 +219,14 @@ func (pt *PieceTable) String() string {
 func (pt *PieceTable) ForEachRange(fn func(data []byte)) {
 	for _, p := range pt.pieces {
 		if p.Buf == Original {
-			fn(pt.orig[p.Start : p.Start+p.Length])
+			const chunkSize = 1024 * 1024
+			for offset := 0; offset < p.Length; offset += chunkSize {
+				take := chunkSize
+				if offset+take > p.Length {
+					take = p.Length - offset
+				}
+				fn(pt.orig.Read(p.Start+offset, take))
+			}
 		} else {
 			fn(pt.add[p.Start : p.Start+p.Length])
 		}
@@ -230,16 +255,27 @@ func (pt *PieceTable) GetRange(offset, length int) []byte {
 
 		var buf []byte
 		if p.Buf == Original {
-			buf = pt.orig
+			buf = pt.orig.Read(p.Start+offInPiece, take)
 		} else {
-			buf = pt.add
+			buf = pt.add[p.Start+offInPiece : p.Start+offInPiece+take]
 		}
 
-		res = append(res, buf[p.Start+offInPiece : p.Start+offInPiece+take]...)
+		res = append(res, buf...)
 
 		remaining -= take
 		offInPiece = 0 // For subsequent pieces, read from start
 	}
 
 	return res
+}
+
+func NewWithBuffer(buf Buffer) *PieceTable {
+	pt := &PieceTable{
+		orig: buf,
+		size: buf.Size(),
+	}
+	if buf.Size() > 0 {
+		pt.pieces = []Piece{{Buf: Original, Start: 0, Length: buf.Size()}}
+	}
+	return pt
 }
