@@ -2,45 +2,49 @@ package vtui
 
 import (
 	"github.com/unxed/vtinput"
-	"github.com/mattn/go-runewidth"
 )
 
-// ListBox represents a list of strings for selection within a dialog.
-type ListBox struct {
-	ScrollView
-	Items    []string
+// listRow wraps a string for Table compatibility.
+type listRow struct {
+	lb  *ListBox
+	idx int
+}
 
-	ColorTextIdx             int
-	ColorSelectedTextIdx     int
-	ColorItemSelectTextIdx   int
-	ColorItemSelectCursorIdx int
-	ColorTitleIdx            int
-	ColorBoxIdx              int
-	MultiSelect              bool
-	SelectedMap              map[int]bool
+func (r listRow) GetCellText(col int) string { return r.lb.Items[r.idx] }
+func (r listRow) IsSelected() bool { return r.lb.SelectedMap[r.idx] }
+
+// ListBox is a single-column Table for simple string selection.
+type ListBox struct {
+	Table
+	Items       []string
+	SelectedMap map[int]bool
+	MultiSelect bool
 }
 
 func NewListBox(x, y, w, h int, items []string) *ListBox {
 	lb := &ListBox{
-		Items:                    items,
-		SelectedMap:              make(map[int]bool),
-		ColorTextIdx:             ColTableText,
-		ColorSelectedTextIdx:     ColTableSelectedText,
-		ColorItemSelectTextIdx:   ColTableText,
-		ColorItemSelectCursorIdx: ColTableSelectedText,
-		ColorTitleIdx:            ColTableColumnTitle,
-		ColorBoxIdx:              ColTableBox,
+		Table:       *NewTable(x, y, w, h, []TableColumn{{Width: w}}),
+		Items:       items,
+		SelectedMap: make(map[int]bool),
 	}
-	lb.ItemCount = len(items)
-	lb.ViewHeight = h
-	if lb.ItemCount == 0 {
-		lb.SelectPos = 0
-	}
+	lb.ShowHeader = false
+	lb.ShowSeparators = false
 	lb.canFocus = true
-	lb.ShowScrollBar = true
-	lb.InitScrollBar(lb)
-	lb.SetPosition(x, y, x+w-1, y+h-1)
+	lb.UpdateRows()
 	return lb
+}
+
+func (lb *ListBox) UpdateRows() {
+	rows := make([]TableRow, len(lb.Items))
+	for i := range lb.Items {
+		rows[i] = listRow{lb: lb, idx: i}
+	}
+	// Sync MarginTop/ViewHeight before calculating widths
+	lb.Table.SetPosition(lb.X1, lb.Y1, lb.X2, lb.Y2)
+	lb.SetRows(rows)
+	if len(lb.Columns) > 0 {
+		lb.Columns[0].Width = lb.GetContentWidth()
+	}
 }
 
 func (lb *ListBox) GetSelectedIndices() []int {
@@ -51,51 +55,15 @@ func (lb *ListBox) GetSelectedIndices() []int {
 	return res
 }
 
-func (lb *ListBox) Show(scr *ScreenBuf) {
-	lb.ScreenObject.Show(scr)
-	lb.DisplayObject(scr)
-}
-
-func (lb *ListBox) DisplayObject(scr *ScreenBuf) {
-	if !lb.IsVisible() { return }
-
-	width := lb.GetContentWidth()
-	height := lb.Y2 - lb.Y1 + 1
-
-	// 1. Elements rendering
-	for i := 0; i < height; i++ {
-		idx := lb.TopPos + i
-		currY := lb.Y1 + i
-
-		attr := lb.GetStateAttr(lb.ColorTextIdx, lb.ColorSelectedTextIdx)
-		isSelected := lb.SelectedMap[idx]
-
-		if isSelected {
-			attr = lb.GetStateAttr(ColDialogHighlightText, ColDialogHighlightSelectedButton)
-		} else if idx == lb.SelectPos && !lb.IsFocused() {
-			attr = lb.GetStateAttr(lb.ColorTextIdx, lb.ColorTextIdx)
-		}
-
-		if idx < len(lb.Items) {
-			text := runewidth.Truncate(lb.Items[idx], width, "")
-			vLen := runewidth.StringWidth(text)
-
-			scr.Write(lb.X1, currY, StringToCharInfo(text, attr))
-			if vLen < width {
-				scr.FillRect(lb.X1+vLen, currY, lb.X1+width-1, currY, ' ', attr)
-			}
-		} else {
-			scr.FillRect(lb.X1, currY, lb.X1+width-1, currY, ' ', lb.GetStateAttr(lb.ColorTextIdx, lb.ColorTextIdx))
-		}
+func (lb *ListBox) SetPosition(x1, y1, x2, y2 int) {
+	lb.Table.SetPosition(x1, y1, x2, y2)
+	if len(lb.Columns) > 0 {
+		lb.Columns[0].Width = lb.GetContentWidth()
 	}
-
-	// 2. Scrollbar
-	lb.DrawScrollBar(scr)
 }
 
 func (lb *ListBox) ProcessKey(e *vtinput.InputEvent) bool {
 	if !e.KeyDown || lb.IsDisabled() { return false }
-
 	switch e.VirtualKeyCode {
 	case vtinput.VK_SPACE, vtinput.VK_INSERT:
 		if lb.MultiSelect {
@@ -104,11 +72,5 @@ func (lb *ListBox) ProcessKey(e *vtinput.InputEvent) bool {
 			return true
 		}
 	}
-
-	return lb.HandleKey(e)
-}
-
-func (lb *ListBox) ProcessMouse(e *vtinput.InputEvent) bool {
-	if lb.IsDisabled() { return false }
-	return lb.HandleMouse(e)
+	return lb.Table.ProcessKey(e)
 }

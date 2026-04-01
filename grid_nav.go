@@ -6,9 +6,7 @@ import (
 )
 
 func gridNav(idx, count, cols int, vk uint16) (int, bool) {
-	if cols < 1 {
-		cols = 1
-	}
+	if cols < 1 { cols = 1 }
 	row := idx / cols
 	col := idx % cols
 	rows := (count + cols - 1) / cols
@@ -18,26 +16,31 @@ func gridNav(idx, count, cols int, vk uint16) (int, bool) {
 		if row > 0 {
 			return idx - cols, true
 		} else if col > 0 {
-			// Snake navigation: move to the bottom of the previous column
-			newIdx := (rows-1)*cols + (col - 1)
-			for newIdx >= count {
-				newIdx -= cols
-			}
+			// Snake: bottom of previous column
+			lastRowInPrev := rows - 1
+			newIdx := lastRowInPrev*cols + (col - 1)
+			for newIdx >= count { newIdx -= cols }
 			return newIdx, true
 		}
 	case vtinput.VK_DOWN:
-		if row < rows-1 && idx+cols < count {
+		if idx+cols < count {
 			return idx + cols, true
 		} else if col < cols-1 && col+1 < count {
-			// Snake navigation: move to the top of the next column
+			// Snake: top of next column
 			return col + 1, true
 		}
 	case vtinput.VK_LEFT:
 		if col > 0 {
 			return idx - 1, true
+		} else if row > 0 {
+			// Snake: end of previous row
+			return idx - 1, true
 		}
 	case vtinput.VK_RIGHT:
-		if col < cols-1 && idx < count-1 {
+		if col < cols-1 && idx+1 < count {
+			return idx + 1, true
+		} else if row < rows-1 && idx+1 < count {
+			// Snake: start of next row
 			return idx + 1, true
 		}
 	}

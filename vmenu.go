@@ -72,11 +72,33 @@ func (m *VMenu) GetItemCount() int { return len(m.items) }
 // ProcessKey processes navigation keys.
 func (m *VMenu) ProcessKey(e *vtinput.InputEvent) bool {
 	if m.IsDisabled() || !e.KeyDown { return false }
+
+	isSubMenu := false
+	if m.owner != nil {
+		_, isSubMenu = m.owner.(*MenuBar)
+	}
+
 	switch e.VirtualKeyCode {
 	case vtinput.VK_LEFT:
-		FrameManager.EmitCommand(CmMenuLeft, nil); return true
+		if isSubMenu {
+			FrameManager.EmitCommand(CmMenuLeft, nil)
+			return true
+		}
+		return false // Boundary exit
 	case vtinput.VK_RIGHT:
-		FrameManager.EmitCommand(CmMenuRight, nil); return true
+		if isSubMenu {
+			FrameManager.EmitCommand(CmMenuRight, nil)
+			return true
+		}
+		// If last item in standalone menu, let focus cycle
+		if m.SelectPos == m.ItemCount-1 { return false }
+		return m.HandleKey(e)
+	case vtinput.VK_UP:
+		if m.SelectPos == 0 && !isSubMenu { return false }
+		return m.HandleKey(e)
+	case vtinput.VK_DOWN:
+		if m.SelectPos == m.ItemCount-1 && !isSubMenu { return false }
+		return m.HandleKey(e)
 	case vtinput.VK_ESCAPE, vtinput.VK_F10:
 		m.SetExitCode(-1); return FrameManager.GetTopFrame() == Frame(m)
 	case vtinput.VK_RETURN:
@@ -209,7 +231,12 @@ func (m *VMenu) DisplayObject(scr *ScreenBuf) {
 	// 1. Frame and Background
 	p.Fill(m.X1, m.Y1, m.X2, m.Y2, ' ', Palette[ColMenuText])
 	p.DrawBox(m.X1, m.Y1, m.X2, m.Y2, Palette[ColMenuBox], DoubleBox)
-	p.DrawTitle(m.X1, m.Y1, m.X2, m.title, Palette[ColMenuTitle])
+
+	titleAttr := Palette[ColMenuTitle]
+	if m.IsFocused() {
+		titleAttr = Palette[ColDialogHighlightBoxTitle]
+	}
+	p.DrawTitle(m.X1, m.Y1, m.X2, m.title, titleAttr)
 
 	colText := Palette[ColMenuText]
 	colSel := Palette[ColMenuSelectedText]

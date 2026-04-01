@@ -97,6 +97,9 @@ func (t *Table) DisplayObject(scr *ScreenBuf) {
 		return
 	}
 
+	// Ensure margins are in sync with ShowHeader/ShowScrollBar before rendering
+	t.SetPosition(t.X1, t.Y1, t.X2, t.Y2)
+
 	yOffset := 0
 	height := t.Y2 - t.Y1 + 1
 
@@ -231,13 +234,22 @@ func (t *Table) formatCell(text string, width int, align Alignment) string {
 func (t *Table) ProcessKey(e *vtinput.InputEvent) bool {
 	if !e.KeyDown || t.IsDisabled() { return false }
 
+	switch e.VirtualKeyCode {
+	case vtinput.VK_UP:
+		if t.SelectPos == 0 { return false }
+	case vtinput.VK_DOWN:
+		if t.SelectPos == t.ItemCount-1 { return false }
+	}
+
 	if t.CellSelection {
 		switch e.VirtualKeyCode {
 		case vtinput.VK_LEFT:
 			if t.SelectCol > 0 { t.SelectCol--; return true }
+			if t.SelectPos == 0 { return false }
 			if t.MoveRelative(-1) { t.SelectCol = len(t.Columns) - 1; return true }
 		case vtinput.VK_RIGHT:
 			if t.SelectCol < len(t.Columns)-1 { t.SelectCol++; return true }
+			if t.SelectPos == t.ItemCount-1 { return false }
 			if t.MoveRelative(1) { t.SelectCol = 0; return true }
 		}
 	}

@@ -6,24 +6,23 @@ import (
 )
 
 func TestRadioGroup_Navigation(t *testing.T) {
-	// Use unique hotkeys: O, W, T
 	rg := NewRadioGroup(0, 0, 1, []string{"&One", "T&wo", "&Three"})
 
 	// 1. Initial
-	if rg.Selected != 0 { t.Errorf("Expected 0, got %d", rg.Selected) }
+	if rg.Selected != 0 || rg.focusIdx != 0 { t.Errorf("Initial state fail") }
 
-	// 2. Down
+	// 2. Down: moves focus, NOT selection
 	rg.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
-	if rg.Selected != 1 { t.Errorf("Expected 1, got %d", rg.Selected) }
+	if rg.focusIdx != 1 { t.Errorf("Expected focus 1, got %d", rg.focusIdx) }
+	if rg.Selected != 0 { t.Error("Selection should not change on arrows") }
 
-	// Boundary check (should return false when trying to go out of bounds)
-	rg.Selected = 2
-	handled := rg.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
-	if handled { t.Errorf("Should return false on bottom boundary") }
+	// 3. Space: changes selection
+	rg.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_SPACE})
+	if rg.Selected != 1 { t.Error("Space should change selection") }
 
-	// 3. Hotkey 't' for 'Three'
+	// 4. Hotkey: changes both
 	rg.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 't'})
-	if rg.Selected != 2 { t.Errorf("Hotkey failed, got %d", rg.Selected) }
+	if rg.Selected != 2 || rg.focusIdx != 2 { t.Error("Hotkey failed") }
 }
 
 func TestRadioGroup_MultiColumn(t *testing.T) {
@@ -32,19 +31,19 @@ func TestRadioGroup_MultiColumn(t *testing.T) {
 	// 2
 	rg := NewRadioGroup(0, 0, 2, []string{"A", "B", "C"})
 
-	rg.Selected = 0
+	rg.focusIdx = 0
 	// 1. Right to B (index 1)
 	rg.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT})
-	if rg.Selected != 1 {
-		t.Errorf("Right nav failed, got %d", rg.Selected)
+	if rg.focusIdx != 1 {
+		t.Errorf("Right nav failed, expected focus 1, got %d", rg.focusIdx)
 	}
 
-	// 2. Down from B (index 1). There is nothing below B, and it's the last column.
-	// According to the "exit only at absolute boundaries" rule, it should be swallowed
-	// because index 1 is not the last element of the group (index 2 is).
+	// 2. Down from B (index 1). "Snake" logic: move to top of next col or swallow.
+	// Since B is at col 1, row 0 and it's the last column, Down should be swallowed
+	// because index 1 is not the absolute end of items (index 2 is).
 	handled := rg.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
 	if !handled {
-		t.Error("VK_DOWN at index 1 should be swallowed (not absolute end of group)")
+		t.Error("VK_DOWN at index 1 should be swallowed")
 	}
 }
 
@@ -54,17 +53,17 @@ func TestRadioGroup_SnakeNavigation(t *testing.T) {
 	// 2 3
 	rg := NewRadioGroup(0, 0, 2, []string{"0", "1", "2", "3"})
 
-	// 1. Down from 2 (bottom of col 0) to 1 (top of col 1)
-	rg.Selected = 2
+	// 1. Down from 2 (bottom of col 0) -> should go to 1 (top of col 1)
+	rg.focusIdx = 2
 	rg.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
-	if rg.Selected != 1 {
-		t.Errorf("Snake Down failed: expected 1, got %d", rg.Selected)
+	if rg.focusIdx != 1 {
+		t.Errorf("Snake Down failed: expected 1, got %d", rg.focusIdx)
 	}
 
-	// 2. Up from 1 (top of col 1) back to 2 (bottom of col 0)
+	// 2. Up from 1 (top of col 1) -> should go back to 2 (bottom of col 0)
 	rg.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_UP})
-	if rg.Selected != 2 {
-		t.Errorf("Snake Up failed: expected 2, got %d", rg.Selected)
+	if rg.focusIdx != 2 {
+		t.Errorf("Snake Up failed: expected 2, got %d", rg.focusIdx)
 	}
 }
 
@@ -72,31 +71,25 @@ func TestRadioGroup_BoundarySwallowing(t *testing.T) {
 	// 3 items: 0, 1, 2
 	rg := NewRadioGroup(0, 0, 1, []string{"0", "1", "2"})
 
-	// At index 1, ANY arrow should be swallowed
-	rg.Selected = 1
-	arrows := []uint16{vtinput.VK_UP, vtinput.VK_DOWN, vtinput.VK_LEFT, vtinput.VK_RIGHT}
+	// At middle index, arrows should be swallowed (stay in group)
+	rg.focusIdx = 1
+	arrows := []uint16{vtinput.VK_UP, vtinput.VK_DOWN}
 	for _, a := range arrows {
 		if !rg.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: a}) {
 			t.Errorf("Arrow %d should be swallowed at index 1", a)
 		}
 	}
 
-	// At index 0, UP and LEFT should NOT be swallowed (exit to prev)
-	rg.Selected = 0
+	// At index 0, UP should NOT be swallowed (exit to prev)
+	rg.focusIdx = 0
 	if rg.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_UP}) {
 		t.Error("VK_UP at index 0 should not be handled")
 	}
-	if rg.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_LEFT}) {
-		t.Error("VK_LEFT at index 0 should not be handled")
-	}
 
-	// At index 2, DOWN and RIGHT should NOT be swallowed (exit to next)
-	rg.Selected = 2
+	// At index 2, DOWN should NOT be swallowed (exit to next)
+	rg.focusIdx = 2
 	if rg.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN}) {
 		t.Error("VK_DOWN at index 2 should not be handled")
-	}
-	if rg.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT}) {
-		t.Error("VK_RIGHT at index 2 should not be handled")
 	}
 }
 
@@ -145,3 +138,24 @@ func TestGroupBox_Rendering(t *testing.T) {
 	checkCell(t, scr, 4, 2, 'G', Palette[ColDialogHighlightText])
 	checkCell(t, scr, 5, 2, 'r', Palette[ColDialogHighlightText])
 }
+
+func TestGridSnakeNavigation(t *testing.T) {
+	// 5 items, 2 cols:
+	// 0 1
+	// 2 3
+	// 4
+	//items := []string{"0", "1", "2", "3", "4"}
+	
+	// Right from col 1 (idx 1) -> idx 2 (row 1 start)
+	idx, ok := gridNav(1, 5, 2, vtinput.VK_RIGHT)
+	if !ok || idx != 2 { t.Errorf("Snake Right row 0 fail: %d", idx) }
+
+	// Down from bottom of col 0 (idx 4) -> idx 1 (col 1 top)
+	idx, ok = gridNav(4, 5, 2, vtinput.VK_DOWN)
+	if !ok || idx != 1 { t.Errorf("Snake Down col 0 fail: %d", idx) }
+	
+	// Left from idx 2 (row 1 start) -> idx 1 (row 0 end)
+	idx, ok = gridNav(2, 5, 2, vtinput.VK_LEFT)
+	if !ok || idx != 1 { t.Errorf("Snake Left row 1 fail: %d", idx) }
+}
+

@@ -24,7 +24,7 @@ func TestListBox_Scrolling(t *testing.T) {
 		t.Errorf("SelectPos error after Down: %d", lb.SelectPos)
 	}
 	if lb.TopPos != 1 {
-		t.Errorf("TopPos error after Down (scrolling): %d", lb.TopPos)
+		t.Errorf("TopPos error after Down (scrolling): expected 1, got %d", lb.TopPos)
 	}
 
 	// 3. Home test
@@ -83,6 +83,7 @@ func TestListBox_PageNavigation(t *testing.T) {
 	}
 
 	// 2. Page Up (19 -> 14)
+	// ViewHeight is 5. 19 - 5 = 14.
 	lb.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_PRIOR})
 	if lb.SelectPos != 14 {
 		t.Errorf("PageUp failed: expected 14, got %d", lb.SelectPos)
@@ -99,9 +100,13 @@ func TestListBox_MouseClickItem(t *testing.T) {
 	lb := NewListBox(0, 0, 10, 5, []string{"0", "1", "2", "3", "4"})
 	lb.TopPos = 1 // Offset by 1 (visible: 1, 2, 3, 4, 5)
 
-	// Click at Y=2 (this is the second visible row in local coordinates)
-	// Selected index should be TopPos (1) + (clickY (2) - lbY (0)) = 3.
-	// Formula check: lb.TopPos + (my - lb.Y1) => 1 + (2 - 0) = 3.
+	// Re-render to ensure Table internal state (MarginTop) is updated in test environment
+	scr := NewScreenBuf()
+	scr.AllocBuf(10, 5)
+	lb.Show(scr)
+
+	// Click at Y=2 (this is the second row of content since Y1=0 and MarginTop=0)
+	// Selected index should be TopPos (1) + 2 = 3.
 	lb.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType,
 		KeyDown: true,

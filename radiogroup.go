@@ -10,6 +10,7 @@ type RadioGroup struct {
 	ScreenObject
 	Items     []string
 	Selected  int
+	focusIdx  int
 	OnChange  func(int)
 	Columns   int
 	colWidths []int
@@ -40,10 +41,21 @@ func (rg *RadioGroup) Show(scr *ScreenBuf) {
 func (rg *RadioGroup) DisplayObject(scr *ScreenBuf) {
 	if !rg.IsVisible() { return }
 
-	attr, highAttr := rg.GetStateAttrs(ColDialogText, ColDialogSelectedButton, ColDialogHighlightText, ColDialogHighlightSelectedButton)
+	attr := Palette[ColDialogText]
+	highAttr := Palette[ColDialogHighlightText]
+	selAttr := Palette[ColDialogSelectedButton]
+	selHighAttr := Palette[ColDialogHighlightSelectedButton]
 
 	p := NewPainter(scr)
 	for i, itm := range rg.Items {
+		curAttr, curHigh := attr, highAttr
+		if rg.IsFocused() && i == rg.focusIdx {
+			curAttr, curHigh = selAttr, selHighAttr
+		}
+		if rg.IsDisabled() {
+			curAttr, curHigh = DimColor(curAttr), DimColor(curHigh)
+		}
+
 		prefix := "( ) "
 		if i == rg.Selected { prefix = "(•) " }
 
@@ -52,7 +64,7 @@ func (rg *RadioGroup) DisplayObject(scr *ScreenBuf) {
 		cx := rg.X1
 		for c := 0; c < col; c++ { cx += rg.colWidths[c] }
 
-		p.DrawStringHighlighted(cx, rg.Y1+row, prefix+itm, attr, highAttr)
+		p.DrawStringHighlighted(cx, rg.Y1+row, prefix+itm, curAttr, curHigh)
 	}
 }
 
@@ -67,45 +79,38 @@ func (rg *RadioGroup) SetData(val any) {
 }
 
 func (rg *RadioGroup) ProcessKey(e *vtinput.InputEvent) bool {
-	if !e.KeyDown {
-		return false
-	}
-
+	if !e.KeyDown { return false }
 	if rg.IsDisabled() { return false }
 
-	newIdx, moved := gridNav(rg.Selected, len(rg.Items), rg.Columns, e.VirtualKeyCode)
+	newIdx, moved := gridNav(rg.focusIdx, len(rg.Items), rg.Columns, e.VirtualKeyCode)
 	if moved {
-		rg.Selected = newIdx
-		var onClick func()
-		if rg.OnChange != nil {
-			onClick = func() { rg.OnChange(rg.Selected) }
-		}
-		rg.FireAction(onClick, rg.Selected)
+		rg.focusIdx = newIdx
 		return true
 	}
 
-	if handleGridBoundaryNav(e.VirtualKeyCode, rg.Selected, len(rg.Items)) {
+	if handleGridBoundaryNav(e.VirtualKeyCode, rg.focusIdx, len(rg.Items)) {
 		return true
 	}
 
 	switch e.VirtualKeyCode {
 	case vtinput.VK_SPACE, vtinput.VK_RETURN:
-		return false // Allow dialog to catch it if needed
+		if rg.Selected != rg.focusIdx {
+			rg.Selected = rg.focusIdx
+			if rg.OnChange != nil { rg.OnChange(rg.Selected) }
+			rg.FireAction(nil, rg.Selected)
+		}
+		return true
 	}
 
 	if e.Char != 0 {
 		hkChar := unicode.ToLower(e.Char)
-		{
-			for i, itm := range rg.Items {
-				if ExtractHotkey(itm) == hkChar {
-					rg.Selected = i
-				var onClick func()
-				if rg.OnChange != nil {
-					onClick = func() { rg.OnChange(rg.Selected) }
-				}
-				rg.FireAction(onClick, rg.Selected)
-					return true
-				}
+		for i, itm := range rg.Items {
+			if ExtractHotkey(itm) == hkChar {
+				rg.focusIdx = i
+				rg.Selected = i
+				if rg.OnChange != nil { rg.OnChange(rg.Selected) }
+				rg.FireAction(nil, rg.Selected)
+				return true
 			}
 		}
 	}
@@ -120,13 +125,11 @@ func (rg *RadioGroup) ProcessMouse(e *vtinput.InputEvent) bool {
 		if rg.HitTest(mx, my) {
 			idx := getGridIndexFromMouse(rg.X1, rg.Y1, mx, my, rg.Columns, rg.colWidths)
 			if idx >= 0 && idx < len(rg.Items) {
+				rg.focusIdx = idx
 				if rg.Selected != idx {
 					rg.Selected = idx
-					var onClick func()
-					if rg.OnChange != nil {
-						onClick = func() { rg.OnChange(rg.Selected) }
-					}
-					rg.FireAction(onClick, rg.Selected)
+					if rg.OnChange != nil { rg.OnChange(rg.Selected) }
+					rg.FireAction(nil, rg.Selected)
 				}
 				return true
 			}
