@@ -144,17 +144,7 @@ func (t *Table) DisplayObject(scr *ScreenBuf) {
 
 
 func (t *Table) drawRow(scr *ScreenBuf, y int, rowIdx int, attr uint64) {
-	headerOffset := 0
-	if t.ShowHeader {
-		headerOffset = 1
-	}
-	dataHeight := (t.Y2 - t.Y1 + 1) - headerOffset
-
-	// If scrollbar is drawn, we must not overwrite the rightmost column.
-	endX := t.X2
-	if t.ShowScrollBar && len(t.Rows) > dataHeight {
-		endX--
-	}
+	endX := t.X1 + t.GetContentWidth() - 1
 
 	currX := t.X1
 	for colIdx, col := range t.Columns {

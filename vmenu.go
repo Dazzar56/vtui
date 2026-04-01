@@ -86,20 +86,18 @@ func (m *VMenu) ProcessKey(e *vtinput.InputEvent) bool {
 			if item.Separator { return true }
 			if FrameManager.DisabledCommands.IsDisabled(item.Command) { return true }
 
-			if m.OnAction != nil { m.OnAction(m.SelectPos) }
-
+			// 1. Fire the actual action (bubbles through owner)
 			oldCmd := m.Command
 			m.Command = item.Command
 			m.FireAction(item.OnClick, item.UserData)
 			m.Command = oldCmd
 
+			// 2. Notify listener (may close the menu)
+			if m.OnAction != nil { m.OnAction(m.SelectPos) }
+
 			m.SetExitCode(m.SelectPos)
 			return true
 		}
-		return true
-	}
-
-	if m.HandleKey(e) {
 		return true
 	}
 
@@ -113,19 +111,21 @@ func (m *VMenu) ProcessKey(e *vtinput.InputEvent) bool {
 					return true
 				}
 				m.SetSelectPos(i)
-				if m.OnAction != nil { m.OnAction(i) }
 
 				oldCmd := m.Command
 				m.Command = item.Command
 				m.FireAction(item.OnClick, item.UserData)
 				m.Command = oldCmd
 
+				if m.OnAction != nil { m.OnAction(i) }
+
 				m.SetExitCode(i)
 				return true
 			}
 		}
 	}
-	return false
+
+	return m.HandleKey(e)
 }
 
 func (m *VMenu) ResizeConsole(w, h int) {
@@ -168,25 +168,32 @@ func (m *VMenu) ClearDone() {
 
 // ProcessMouse handles mouse wheel scrolling and menu item clicks.
 func (m *VMenu) ProcessMouse(e *vtinput.InputEvent) bool {
-	if m.IsDisabled() { return false }
+	if m.IsDisabled() || e.Type != vtinput.MouseEventType { return false }
+	if m.HandleMouseScroll(e) { return true }
 
-	// We need to override OnAction temporarily to handle VMenu's complex logic
-	originalAction := m.OnAction
-	m.OnAction = func(idx int) {
-		if idx >= 0 && idx < len(m.items) && !m.items[idx].Separator {
-			item := m.items[idx]
-			if FrameManager.DisabledCommands.IsDisabled(item.Command) { return }
-			if originalAction != nil { originalAction(idx) }
+	if e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
+		clickIdx := m.GetClickIndex(int(e.MouseY))
+		if clickIdx != -1 && !m.items[clickIdx].Separator {
+			m.SetSelectPos(clickIdx)
+			item := m.items[clickIdx]
+			if FrameManager.DisabledCommands.IsDisabled(item.Command) {
+				return true
+			}
+
+			// Fire Action BEFORE calling OnAction/SetExitCode
 			oldCmd := m.Command
 			m.Command = item.Command
 			m.FireAction(item.OnClick, item.UserData)
 			m.Command = oldCmd
-			m.SetExitCode(idx)
+
+			if m.OnAction != nil {
+				m.OnAction(clickIdx)
+			}
+			m.SetExitCode(clickIdx)
+			return true
 		}
 	}
-	defer func() { m.OnAction = originalAction }()
-
-	return m.HandleMouse(e)
+	return false
 }
 
 

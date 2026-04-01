@@ -44,9 +44,6 @@ type TreeView struct {
 	ColorTreeLineIdx     int
 	ColorBoxIdx          int
 
-	OnSelect func(*TreeNode)
-	OnAction func(*TreeNode)
-
 	flatNodes []flatNode
 }
 
@@ -63,6 +60,23 @@ func NewTreeView(x, y, w, h int, root *TreeNode) *TreeView {
 	tv.canFocus = true
 	tv.ShowScrollBar = true
 	tv.InitScrollBar(tv)
+
+	// Define default action: toggle expansion for folders,
+	// or trigger user callback for leaves.
+	tv.OnAction = func(idx int) {
+		if idx < 0 || idx >= len(tv.flatNodes) { return }
+		node := tv.flatNodes[idx].node
+
+		// 1. Fire the action first (Command bubbling)
+		tv.FireAction(nil, node)
+
+		// 2. Toggle expansion
+		if len(node.Children) > 0 {
+			node.Expanded = !node.Expanded
+			tv.Flatten()
+		}
+	}
+
 	tv.SetPosition(x, y, x+w-1, y+h-1)
 	tv.Flatten()
 	return tv
@@ -203,7 +217,6 @@ func (t *TreeView) DisplayObject(scr *ScreenBuf) {
 
 func (t *TreeView) ProcessKey(e *vtinput.InputEvent) bool {
 	if !e.KeyDown || t.IsDisabled() || len(t.flatNodes) == 0 { return false }
-	oldPos := t.SelectPos
 	fn := t.flatNodes[t.SelectPos]
 
 	switch e.VirtualKeyCode {
@@ -212,58 +225,41 @@ func (t *TreeView) ProcessKey(e *vtinput.InputEvent) bool {
 			fn.node.Expanded = false; t.Flatten(); return true
 		} else if fn.node.parent != nil {
 			for i := t.SelectPos - 1; i >= 0; i-- {
-				if t.flatNodes[i].node == fn.node.parent { t.SelectPos = i; t.EnsureVisible(); break }
+				if t.flatNodes[i].node == fn.node.parent { t.SetSelectPos(i); break }
 			}
 			return true
 		}
 	case vtinput.VK_RIGHT:
 		if len(fn.node.Children) > 0 {
 			if !fn.node.Expanded { fn.node.Expanded = true; t.Flatten(); return true }
-			if t.SelectPos < len(t.flatNodes)-1 { t.SelectPos++; t.EnsureVisible(); return true }
+			if t.SelectPos < len(t.flatNodes)-1 { t.SetSelectPos(t.SelectPos + 1); return true }
 		}
-	case vtinput.VK_RETURN, vtinput.VK_SPACE:
-		if len(fn.node.Children) > 0 {
-			fn.node.Expanded = !fn.node.Expanded
-			t.Flatten()
-		} else {
-			var onClick func()
-			if t.OnAction != nil {
-				onClick = func() { t.OnAction(fn.node) }
-			}
-			t.FireAction(onClick, fn.node)
-		}
+	case vtinput.VK_SPACE:
+		if t.OnAction != nil { t.OnAction(t.SelectPos) }
 		return true
 	}
 
-	if t.HandleNavKey(e.VirtualKeyCode) {
-		if t.SelectPos != oldPos && t.OnSelect != nil {
-			t.OnSelect(t.flatNodes[t.SelectPos].node)
-		}
-		return true
-	}
-	return false
+	return t.HandleKey(e)
 }
 
 func (t *TreeView) ProcessMouse(e *vtinput.InputEvent) bool {
-	if t.IsDisabled() || e.Type != vtinput.MouseEventType || len(t.flatNodes) == 0 { return false }
-	if t.HandleMouseScroll(e) { return true }
+	if t.IsDisabled() { return false }
 
-	if e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
+	// Custom handling for [+] [-] icon clicks before generic list selection
+	if e.Type == vtinput.MouseEventType && e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
 		mx, my := int(e.MouseX), int(e.MouseY)
 		clickIdx := t.GetClickIndex(my)
 		if clickIdx != -1 {
-			t.SelectPos = clickIdx
-			t.EnsureVisible()
-			if t.OnSelect != nil {
-				t.OnSelect(t.flatNodes[clickIdx].node)
-			}
 			fn := t.flatNodes[clickIdx]
 			prefixWidth := fn.level*2 + map[bool]int{true: 0, false: 2}[fn.node == t.Root && t.ShowRoot]
 			if mx >= t.X1+prefixWidth && mx < t.X1+prefixWidth+3 && len(fn.node.Children) > 0 {
-				fn.node.Expanded = !fn.node.Expanded; t.Flatten()
+				fn.node.Expanded = !fn.node.Expanded
+				t.Flatten()
+				t.SetSelectPos(clickIdx)
+				return true
 			}
-			return true
 		}
 	}
-	return false
+
+	return t.HandleMouse(e)
 }

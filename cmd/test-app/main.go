@@ -182,6 +182,7 @@ func main() {
 	// Wrap the window to provide our custom HandleCommand logic
 	dlg := &DemoWindow{Window: baseWin}
 	x1, y1 := dlg.X1, dlg.Y1
+	topMenu.SetOwner(dlg)
 
 	// LEFT: Input & Options
 	dlg.AddItem(vtui.NewGroupBox(x1+2, y1+1, x1+35, y1+5, "Execution Mode"))

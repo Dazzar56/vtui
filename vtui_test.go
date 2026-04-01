@@ -1027,3 +1027,36 @@ func TestMenuBar_DynamicSubMenuWidth(t *testing.T) {
 		t.Errorf("Submenu width was not calculated dynamically. Expected >30, got %d", width)
 	}
 }
+
+func TestVMenu_ActionOrdering_Integration(t *testing.T) {
+	// Integration test for the "disappearing menu action" bug.
+	// Scenario: VMenu is a child of MenuBar.
+	// Action: FireAction (must bubble to PanelsFrame) then OnAction (must deactivate MenuBar).
+	
+	panelsFrame := &mockOwner{}
+	mb := NewMenuBar([]string{"&File"})
+	mb.SetOwner(panelsFrame)
+	mb.Active = true
+	
+	vm := NewVMenu("Sub")
+	vm.SetOwner(mb)
+	vm.AddItem(MenuItem{Text: "Test", Command: 123})
+	vm.SetSelectPos(0)
+	
+	// MenuBar's activation logic usually sets this up:
+	vm.OnAction = func(idx int) { mb.Active = false }
+	
+	// Simulate Enter
+	vm.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, 
+		KeyDown: true, 
+		VirtualKeyCode: vtinput.VK_RETURN,
+	})
+	
+	if !panelsFrame.commandHandled {
+		t.Error("Command did not reach PanelsFrame because MenuBar was deactivated too early")
+	}
+	if mb.Active {
+		t.Error("MenuBar should be inactive after item selection")
+	}
+}
