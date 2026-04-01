@@ -68,3 +68,7 @@ type DataControl interface {
 	SetData(value any)
 	GetData() any
 }
+// FocusContainer is an interface for UI elements that manage a focusable child.
+type FocusContainer interface {
+	GetFocusedItem() UIElement
+}

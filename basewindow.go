@@ -122,19 +122,11 @@ func (bw *BaseWindow) ProcessKey(e *vtinput.InputEvent) bool {
 		bw.Close()
 		return true
 	case vtinput.VK_RETURN:
-		// Fallback for Enter: trigger default button if a focused element didn't handle it
-		btn := bw.rootGroup.FindDefaultButton()
-		if btn != nil {
-			DebugLog("DEBUG: BaseWindow found button in rootGroup. Command=%d, HasOnClick=%v", btn.Command, btn.OnClick != nil)
-			if btn.OnClick != nil {
-				btn.OnClick()
-			} else if btn.Command != 0 {
-				bw.HandleCommand(btn.Command, nil)
-			}
+		// Fallback for Enter: trigger default action if a focused element didn't handle it
+		if bw.rootGroup.TriggerDefaultAction() {
 			return true
-		} else {
-			DebugLog("DEBUG: BaseWindow found NO buttons in rootGroup")
 		}
+		DebugLog("DEBUG: BaseWindow found NO default action in rootGroup")
 	}
 
 	return false

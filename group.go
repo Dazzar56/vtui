@@ -236,14 +236,8 @@ func (g *Group) ActivateHotkey(hk rune) bool {
 			if target.CanFocus() && !target.IsDisabled() {
 				g.setFocus(targetIdx)
 			}
-			// Trigger action for buttons/checkboxes
-			if b, isBtn := target.(*Button); isBtn {
-				if b.Command != 0 {
-					g.HandleCommand(b.Command, nil)
-				}
-			} else if _, isChk := target.(*Checkbox); isChk {
-				target.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_SPACE})
-			}
+			// Trigger action via standard input event
+			target.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_SPACE})
 			return true
 		}
 
@@ -364,32 +358,36 @@ func (g *Group) GetData(record any) {
 	}
 }
 
-// FindDefaultButton recursively searches for a button marked as IsDefault,
-// falling back to the first actionable button if none is strictly default.
-func (g *Group) FindDefaultButton() *Button {
-	var firstBtn *Button
-	var search func(grp *Group) *Button
+// TriggerDefaultAction recursively searches for a default action element and triggers it.
+func (g *Group) TriggerDefaultAction() bool {
+	var firstActionable UIElement
+	var search func(grp *Group) bool
 
-	search = func(grp *Group) *Button {
+	search = func(grp *Group) bool {
 		for _, item := range grp.items {
 			if btn, ok := item.(*Button); ok && !btn.IsDisabled() {
-				if btn.IsDefault { return btn }
-				if firstBtn == nil && (btn.OnClick != nil || btn.Command != 0) {
-					firstBtn = btn
+				if btn.IsDefault {
+					return btn.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN})
+				}
+				if firstActionable == nil && (btn.OnClick != nil || btn.Command != 0) {
+					firstActionable = btn
 				}
 			} else if subGrp, ok := item.(*Group); ok {
-				if b := search(subGrp); b != nil && b.IsDefault { return b }
+				if search(subGrp) { return true }
 			} else if gb, ok := item.(*GroupBox); ok {
-				if b := search(&gb.Group); b != nil && b.IsDefault { return b }
+				if search(&gb.Group) { return true }
 			}
 		}
-		return nil
+		return false
 	}
 
-	if def := search(g); def != nil {
-		return def
+	if search(g) {
+		return true
 	}
-	return firstBtn
+	if firstActionable != nil {
+		return firstActionable.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN})
+	}
+	return false
 }
 
 // HandleBroadcast propagates broadcast events to all children.

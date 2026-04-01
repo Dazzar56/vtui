@@ -803,8 +803,8 @@ func (fm *frameManager) renderPhase() {
 		if fm.MenuBar != nil && fm.MenuBar.Active {
 			topic = "menu"
 		} else {
-			if dlg, ok := topFrame.(*Window); ok {
-				if foc := dlg.GetFocusedItem(); foc != nil {
+			if fc, ok := topFrame.(FocusContainer); ok {
+				if foc := fc.GetFocusedItem(); foc != nil && foc.GetHelp() != "" {
 					topic = foc.GetHelp()
 				}
 			}
@@ -1076,8 +1076,8 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 		modifierMask := uint32(vtinput.LeftAltPressed | vtinput.RightAltPressed | vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed | vtinput.ShiftPressed)
 		if ev.VirtualKeyCode == vtinput.VK_F1 && (ev.ControlKeyState&modifierMask) == 0 {
 			topic := topFrame.GetHelp()
-			if dlg, ok := topFrame.(*Window); ok {
-				if foc := dlg.GetFocusedItem(); foc != nil && foc.GetHelp() != "" {
+			if fc, ok := topFrame.(FocusContainer); ok {
+				if foc := fc.GetFocusedItem(); foc != nil && foc.GetHelp() != "" {
 					topic = foc.GetHelp()
 				}
 			}
