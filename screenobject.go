@@ -56,6 +56,9 @@ func (so *ScreenObject) HitTest(x, y int) bool {
 func (so *ScreenObject) WantsChars() bool {
 	return false
 }
+func (so *ScreenObject) GetFocusLink() UIElement {
+	return nil
+}
 // SetPosition sets the object's coordinates.
 // Important: this does not trigger a redraw.
 func (so *ScreenObject) SetPosition(x1, y1, x2, y2 int) {

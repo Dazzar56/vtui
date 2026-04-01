@@ -208,6 +208,15 @@ func (g *Group) setFocus(index int) {
 	}
 }
 
+// CanFocus returns true if the group contains at least one focusable child.
+func (g *Group) CanFocus() bool {
+	for _, item := range g.items {
+		if item.CanFocus() && !item.IsDisabled() {
+			return true
+		}
+	}
+	return false
+}
 // SetFocus handles focus delegation for the group.
 func (g *Group) SetFocus(f bool) {
 	g.ScreenObject.SetFocus(f)
@@ -224,41 +233,35 @@ func (g *Group) SetFocus(f bool) {
 		g.focusIdx = -1
 	}
 }
-// ActivateHotkey finds and activates an element by its hotkey.
+// ActivateHotkey finds and activates an element by its hotkey recursively.
 func (g *Group) ActivateHotkey(hk rune) bool {
 	for i, item := range g.items {
 		if item.GetHotkey() == hk {
 			target := item
-			targetIdx := i
-			// Follow FocusLink chain
-			for {
-				if txt, ok := target.(*Text); ok && txt.FocusLink != nil {
-					target = txt.FocusLink
-					found := false
-					for j, other := range g.items {
-						if other == target {
-							targetIdx = j
-							found = true
-							break
-						}
-					}
-					if !found { break } // Link points to an item not in this group
-				} else {
-					break
-				}
+			for target.GetFocusLink() != nil {
+				target = target.GetFocusLink()
 			}
 
 			if target.CanFocus() && !target.IsDisabled() {
-				g.setFocus(targetIdx)
+				// Search if the resolved target is a direct sibling in this group
+				foundIdx := -1
+				for j, itm := range g.items {
+					if itm == target { foundIdx = j; break }
+				}
+				if foundIdx != -1 {
+					g.setFocus(foundIdx)
+				} else {
+					g.setFocus(i)
+				}
 			}
 			// Trigger action via standard input event
 			target.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_SPACE})
 			return true
 		}
 
-		// Recurse into nested groups
-		if subGroup, ok := item.(interface{ ActivateHotkey(rune) bool }); ok {
-			if subGroup.ActivateHotkey(hk) {
+		// Recurse if the item is a container that supports ActivateHotkey
+		if sub, ok := item.(interface{ ActivateHotkey(rune) bool }); ok {
+			if sub.ActivateHotkey(hk) {
 				if item.CanFocus() && !item.IsDisabled() {
 					g.setFocus(i)
 				}
@@ -375,48 +378,58 @@ func (g *Group) GetData(record any) {
 // TriggerDefaultAction recursively searches for a default action element and triggers it.
 func (g *Group) TriggerDefaultAction() bool {
 	var firstActionable UIElement
+	var firstActionableIdx int = -1
 
-	found := false
-	walk(g, func(el UIElement) bool {
-		if btn, ok := el.(*Button); ok && !btn.IsDisabled() {
+	for i, item := range g.items {
+		if btn, ok := item.(*Button); ok && !btn.IsDisabled() {
 			if btn.IsDefault {
-				btn.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN})
-				found = true
-				return false // Stop walking
+				g.setFocus(i)
+				return btn.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN})
 			}
 			if firstActionable == nil && (btn.OnClick != nil || btn.Command != 0) {
 				firstActionable = btn
+				firstActionableIdx = i
 			}
 		}
-		return true
-	})
 
-	if found {
-		return true
+		if sub, ok := item.(interface{ TriggerDefaultAction() bool }); ok {
+			if sub.TriggerDefaultAction() {
+				g.setFocus(i)
+				return true
+			}
+		}
 	}
+
 	if firstActionable != nil {
+		g.setFocus(firstActionableIdx)
 		return firstActionable.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN})
 	}
 	return false
 }
 
-// HandleBroadcast propagates broadcast events to all children.
+// HandleBroadcast propagates broadcast events to all children recursively.
 func (g *Group) HandleBroadcast(cmd int, args any) bool {
 	handled := false
-	for _, item := range g.items {
-		if item.HandleBroadcast(cmd, args) {
+	walk(g, func(el UIElement) bool {
+		// Skip the group itself to avoid infinite recursion,
+		// but process all its actual children.
+		if el != UIElement(g) && el.HandleBroadcast(cmd, args) {
 			handled = true
 		}
-	}
+		return true
+	})
 	return handled
 }
 
-// Valid checks if all children are valid.
+// Valid checks if all children are valid recursively.
 func (g *Group) Valid(cmd int) bool {
-	for _, item := range g.items {
-		if !item.Valid(cmd) {
-			return false
+	allValid := true
+	walk(g, func(el UIElement) bool {
+		if el != UIElement(g) && !el.Valid(cmd) {
+			allValid = false
+			return false // Stop walking on first invalid
 		}
-	}
-	return true
+		return true
+	})
+	return allValid
 }

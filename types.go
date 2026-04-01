@@ -62,6 +62,7 @@ type UIElement interface {
 	Valid(cmd int) bool
 	HitTest(x, y int) bool
 	WantsChars() bool
+	GetFocusLink() UIElement
 }
 
 // Container is an interface for elements that have child UI elements.

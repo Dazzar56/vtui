@@ -42,14 +42,5 @@ func (gb *GroupBox) DisplayObject(scr *ScreenBuf) {
 	gb.Group.DisplayObject(scr)
 }
 
-// CanFocus returns true if the groupbox contains at least one focusable child.
-func (gb *GroupBox) CanFocus() bool {
-	for _, item := range gb.items {
-		if item.CanFocus() && !item.IsDisabled() {
-			return true
-		}
-	}
-	return false
-}
 
 

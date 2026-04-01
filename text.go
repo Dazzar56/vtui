@@ -41,3 +41,6 @@ func (t *Text) DisplayObject(scr *ScreenBuf) {
 func (t *Text) SetText(text string) {
 	t.content = text
 }
+func (t *Text) GetFocusLink() UIElement {
+	return t.FocusLink
+}
