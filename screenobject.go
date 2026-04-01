@@ -234,21 +234,22 @@ func (so *ScreenObject) GetKeyLabels() *KeySet {
 func (so *ScreenObject) GetMenuBar() *MenuBar {
 	return nil
 }
-// ResolveColor simplifies selecting the right palette index based on focus and disabled states.
-func (so *ScreenObject) ResolveColor(normIdx, selIdx int) uint64 {
-	attr := Palette[normIdx]
+// GetStateAttr returns the appropriate color attribute based on focus and disabled states.
+func (so *ScreenObject) GetStateAttr(normIdx, focIdx int) uint64 {
+	idx := normIdx
 	if so.IsFocused() {
-		attr = Palette[selIdx]
+		idx = focIdx
 	}
+	attr := Palette[idx]
 	if so.IsDisabled() {
 		return DimColor(attr)
 	}
 	return attr
 }
 
-// ResolveColors resolves both base and highlight colors simultaneously.
-func (so *ScreenObject) ResolveColors(normIdx, selNormIdx, highIdx, selHighIdx int) (uint64, uint64) {
-	return so.ResolveColor(normIdx, selNormIdx), so.ResolveColor(highIdx, selHighIdx)
+// GetStateAttrs returns a pair of attributes (normal and highlight) based on states.
+func (so *ScreenObject) GetStateAttrs(normIdx, focIdx, highIdx, focHighIdx int) (uint64, uint64) {
+	return so.GetStateAttr(normIdx, focIdx), so.GetStateAttr(highIdx, focHighIdx)
 }
 // FireAction centralizes the logic for executing an optional callback or emitting the internal Command.
 // It gives priority to the callback.

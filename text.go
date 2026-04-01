@@ -27,7 +27,7 @@ func (t *Text) Show(scr *ScreenBuf) {
 
 func (t *Text) DisplayObject(scr *ScreenBuf) {
 	if !t.IsVisible() { return }
-	attr, highAttr := t.ResolveColors(ColDialogText, ColDialogText, ColDialogHighlightText, ColDialogHighlightText)
+	attr, highAttr := t.GetStateAttrs(ColDialogText, ColDialogText, ColDialogHighlightText, ColDialogHighlightText)
 	if t.color != 0 && !t.IsDisabled() { attr = t.color }
 
 	p := NewPainter(scr)

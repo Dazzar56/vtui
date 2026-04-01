@@ -40,7 +40,7 @@ func (rg *RadioGroup) Show(scr *ScreenBuf) {
 func (rg *RadioGroup) DisplayObject(scr *ScreenBuf) {
 	if !rg.IsVisible() { return }
 
-	attr, highAttr := rg.ResolveColors(ColDialogText, ColDialogSelectedButton, ColDialogHighlightText, ColDialogHighlightSelectedButton)
+	attr, highAttr := rg.GetStateAttrs(ColDialogText, ColDialogSelectedButton, ColDialogHighlightText, ColDialogHighlightSelectedButton)
 
 	p := NewPainter(scr)
 	for i, itm := range rg.Items {

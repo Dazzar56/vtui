@@ -33,9 +33,8 @@ func (b *Button) Show(scr *ScreenBuf) {
 
 func (b *Button) DisplayObject(scr *ScreenBuf) {
 	if !b.IsVisible() { return }
-	attr, highAttr := b.ResolveColors(ColDialogButton, ColDialogSelectedButton, ColDialogHighlightButton, ColDialogHighlightSelectedButton)
-	p := NewPainter(scr)
-	p.DrawHighlightedText(b.X1, b.Y1, b.cleanText, b.hotkeyPos, attr, highAttr)
+	n, h := b.GetStateAttrs(ColDialogButton, ColDialogSelectedButton, ColDialogHighlightButton, ColDialogHighlightSelectedButton)
+	NewPainter(scr).DrawHighlightedText(b.X1, b.Y1, b.cleanText, b.hotkeyPos, n, h)
 }
 
 

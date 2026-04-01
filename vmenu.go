@@ -1,7 +1,6 @@
 package vtui
 
 import (
-	"strings"
 	"unicode"
 
 	"github.com/mattn/go-runewidth"
@@ -215,8 +214,6 @@ func (m *VMenu) DisplayObject(scr *ScreenBuf) {
 	colText := Palette[ColMenuText]
 	colSel := Palette[ColMenuSelectedText]
 	colBox := Palette[ColMenuBox]
-	fullWidth := m.X2 - m.X1 + 1
-	interiorWidth := fullWidth - 2
 	height := m.Y2 - m.Y1 - 1
 	if height < 0 { height = 0 }
 
@@ -241,33 +238,38 @@ func (m *VMenu) DisplayObject(scr *ScreenBuf) {
 		}
 
 		if item.Separator {
-			// For VMenu separators, we want the single horizontal line symbol (bsH)
-			// with the VMenu specific cross-symbols.
 			p.DrawLine(m.X1, currY, m.X2, currY, boxSymbols[bsH], colBox, true, true)
-		} else {
-			fullItemText := " " + item.Text
-			clean, _, _ := ParseAmpersandString(fullItemText)
-			vLenText := runewidth.StringWidth(clean)
+			continue
+		}
 
-			shortcutText := ""
-			vLenShortcut := 0
-			if item.Shortcut != "" {
-				shortcutText = item.Shortcut + " "
-				vLenShortcut = runewidth.StringWidth(shortcutText)
-			}
+		// Resolve item colors
+		isSel := itemIdx == m.SelectPos
+		isDisabled = FrameManager.DisabledCommands.IsDisabled(item.Command)
 
-			padding := interiorWidth - vLenText - vLenShortcut
-			if padding > 0 {
-				fullItemText += strings.Repeat(" ", padding)
-			}
-			fullItemText += shortcutText
+		itemAttr := colText
+		hiAttr := colHigh
+		if isSel {
+			itemAttr, hiAttr = colSel, colSelHigh
+		}
+		if isDisabled {
+			itemAttr, hiAttr = DimColor(itemAttr), DimColor(hiAttr)
+		}
 
-			finalHighAttr := colHigh
-			if itemIdx == m.SelectPos {
-				finalHighAttr = colSelHigh
-			}
+		// Calculate layout
+		//clean, _, _ := ParseAmpersandString(item.Text)
+		//vLenText := runewidth.StringWidth(clean) + 1 // +1 for leading space
+		shortcutText := ""
+		vLenShortcut := 0
+		if item.Shortcut != "" {
+			shortcutText = item.Shortcut + " "
+			vLenShortcut = runewidth.StringWidth(shortcutText)
+		}
 
-			p.DrawStringHighlighted(m.X1+1, currY, fullItemText, attr, finalHighAttr)
+		// Draw background and text
+		p.Fill(m.X1+1, currY, m.X2-1, currY, ' ', itemAttr)
+		p.DrawControlText(m.X1+1, currY, " "+item.Text, itemAttr, hiAttr)
+		if shortcutText != "" {
+			p.DrawString(m.X2-vLenShortcut, currY, shortcutText, itemAttr)
 		}
 	}
 

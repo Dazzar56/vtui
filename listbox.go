@@ -67,21 +67,17 @@ func (lb *ListBox) DisplayObject(scr *ScreenBuf) {
 		idx := lb.TopPos + i
 		currY := lb.Y1 + i
 
-		attr := lb.ResolveColor(lb.ColorTextIdx, lb.ColorSelectedTextIdx)
+		attr := lb.GetStateAttr(lb.ColorTextIdx, lb.ColorSelectedTextIdx)
 		isSelected := lb.SelectedMap[idx]
 
 		if isSelected {
-			attr = lb.ResolveColor(ColDialogHighlightText, ColDialogHighlightSelectedButton)
-		} else if idx == lb.SelectPos && lb.IsFocused() {
-			// ResolveColor already handled this via the base/selected indices above
+			attr = lb.GetStateAttr(ColDialogHighlightText, ColDialogHighlightSelectedButton)
 		} else if idx == lb.SelectPos && !lb.IsFocused() {
-			// Keep it normal text if not focused
-			attr = lb.ResolveColor(lb.ColorTextIdx, lb.ColorTextIdx)
+			attr = lb.GetStateAttr(lb.ColorTextIdx, lb.ColorTextIdx)
 		}
 
 		if idx < len(lb.Items) {
-			text := lb.Items[idx]
-			text = runewidth.Truncate(text, width, "")
+			text := runewidth.Truncate(lb.Items[idx], width, "")
 			vLen := runewidth.StringWidth(text)
 
 			scr.Write(lb.X1, currY, StringToCharInfo(text, attr))
@@ -89,7 +85,7 @@ func (lb *ListBox) DisplayObject(scr *ScreenBuf) {
 				scr.FillRect(lb.X1+vLen, currY, lb.X1+width-1, currY, ' ', attr)
 			}
 		} else {
-			scr.FillRect(lb.X1, currY, lb.X1+width-1, currY, ' ', lb.ResolveColor(lb.ColorTextIdx, lb.ColorTextIdx))
+			scr.FillRect(lb.X1, currY, lb.X1+width-1, currY, ' ', lb.GetStateAttr(lb.ColorTextIdx, lb.ColorTextIdx))
 		}
 	}
 

@@ -38,7 +38,7 @@ func ExtractHotkey(s string) rune {
 // ParseAmpersandString parses a string with ampersands, removes utility &,
 // processes && as &, and returns the clean string, the hotkey, and its position (in runes).
 func ParseAmpersandString(s string) (clean string, hotkey rune, hotkeyPos int) {
-	if strings.IndexByte(s, '&') == -1 {
+	if s == "" || strings.IndexByte(s, '&') == -1 {
 		return s, 0, -1
 	}
 

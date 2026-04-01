@@ -33,22 +33,15 @@ func (cb *Checkbox) Show(scr *ScreenBuf) {
 
 func (cb *Checkbox) DisplayObject(scr *ScreenBuf) {
 	if !cb.IsVisible() { return }
+	n, h := cb.GetStateAttrs(ColDialogText, ColDialogSelectedButton, ColDialogHighlightText, ColDialogHighlightSelectedButton)
 
-	attr, highAttr := cb.ResolveColors(ColDialogText, ColDialogSelectedButton, ColDialogHighlightText, ColDialogHighlightSelectedButton)
-
-	char := " "
-	switch cb.State {
-	case 1:
-		char = "x"
-	case 2:
-		char = "?"
-	}
+	mark := " "
+	if cb.State == 1 { mark = "x" } else if cb.State == 2 { mark = "?" }
+	prefix := "[" + mark + "] "
 
 	p := NewPainter(scr)
-	prefix := "[" + char + "] "
-	p.DrawString(cb.X1, cb.Y1, prefix, attr)
-
-	p.DrawHighlightedText(cb.X1+runewidth.StringWidth(prefix), cb.Y1, cb.cleanText, cb.hotkeyPos, attr, highAttr)
+	p.DrawString(cb.X1, cb.Y1, prefix, n)
+	p.DrawHighlightedText(cb.X1+runewidth.StringWidth(prefix), cb.Y1, cb.cleanText, cb.hotkeyPos, n, h)
 }
 
 func (cb *Checkbox) ProcessKey(e *vtinput.InputEvent) bool {
