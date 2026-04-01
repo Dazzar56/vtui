@@ -158,4 +158,19 @@ func TestGridSnakeNavigation(t *testing.T) {
 	idx, ok = gridNav(2, 5, 2, vtinput.VK_LEFT)
 	if !ok || idx != 1 { t.Errorf("Snake Left row 1 fail: %d", idx) }
 }
+func TestCheckGroup_SnakeNavigation(t *testing.T) {
+	cg := NewCheckGroup(0, 0, 2, []string{"A", "B", "C", "D"})
+	// 0(A) 1(B)
+	// 2(C) 3(D)
+
+	cg.focusIdx = 1 // At 'B'
+	// Right from B -> should snake to C (idx 2)
+	cg.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT})
+	if cg.focusIdx != 2 { t.Errorf("CheckGroup snake RIGHT failed, got %d", cg.focusIdx) }
+
+	cg.focusIdx = 2 // At 'C'
+	// Left from C -> should snake back to B (idx 1)
+	cg.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_LEFT})
+	if cg.focusIdx != 1 { t.Errorf("CheckGroup snake LEFT failed, got %d", cg.focusIdx) }
+}
 

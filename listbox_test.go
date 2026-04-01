@@ -129,3 +129,21 @@ func TestListBox_EmptyList(t *testing.T) {
 		t.Error("SelectPos should be 0 for empty list")
 	}
 }
+func TestListBox_DynamicLayout(t *testing.T) {
+	SetDefaultPalette()
+	scr := NewScreenBuf()
+	scr.AllocBuf(20, 10)
+
+	lb := NewListBox(0, 0, 10, 5, []string{"Item1"})
+
+	// 1. Default (No Header): Row 0 is at Y=0
+	lb.Show(scr)
+	checkCell(t, scr, 0, 0, 'I', Palette[ColTableText])
+
+	// 2. Enable Header: Row 0 must shift to Y=1
+	lb.ShowHeader = true
+	lb.Show(scr)
+	// Cell at 0,0 should now be part of the header (title or spacer)
+	// Cell at 0,1 should contain 'I'
+	checkCell(t, scr, 0, 1, 'I', Palette[ColTableText])
+}

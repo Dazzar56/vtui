@@ -185,6 +185,23 @@ func TestTable_Navigation(t *testing.T) {
 		t.Errorf("Expected SelectPos 0, got %d", tbl.SelectPos)
 	}
 }
+func TestTable_BoundaryNavigation(t *testing.T) {
+	cols := []TableColumn{{Title: "C", Width: 5}}
+	tbl := NewTable(0, 0, 10, 5, cols)
+	tbl.SetRows([]TableRow{mockRow{"1", ""}, mockRow{"2", ""}})
+
+	// 1. Up at top -> false
+	tbl.SetSelectPos(0)
+	if tbl.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_UP}) {
+		t.Error("Table Up at row 0 should return false")
+	}
+
+	// 2. Down at bottom -> false
+	tbl.SetSelectPos(1)
+	if tbl.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN}) {
+		t.Error("Table Down at last row should return false")
+	}
+}
 func TestTable_PageNavigation(t *testing.T) {
 	cols := []TableColumn{{Title: "Col", Width: 10}}
 	tbl := NewTable(0, 0, 10, 5, cols) // Height 5, Header 1 -> Data Height 4
