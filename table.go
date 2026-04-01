@@ -252,32 +252,28 @@ func (t *Table) ProcessKey(e *vtinput.InputEvent) bool {
 		}
 	}
 
-	return t.HandleNavKey(e.VirtualKeyCode)
+	return t.HandleKey(e)
 }
 
 func (t *Table) ProcessMouse(e *vtinput.InputEvent) bool {
-	if t.IsDisabled() || e.Type != vtinput.MouseEventType { return false }
-	if t.HandleMouseScroll(e) { return true }
-
-	if e.ButtonState != 0 && e.KeyDown {
-		clickIdx := t.GetClickIndex(int(e.MouseY))
-		if clickIdx != -1 {
-			t.SelectPos = clickIdx
-			if t.CellSelection {
-				currX := t.X1
-				for i, col := range t.Columns {
-					if int(e.MouseX) >= currX && int(e.MouseX) < currX+col.Width {
-						t.SelectCol = i
-						break
-					}
-					currX += col.Width
-					if i < len(t.Columns)-1 { currX++ }
+	if t.IsDisabled() { return false }
+	
+	// Pre-process for CellSelection before generic HandleMouse
+	if e.Type == vtinput.MouseEventType && e.ButtonState != 0 && e.KeyDown {
+		if t.CellSelection && t.HitTest(int(e.MouseX), int(e.MouseY)) {
+			currX := t.X1
+			for i, col := range t.Columns {
+				if int(e.MouseX) >= currX && int(e.MouseX) < currX+col.Width {
+					t.SelectCol = i
+					break
 				}
+				currX += col.Width
+				if i < len(t.Columns)-1 { currX++ }
 			}
-			return true
 		}
 	}
-	return false
+	
+	return t.HandleMouse(e)
 }
 
 func (t *Table) SetPosition(x1, y1, x2, y2 int) {

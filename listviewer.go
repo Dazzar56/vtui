@@ -20,6 +20,9 @@ type ScrollView struct {
 	MarginBottom int
 	MarginLeft   int
 	MarginRight  int
+
+	OnSelect func(int)
+	OnAction func(int)
 }
 
 func (sv *ScrollView) InitScrollBar(owner CommandHandler) {
@@ -174,4 +177,50 @@ func (sv *ScrollView) GetClickIndex(my int) int {
 		}
 	}
 	return -1
+}
+
+func (sv *ScrollView) HandleKey(e *vtinput.InputEvent) bool {
+	if !e.KeyDown { return false }
+
+	oldPos := sv.SelectPos
+	handled := false
+
+	switch e.VirtualKeyCode {
+	case vtinput.VK_RETURN:
+		if sv.OnAction != nil {
+			sv.OnAction(sv.SelectPos)
+			return true
+		}
+	default:
+		handled = sv.HandleNavKey(e.VirtualKeyCode)
+	}
+
+	if handled && sv.SelectPos != oldPos && sv.OnSelect != nil {
+		sv.OnSelect(sv.SelectPos)
+	}
+	return handled
+}
+
+func (sv *ScrollView) HandleMouse(e *vtinput.InputEvent) bool {
+	if e.Type != vtinput.MouseEventType { return false }
+	if sv.HandleMouseScroll(e) { return true }
+
+	if e.ButtonState != 0 && e.KeyDown {
+		clickIdx := sv.GetClickIndex(int(e.MouseY))
+		if clickIdx != -1 {
+			oldPos := sv.SelectPos
+			sv.SelectPos = clickIdx
+
+			if sv.SelectPos != oldPos && sv.OnSelect != nil {
+				sv.OnSelect(sv.SelectPos)
+			}
+
+			// Trigger actions only for the primary (left) button
+			if e.ButtonState == vtinput.FromLeft1stButtonPressed && (e.MouseEventFlags & vtinput.DoubleClick) != 0 && sv.OnAction != nil {
+				sv.OnAction(sv.SelectPos)
+			}
+			return true
+		}
+	}
+	return false
 }

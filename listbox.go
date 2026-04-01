@@ -9,22 +9,27 @@ import (
 type ListBox struct {
 	ScrollView
 	Items    []string
-	OnSelect func(int)
-	OnAction func(int)
 
-	ColorTextIdx         int
-	MultiSelect          bool
-	SelectedMap          map[int]bool
-	ColorSelectedTextIdx int
+	ColorTextIdx             int
+	ColorSelectedTextIdx     int
+	ColorItemSelectTextIdx   int
+	ColorItemSelectCursorIdx int
+	ColorTitleIdx            int
+	ColorBoxIdx              int
+	MultiSelect              bool
+	SelectedMap              map[int]bool
 }
-
 
 func NewListBox(x, y, w, h int, items []string) *ListBox {
 	lb := &ListBox{
-		Items:                items,
-		SelectedMap:          make(map[int]bool),
-		ColorTextIdx:         ColTableText,
-		ColorSelectedTextIdx: ColTableSelectedText,
+		Items:                    items,
+		SelectedMap:              make(map[int]bool),
+		ColorTextIdx:             ColTableText,
+		ColorSelectedTextIdx:     ColTableSelectedText,
+		ColorItemSelectTextIdx:   ColTableText,
+		ColorItemSelectCursorIdx: ColTableSelectedText,
+		ColorTitleIdx:            ColTableColumnTitle,
+		ColorBoxIdx:              ColTableBox,
 	}
 	lb.ItemCount = len(items)
 	lb.ViewHeight = h
@@ -102,37 +107,12 @@ func (lb *ListBox) ProcessKey(e *vtinput.InputEvent) bool {
 			if e.VirtualKeyCode == vtinput.VK_INSERT { lb.MoveRelative(1) }
 			return true
 		}
-	case vtinput.VK_RETURN:
-		if lb.OnAction != nil {
-			lb.OnAction(lb.SelectPos)
-		} else if lb.Command != 0 {
-			lb.HandleCommand(lb.Command, lb.SelectPos)
-		}
-		return true
 	}
 
-	if lb.HandleNavKey(e.VirtualKeyCode) {
-		if lb.OnSelect != nil { lb.OnSelect(lb.SelectPos) }
-		return true
-	}
-
-	return false
+	return lb.HandleKey(e)
 }
 
-
 func (lb *ListBox) ProcessMouse(e *vtinput.InputEvent) bool {
-	if lb.IsDisabled() || e.Type != vtinput.MouseEventType { return false }
-	if lb.HandleMouseScroll(e) { return true }
-
-	if e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
-		clickIdx := lb.GetClickIndex(int(e.MouseY))
-		if clickIdx != -1 {
-			lb.SelectPos = clickIdx
-			if lb.OnSelect != nil {
-				lb.OnSelect(lb.SelectPos)
-			}
-			return true
-		}
-	}
-	return false
+	if lb.IsDisabled() { return false }
+	return lb.HandleMouse(e)
 }

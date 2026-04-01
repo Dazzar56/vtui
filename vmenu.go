@@ -83,27 +83,23 @@ func (m *VMenu) ProcessKey(e *vtinput.InputEvent) bool {
 	case vtinput.VK_RETURN:
 		if m.SelectPos >= 0 && m.SelectPos < m.ItemCount {
 			item := m.items[m.SelectPos]
-			if !item.Separator {
-				if FrameManager.DisabledCommands.IsDisabled(item.Command) {
-					return true
-				}
-				if m.OnAction != nil {
-					m.OnAction(m.SelectPos)
-				}
-				// Set local command for the duration of the call
-				oldCmd := m.Command
-				m.Command = item.Command
-				m.FireAction(item.OnClick, item.UserData)
-				m.Command = oldCmd
-				
-				m.SetExitCode(m.SelectPos)
-				return true
-			}
+			if item.Separator { return true }
+			if FrameManager.DisabledCommands.IsDisabled(item.Command) { return true }
+
+			if m.OnAction != nil { m.OnAction(m.SelectPos) }
+
+			oldCmd := m.Command
+			m.Command = item.Command
+			m.FireAction(item.OnClick, item.UserData)
+			m.Command = oldCmd
+
+			m.SetExitCode(m.SelectPos)
+			return true
 		}
-		return true // Consume Enter on separators
+		return true
 	}
 
-	if m.HandleNavKey(e.VirtualKeyCode) {
+	if m.HandleKey(e) {
 		return true
 	}
 
@@ -172,36 +168,25 @@ func (m *VMenu) ClearDone() {
 
 // ProcessMouse handles mouse wheel scrolling and menu item clicks.
 func (m *VMenu) ProcessMouse(e *vtinput.InputEvent) bool {
-	if m.IsDisabled() || e.Type != vtinput.MouseEventType { return false }
+	if m.IsDisabled() { return false }
 
-	if e.WheelDirection != 0 {
-		if e.WheelDirection > 0 { m.MoveRelative(-1) } else { m.MoveRelative(1) }
-		return true
-	}
-	if m.HandleMouseScroll(e) { return true }
-
-	if e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
-		mx, my := int(e.MouseX), int(e.MouseY)
-
-		clickedIdx := m.GetClickIndex(my)
-		if mx >= m.X1 && mx < m.X2 && clickedIdx != -1 && !m.items[clickedIdx].Separator {
-			m.SetSelectPos(clickedIdx)
-			item := m.items[clickedIdx]
-			if FrameManager.DisabledCommands.IsDisabled(item.Command) {
-				return true
-			}
-			if m.OnAction != nil { m.OnAction(clickedIdx) }
-
+	// We need to override OnAction temporarily to handle VMenu's complex logic
+	originalAction := m.OnAction
+	m.OnAction = func(idx int) {
+		if idx >= 0 && idx < len(m.items) && !m.items[idx].Separator {
+			item := m.items[idx]
+			if FrameManager.DisabledCommands.IsDisabled(item.Command) { return }
+			if originalAction != nil { originalAction(idx) }
 			oldCmd := m.Command
 			m.Command = item.Command
 			m.FireAction(item.OnClick, item.UserData)
 			m.Command = oldCmd
-
-			m.SetExitCode(clickedIdx)
-			return true
+			m.SetExitCode(idx)
 		}
 	}
-	return false
+	defer func() { m.OnAction = originalAction }()
+
+	return m.HandleMouse(e)
 }
 
 
