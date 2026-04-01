@@ -133,11 +133,11 @@ func (rg *RadioGroup) ProcessKey(e *vtinput.InputEvent) bool {
 	newIdx, moved := gridNav(rg.Selected, len(rg.Items), rg.Columns, e.VirtualKeyCode)
 	if moved {
 		rg.Selected = newIdx
+		var onClick func()
 		if rg.OnChange != nil {
-			rg.OnChange(rg.Selected)
-		} else if rg.Command != 0 {
-			rg.HandleCommand(rg.Command, rg.Selected)
+			onClick = func() { rg.OnChange(rg.Selected) }
 		}
+		rg.FireAction(onClick, rg.Command, rg.Selected)
 		return true
 	}
 
@@ -167,11 +167,11 @@ func (rg *RadioGroup) ProcessKey(e *vtinput.InputEvent) bool {
 				_, hk, _ := ParseAmpersandString(itm)
 				if hk == unicode.ToLower(e.Char) {
 					rg.Selected = i
-					if rg.OnChange != nil {
-						rg.OnChange(rg.Selected)
-					} else if rg.Command != 0 {
-						rg.HandleCommand(rg.Command, rg.Selected)
-					}
+				var onClick func()
+				if rg.OnChange != nil {
+					onClick = func() { rg.OnChange(rg.Selected) }
+				}
+				rg.FireAction(onClick, rg.Command, rg.Selected)
 					return true
 				}
 			}
@@ -200,11 +200,11 @@ func (rg *RadioGroup) ProcessMouse(e *vtinput.InputEvent) bool {
 			if idx >= 0 && idx < len(rg.Items) {
 				if rg.Selected != idx {
 					rg.Selected = idx
+					var onClick func()
 					if rg.OnChange != nil {
-						rg.OnChange(rg.Selected)
-					} else if rg.Command != 0 {
-						rg.HandleCommand(rg.Command, rg.Selected)
+						onClick = func() { rg.OnChange(rg.Selected) }
 					}
+					rg.FireAction(onClick, rg.Command, rg.Selected)
 				}
 				return true
 			}

@@ -89,19 +89,21 @@ func (m *VMenu) ProcessKey(e *vtinput.InputEvent) bool {
 	case vtinput.VK_RETURN:
 		if m.SelectPos >= 0 && m.SelectPos < m.ItemCount {
 			item := m.items[m.SelectPos]
-			if !item.Separator && FrameManager.DisabledCommands.IsDisabled(item.Command) { return true }
-			if item.OnClick != nil {
-				item.OnClick()
-			} else if item.Command != 0 {
-				FrameManager.EmitCommand(item.Command, item.UserData)
+			if !item.Separator {
+				if FrameManager.DisabledCommands.IsDisabled(item.Command) {
+					return true
+				}
+				// Fire item-specific action
+				m.FireAction(item.OnClick, item.Command, item.UserData)
+				// Notify owner of selection
+				if m.OnAction != nil {
+					m.OnAction(m.SelectPos)
+				}
+				m.SetExitCode(m.SelectPos)
+				return true
 			}
 		}
-		if m.OnAction != nil {
-			m.OnAction(m.SelectPos)
-		} else if m.Command != 0 {
-			m.HandleCommand(m.Command, m.SelectPos)
-		}
-		m.SetExitCode(m.SelectPos); return true
+		return true // Consume Enter on separators
 	case vtinput.VK_UP: m.MoveRelative(-1); return true
 	case vtinput.VK_DOWN: m.MoveRelative(1); return true
 	case vtinput.VK_HOME: m.SetSelectPos(0); return true
@@ -115,19 +117,17 @@ func (m *VMenu) ProcessKey(e *vtinput.InputEvent) bool {
 			if item.Separator { continue }
 			_, hk, _ := ParseAmpersandString(item.Text)
 			if hk == charLower {
-				if FrameManager.DisabledCommands.IsDisabled(item.Command) { return true }
+				if FrameManager.DisabledCommands.IsDisabled(item.Command) {
+					return true
+				}
 				m.SetSelectPos(i)
+				// Fire item-specific action
+				m.FireAction(item.OnClick, item.Command, item.UserData)
+				// Notify owner of selection
 				if m.OnAction != nil {
 					m.OnAction(i)
-				} else if m.Command != 0 {
-					m.HandleCommand(m.Command, i)
 				}
 				m.SetExitCode(i)
-				if item.OnClick != nil {
-					item.OnClick()
-				} else if item.Command != 0 {
-					FrameManager.EmitCommand(item.Command, item.UserData)
-				}
 				return true
 			}
 		}
@@ -190,10 +190,13 @@ func (m *VMenu) ProcessMouse(e *vtinput.InputEvent) bool {
 		clickedIdx := m.TopPos + (my - m.Y1 - 1)
 		if mx >= m.X1 && mx < m.X2 && clickedIdx >= 0 && clickedIdx < m.ItemCount && !m.items[clickedIdx].Separator {
 			m.SetSelectPos(clickedIdx)
+			item := m.items[clickedIdx]
+			if FrameManager.DisabledCommands.IsDisabled(item.Command) {
+				return true
+			}
+			m.FireAction(item.OnClick, item.Command, item.UserData)
 			if m.OnAction != nil {
 				m.OnAction(clickedIdx)
-			} else if m.Command != 0 {
-				m.HandleCommand(m.Command, clickedIdx)
 			}
 			m.SetExitCode(clickedIdx)
 			return true

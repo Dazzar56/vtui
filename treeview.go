@@ -230,13 +230,14 @@ func (t *TreeView) ProcessKey(e *vtinput.InputEvent) bool {
 		}
 	case vtinput.VK_RETURN, vtinput.VK_SPACE:
 		if len(fn.node.Children) > 0 {
-			fn.node.Expanded = !fn.node.Expanded; t.Flatten()
+			fn.node.Expanded = !fn.node.Expanded
+			t.Flatten()
 		} else {
+			var onClick func()
 			if t.OnAction != nil {
-				t.OnAction(fn.node)
-			} else if t.Command != 0 {
-				t.HandleCommand(t.Command, fn.node)
+				onClick = func() { t.OnAction(fn.node) }
 			}
+			t.FireAction(onClick, t.Command, fn.node)
 		}
 		return true
 	}

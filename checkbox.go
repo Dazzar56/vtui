@@ -82,11 +82,11 @@ func (cb *Checkbox) Toggle() {
 			cb.State = 0
 		}
 	}
+	var onClick func()
 	if cb.OnChange != nil {
-		cb.OnChange(cb.State)
-	} else if cb.Command != 0 {
-		cb.HandleCommand(cb.Command, cb.State)
+		onClick = func() { cb.OnChange(cb.State) }
 	}
+	cb.FireAction(onClick, cb.Command, cb.State)
 }
 
 func (cb *Checkbox) GetData() any {

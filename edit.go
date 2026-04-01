@@ -218,14 +218,7 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 	switch event.VirtualKeyCode {
 
 	case vtinput.VK_RETURN:
-		if e.OnAction != nil {
-			e.OnAction()
-			return true
-		} else if e.Command != 0 {
-			e.HandleCommand(e.Command, nil)
-			return true
-		}
-		return false
+		return e.FireAction(e.OnAction, e.Command, nil)
 
 	case vtinput.VK_LEFT:
 		if shift { e.beginSelection() } else { e.selStart = -1; e.selAnchor = -1 }

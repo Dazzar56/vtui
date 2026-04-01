@@ -221,6 +221,19 @@ func (so *ScreenObject) ResolveColor(normIdx, selIdx int) uint64 {
 func (so *ScreenObject) ResolveColors(normIdx, selNormIdx, highIdx, selHighIdx int) (uint64, uint64) {
 	return so.ResolveColor(normIdx, selNormIdx), so.ResolveColor(highIdx, selHighIdx)
 }
+// FireAction centralizes the logic for executing an OnClick callback or emitting a command.
+// It gives priority to the callback.
+// Returns true if an action was taken (either callback or command was handled).
+func (so *ScreenObject) FireAction(onClick func(), command int, args any) bool {
+	if onClick != nil {
+		onClick()
+		return true
+	}
+	if command != 0 {
+		return so.HandleCommand(command, args)
+	}
+	return false
+}
 // HandleCommand is the default implementation for command routing.
 // It bubbles the command up to the owner.
 func (so *ScreenObject) HandleCommand(cmd int, args any) bool {
