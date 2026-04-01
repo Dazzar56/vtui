@@ -40,8 +40,8 @@ func (rb *RadioButton) DisplayObject(scr *ScreenBuf) {
 		state = "(•) "
 	}
 
-	cells, _ := StringToCharInfoHighlighted(state+rb.Text, attr, highAttr)
-	scr.Write(rb.X1, rb.Y1, cells)
+	p := NewPainter(scr)
+	p.DrawStringHighlighted(rb.X1, rb.Y1, state+rb.Text, attr, highAttr)
 }
 
 func (rb *RadioButton) ProcessKey(e *vtinput.InputEvent) bool {

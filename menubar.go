@@ -56,7 +56,7 @@ func (mb *MenuBar) Show(scr *ScreenBuf) {
 
 func (mb *MenuBar) DisplayObject(scr *ScreenBuf) {
 	if !mb.IsVisible() { return }
-
+	p := NewPainter(scr)
 	attr := Palette[ColMenuBarItem]
 	mb.DrawBackground(scr, attr)
 
@@ -82,8 +82,7 @@ func (mb *MenuBar) DisplayObject(scr *ScreenBuf) {
 			itemAttr = SetRGBFore(itemAttr, GetRGBFore(itemAttr)/2)
 		}
 
-		cells, _ := StringToCharInfoHighlighted("  "+item.Label+"  ", itemAttr, hiAttr)
-		scr.Write(currX, mb.Y1, cells)
+		p.DrawStringHighlighted(currX, mb.Y1, "  "+item.Label+"  ", itemAttr, hiAttr)
 
 		clean, _, _ := ParseAmpersandString(item.Label)
 		currX += runewidth.StringWidth("  " + clean + "  ")
@@ -224,8 +223,8 @@ func (mb *MenuBar) ProcessKey(e *vtinput.InputEvent) bool {
 func (mb *MenuBar) ProcessMouse(e *vtinput.InputEvent) bool {
 	if mb.IsDisabled() { return false }
 	if e.Type == vtinput.MouseEventType && e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
-		my, mx := int(e.MouseY), int(e.MouseX)
-		if my == mb.Y1 && mx >= mb.X1 && mx <= mb.X2 {
+		mx, my := int(e.MouseX), int(e.MouseY)
+		if mb.HitTest(mx, my) {
 			for i := range mb.Items {
 				x1 := mb.GetItemX(i)
 				var x2 int

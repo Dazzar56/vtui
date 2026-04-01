@@ -277,8 +277,7 @@ func (m *VMenu) DisplayObject(scr *ScreenBuf) {
 				finalHighAttr = colSelHigh
 			}
 
-			cells, _ := StringToCharInfoHighlighted(fullItemText, attr, finalHighAttr)
-			scr.Write(m.X1+1, currY, cells)
+			p.DrawStringHighlighted(m.X1+1, currY, fullItemText, attr, finalHighAttr)
 		}
 	}
 

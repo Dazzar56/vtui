@@ -64,6 +64,16 @@ func (p *Painter) DrawCloseButton(x2, y1 int, attr uint64) {
 	p.scr.Write(x2-4, y1, StringToCharInfo(closeStr, attr))
 }
 
+// DrawString draws a raw string with given attributes.
+func (p *Painter) DrawString(x, y int, text string, attr uint64) {
+	p.scr.Write(x, y, StringToCharInfo(text, attr))
+}
+
+// DrawStringHighlighted draws a string, highlighting the character after the '&' symbol.
+func (p *Painter) DrawStringHighlighted(x, y int, text string, normAttr, highAttr uint64) {
+	cells, _ := StringToCharInfoHighlighted(text, normAttr, highAttr)
+	p.scr.Write(x, y, cells)
+}
 // DrawLine draws a horizontal line segment, optionally with connectors.
 func (p *Painter) DrawLine(x1, y1, x2, y2 int, char rune, attr uint64, connectLeft, connectRight bool) {
 	if x1 > x2 || y1 > y2 { return } // Only horizontal for now

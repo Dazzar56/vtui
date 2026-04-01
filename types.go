@@ -60,6 +60,7 @@ type UIElement interface {
 	HandleCommand(cmd int, args any) bool
 	HandleBroadcast(cmd int, args any) bool
 	Valid(cmd int) bool
+	HitTest(x, y int) bool
 }
 
 // DataControl is an interface for UI elements that can store and return data.

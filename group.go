@@ -147,8 +147,7 @@ func (g *Group) ProcessMouse(e *vtinput.InputEvent) bool {
 	mx, my := int(e.MouseX), int(e.MouseY)
 	for i := len(g.items) - 1; i >= 0; i-- {
 		item := g.items[i]
-		x1, y1, x2, y2 := item.GetPosition()
-		if mx >= x1 && mx <= x2 && my >= y1 && my <= y2 {
+		if item.HitTest(mx, my) {
 			if e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
 				if item.CanFocus() && !item.IsDisabled() && g.focusIdx != i {
 					g.setFocus(i)

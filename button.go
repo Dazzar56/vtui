@@ -36,8 +36,8 @@ func (b *Button) Show(scr *ScreenBuf) {
 func (b *Button) DisplayObject(scr *ScreenBuf) {
 	if !b.IsVisible() { return }
 	attr, highAttr := b.ResolveColors(ColDialogButton, ColDialogSelectedButton, ColDialogHighlightButton, ColDialogHighlightSelectedButton)
-	cells, _ := StringToCharInfoHighlighted(b.text, attr, highAttr)
-	scr.Write(b.X1, b.Y1, cells)
+	p := NewPainter(scr)
+	p.DrawStringHighlighted(b.X1, b.Y1, b.text, attr, highAttr)
 }
 
 

@@ -34,8 +34,8 @@ func (t *Text) DisplayObject(scr *ScreenBuf) {
 		attr = DimColor(attr)
 		highAttr = DimColor(highAttr)
 	}
-	cells, _ := StringToCharInfoHighlighted(t.content, attr, highAttr)
-	scr.Write(t.X1, t.Y1, cells)
+	p := NewPainter(scr)
+	p.DrawStringHighlighted(t.X1, t.Y1, t.content, attr, highAttr)
 }
 
 func (t *Text) SetText(text string) {

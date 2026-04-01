@@ -48,8 +48,8 @@ func (cb *Checkbox) DisplayObject(scr *ScreenBuf) {
 		char = "?" // Symbol for undefined state
 	}
 
-	cells, _ := StringToCharInfoHighlighted("["+char+"] "+cb.Text, attr, highAttr)
-	scr.Write(cb.X1, cb.Y1, cells)
+	p := NewPainter(scr)
+	p.DrawStringHighlighted(cb.X1, cb.Y1, "["+char+"] "+cb.Text, attr, highAttr)
 }
 
 func (cb *Checkbox) ProcessKey(e *vtinput.InputEvent) bool {

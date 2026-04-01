@@ -87,8 +87,8 @@ func (cg *CheckGroup) DisplayObject(scr *ScreenBuf) {
 		cx := cg.X1
 		for c := 0; c < col; c++ { cx += cg.colWidths[c] }
 
-		cells, _ := StringToCharInfoHighlighted(prefix+itm, curAttr, curHigh)
-		scr.Write(cx, cg.Y1+row, cells)
+		p := NewPainter(scr)
+		p.DrawStringHighlighted(cx, cg.Y1+row, prefix+itm, curAttr, curHigh)
 	}
 }
 
@@ -143,8 +143,8 @@ func (cg *CheckGroup) ProcessKey(e *vtinput.InputEvent) bool {
 func (cg *CheckGroup) ProcessMouse(e *vtinput.InputEvent) bool {
 	if cg.IsDisabled() { return false }
 	if e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
-		my, mx := int(e.MouseY), int(e.MouseX)
-		if my >= cg.Y1 && my <= cg.Y2 && mx >= cg.X1 && mx <= cg.X2 {
+		mx, my := int(e.MouseX), int(e.MouseY)
+		if cg.HitTest(mx, my) {
 			row := my - cg.Y1
 			col := 0
 			cx := cg.X1

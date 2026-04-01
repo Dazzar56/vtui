@@ -49,6 +49,10 @@ func (so *ScreenObject) GetGrowMode() GrowMode {
 	return so.growMode
 }
 
+// HitTest returns true if the coordinates fall within the object's bounding box.
+func (so *ScreenObject) HitTest(x, y int) bool {
+	return x >= so.X1 && x <= so.X2 && y >= so.Y1 && y <= so.Y2
+}
 // SetPosition sets the object's coordinates.
 // Important: this does not trigger a redraw.
 func (so *ScreenObject) SetPosition(x1, y1, x2, y2 int) {

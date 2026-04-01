@@ -239,7 +239,7 @@ func (bw *BaseWindow) handleWindowOperations(e *vtinput.InputEvent) bool {
 			bw.isResizing = true
 			return true
 		}
-		if mx >= bw.X1 && mx <= bw.X2 && my >= bw.Y1 && my <= bw.Y2 {
+		if bw.HitTest(mx, my) {
 			bw.isDragging = true
 			bw.dragOffX, bw.dragOffY = mx-bw.X1, my-bw.Y1
 			return true

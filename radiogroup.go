@@ -99,6 +99,7 @@ func (rg *RadioGroup) DisplayObject(scr *ScreenBuf) {
 		highAttr = DimColor(highAttr)
 	}
 
+	p := NewPainter(scr)
 	for i, itm := range rg.Items {
 		prefix := "( ) "
 		if i == rg.Selected { prefix = "(•) " }
@@ -108,8 +109,7 @@ func (rg *RadioGroup) DisplayObject(scr *ScreenBuf) {
 		cx := rg.X1
 		for c := 0; c < col; c++ { cx += rg.colWidths[c] }
 
-		cells, _ := StringToCharInfoHighlighted(prefix+itm, attr, highAttr)
-		scr.Write(cx, rg.Y1+row, cells)
+		p.DrawStringHighlighted(cx, rg.Y1+row, prefix+itm, attr, highAttr)
 	}
 }
 
@@ -184,8 +184,8 @@ func (rg *RadioGroup) ProcessKey(e *vtinput.InputEvent) bool {
 func (rg *RadioGroup) ProcessMouse(e *vtinput.InputEvent) bool {
 	if rg.IsDisabled() { return false }
 	if e.Type == vtinput.MouseEventType && e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
-		my, mx := int(e.MouseY), int(e.MouseX)
-		if my >= rg.Y1 && my <= rg.Y2 && mx >= rg.X1 && mx <= rg.X2 {
+		mx, my := int(e.MouseX), int(e.MouseY)
+		if rg.HitTest(mx, my) {
 			row := my - rg.Y1
 			col := 0
 			cx := rg.X1
