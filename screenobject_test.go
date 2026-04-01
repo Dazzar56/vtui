@@ -2,6 +2,7 @@ package vtui
 
 import (
 	"testing"
+	"github.com/unxed/vtinput"
 )
 
 type mockOwner struct {
@@ -64,5 +65,34 @@ func TestScreenObject_FireAction(t *testing.T) {
 	handled = so.FireAction(nil, 0, nil)
 	if handled {
 		t.Error("FireAction should return false when there is nothing to do")
+	}
+}
+
+func TestCommandBubbling_MultiLevel(t *testing.T) {
+	// Regression test for "broken menu" bug.
+	// Flow: VMenu (item clicked) -> MenuBar (owner) -> PanelsFrame (owner)
+	
+	finalTarget := &mockOwner{}
+	
+	mb := NewMenuBar([]string{"File"})
+	mb.SetOwner(finalTarget)
+	
+	vm := NewVMenu("Sub")
+	vm.SetOwner(mb)
+	vm.AddItem(MenuItem{Text: "Action", Command: 777})
+	vm.SetSelectPos(0)
+	
+	// Simulate Enter on menu item
+	vm.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, 
+		KeyDown: true, 
+		VirtualKeyCode: vtinput.VK_RETURN,
+	})
+	
+	if !finalTarget.commandHandled {
+		t.Error("Multi-level bubbling failed: Command did not reach the final owner")
+	}
+	if finalTarget.lastCmd != 777 {
+		t.Errorf("Wrong command reached owner: expected 777, got %d", finalTarget.lastCmd)
 	}
 }

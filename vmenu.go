@@ -88,12 +88,12 @@ func (m *VMenu) ProcessKey(e *vtinput.InputEvent) bool {
 				if FrameManager.DisabledCommands.IsDisabled(item.Command) {
 					return true
 				}
-				// Fire item-specific action
-				m.FireAction(item.OnClick, item.Command, item.UserData)
-				// Notify owner of selection
+				// Notify owner of selection before firing action to ensure context is valid
 				if m.OnAction != nil {
 					m.OnAction(m.SelectPos)
 				}
+				// Fire item-specific action (bubbles through owner link)
+				m.FireAction(item.OnClick, item.Command, item.UserData)
 				m.SetExitCode(m.SelectPos)
 				return true
 			}
