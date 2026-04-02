@@ -156,6 +156,7 @@ func (fm *frameManager) SwitchScreen(idx int) {
 	fm.ActiveIdx = idx
 	fm.frames = fm.Screens[idx].Frames
 	fm.capturedFrame = fm.Screens[idx].CapturedFrame
+	DebugLog("FM: Switched to Screen %d (Workspace: %s)", idx, fm.Screens[idx].GetTitle())
 
 	// 2. Notify new screen it's gaining focus
 	if len(fm.frames) > 0 {
@@ -949,6 +950,9 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 
 	// --- Menu Interception ---
 	if ev.Type == vtinput.KeyEventType && ev.KeyDown {
+
+		DebugLog("INPUT: KeyPress VK=0x%X Char=%d (Stack: %d frames, ActiveIdx: %d)", ev.VirtualKeyCode, ev.Char, len(fm.frames), fm.ActiveIdx)
+
 		// 1. If Menu is Active, it has priority.
 		// We allow it even if topFrame is modal, provided topFrame IS the menu itself
 		// or the frame that owns the menu.
@@ -974,6 +978,8 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 			}
 			return // Don't pass keys to background frames when menu is active
 		}
+	} else if (ev.Type == vtinput.KeyEventType && !ev.KeyDown) {
+		DebugLog("INPUT: KeyRelease VK=0x%X Char=%d (Stack: %d frames, ActiveIdx: %d)", ev.VirtualKeyCode, ev.Char, len(fm.frames), fm.ActiveIdx)
 	}
 
 	// 3. Regular Dispatch (MDI Hit-Testing)
@@ -1011,10 +1017,9 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 				x1, y1, x2, y2 := f.GetPosition()
 				hitShadow := f.HasShadow() && mx >= x1 && mx <= x2+2 && my >= y1 && my <= y2+1
 
-				if f.HitTest(mx, my) || hitShadow {
-					DebugLog("FM: Hit-test SUCCESS for frame %d type %d", i, f.GetType())
-
-					if i != len(fm.frames)-1 {
+		if f.HitTest(mx, my) || hitShadow {
+			if i != len(fm.frames)-1 {
+				DebugLog("FM: Mouse hit background frame %d (type %d), requesting focus.", i, f.GetType())
 						// Try to bring it to front before passing the event
 						if fm.RequestFocus(f) {
 							handled = f.ProcessMouse(ev)
@@ -1079,6 +1084,7 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 		// We must ignore NumLock, CapsLock, and EnhancedKey flags
 		modifierMask := uint32(vtinput.LeftAltPressed | vtinput.RightAltPressed | vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed | vtinput.ShiftPressed)
 		if ev.VirtualKeyCode == vtinput.VK_F1 && (ev.ControlKeyState&modifierMask) == 0 {
+			DebugLog("FM: F1 triggered Help for topic context.")
 			topic := topFrame.GetHelp()
 			if fc, ok := topFrame.(FocusContainer); ok {
 				if foc := fc.GetFocusedItem(); foc != nil && foc.GetHelp() != "" {
@@ -1125,6 +1131,7 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 				if activeMenu.ProcessKey(ev) {
 					return
 				}
+				DebugLog("FM: Hotkey Alt+%c matched MenuBar item.", ev.Char)
 			}
 		}
 	}

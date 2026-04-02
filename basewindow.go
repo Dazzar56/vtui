@@ -161,6 +161,7 @@ func (bw *BaseWindow) ChangeSize(nw, nh int) {
 
 	bw.X2 += dx
 	bw.Y2 += dy
+	DebugLog("WINDOW: Resized %q to %dx%d (Delta: %dx%d)", bw.frame.title, nw, nh, dx, dy)
 	bw.frame.SetPosition(bw.X1, bw.Y1, bw.X2, bw.Y2)
 	bw.rootGroup.Resize(dx, dy)
 
