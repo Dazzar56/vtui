@@ -6,14 +6,6 @@ import (
 	"strings"
 )
 
-// Alignment defines text alignment within a cell.
-type Alignment int
-
-const (
-	AlignLeft Alignment = iota
-	AlignCenter
-	AlignRight
-)
 
 // TableColumn defines the properties of a single table column.
 type TableColumn struct {
