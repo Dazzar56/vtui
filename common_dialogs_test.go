@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 	"context"
+	"time"
 	"github.com/unxed/vtinput"
 )
 
@@ -98,20 +99,41 @@ func TestSelectFileDialog_Selection(t *testing.T) {
 	var lb *ListBox
 	var fileEdit *Edit
 	editCount := 0
-	for _, item := range dlg.rootGroup.items {
-		if l, ok := item.(*ListBox); ok {
-			lb = l
-		}
-		if e, ok := item.(*Edit); ok {
+	walk(dlg.rootGroup, func(el UIElement) bool {
+		if l, ok := el.(*ListBox); ok { lb = l }
+		if e, ok := el.(*Edit); ok {
 			editCount++
-			if editCount == 2 { // fileEdit is the second Edit field
-				fileEdit = e
-	if lb == nil || fileEdit == nil { t.Fatal("SelectFileDialog structure error") }
+			if editCount == 2 { fileEdit = e }
+		}
+		return true
+	})
+
+	if lb == nil || fileEdit == nil {
+		t.Fatal("SelectFileDialog structure error")
+	}
+
+	// Wait for async VFS to load items into the listbox
+	timeout := time.After(1 * time.Second)
+Loop:
+	for {
+		for _, name := range lb.Items {
+			if name == "dummy.txt" { break Loop }
+		}
+		select {
+		case task := <-FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("Timeout waiting for dummy.txt to appear in list")
+		}
+	}
 
 	// Find dummy.txt in list
 	fileIdx := -1
 	for i, name := range lb.Items {
-		if name == "dummy.txt" { fileIdx = i; break }
+		if name == "dummy.txt" {
+			fileIdx = i
+			break
+		}
 	}
 
 	if fileIdx == -1 { t.Fatal("File not found in list") }
@@ -125,6 +147,50 @@ func TestSelectFileDialog_Selection(t *testing.T) {
 		t.Errorf("File Edit not updated on selection. Got %q", fileEdit.GetText())
 	}
 }
+
+func TestSelectFileDialog_LayoutBestPractice(t *testing.T) {
+	SetDefaultPalette()
+	FrameManager.Init(NewScreenBuf())
+	v := &testVFS{currentPath: "/tmp"}
+
+	// Create dialog (55x20)
+	dlg := SelectFileDialog("LayoutTest", "/tmp", v)
+
+	var fileEdit *Edit
+	var btnOk *Button
+	var lb *ListBox
+
+	walk(dlg.rootGroup, func(el UIElement) bool {
+		if t, ok := el.(*Text); ok && el.GetHotkey() == 'f' {
+			if e, ok := t.FocusLink.(*Edit); ok { fileEdit = e }
 		}
+		if b, ok := el.(*Button); ok && b.GetHotkey() == 'o' { btnOk = b }
+		if l, ok := el.(*ListBox); ok { lb = l }
+		return true
+	})
+
+	if fileEdit == nil || btnOk == nil || lb == nil {
+		t.Fatal("Required components not found in dialog")
+	}
+
+	// 1. Check ListBox stretch
+	lx1, _, lx2, _ := lb.GetPosition()
+	if lx1 < dlg.X1 || lx2 > dlg.X2 {
+		t.Errorf("ListBox bounds invalid: %d..%d", lx1, lx2)
+	}
+
+	// 2. Check File Edit stretch
+	ex1, _, ex2, _ := fileEdit.GetPosition()
+	if ex1 <= dlg.X1+2 {
+		t.Errorf("File Edit overlap with label: X1=%d", ex1)
+	}
+	if ex2 < ex1 {
+		t.Errorf("File Edit has negative width: X1=%d, X2=%d", ex1, ex2)
+	}
+
+	// 3. Check Button centering
+	bx1, _, _, _ := btnOk.GetPosition()
+	if bx1 < dlg.X1 {
+		t.Errorf("Button out of bounds: X1=%d", bx1)
 	}
 }

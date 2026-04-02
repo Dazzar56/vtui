@@ -64,4 +64,12 @@ dlg.AddItem(...) // Add all elements to dlg
 
 ## Best Practices
 * **Use Layouts for structured forms:** Forms with labels, inputs, and checkboxes benefit massively from `VBoxLayout`.
-* **Use `GrowMode` for resizing:** The Layout engine is currently a "one-time calculator" used during initialization. If your dialog supports manual resizing by the user, combine the initial Layout setup with `SetGrowMode` (e.g., `GrowHiX | GrowHiY`) so widgets resize dynamically without re-running the layout engine.
+* **Use `GrowMode` for resizing:** The Layout engine is currently a "one-time calculator" used during initialization. If your dialog supports manual resizing by the user, combine the initial Layout setup with `SetGrowMode` (e.g., `GrowHiX | GrowHiY`) so widgets resize dynamically without re-running the layout engine.## Reference Implementation (Best Practice)
+
+For a complete example of a complex layout with nested horizontal rows and a filling vertical center, see **`SelectFileDialog`** in `vtui/common_dialogs.go`.
+
+Key patterns demonstrated there:
+1. **The Root Stack**: A `VBoxLayout` that defines the overall vertical spacing of the dialog.
+2. **The "Label + Input" Row**: Using an `HBoxLayout` where the Label has a fixed margin and the Edit field uses `AlignFill` to take up the remaining width.
+3. **The Expansion Area**: Placing a `ListBox` or `Table` in the middle of a `VBoxLayout` with `AlignFill` so it scales with the dialog's height.
+4. **Grouped Buttons**: An `HBoxLayout` with `HorizontalAlign = AlignCenter` and `Spacing = 2` to create a professional-looking button bar at the bottom.

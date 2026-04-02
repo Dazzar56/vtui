@@ -26,14 +26,25 @@ type LayoutItem struct {
 
 // VBoxLayout stacks elements vertically.
 type VBoxLayout struct {
+	ScreenObject
 	X, Y, W, H int
 	Items      []LayoutItem
 }
 
 // NewVBoxLayout creates a new vertical layout manager.
 func NewVBoxLayout(x, y, w, h int) *VBoxLayout {
-	return &VBoxLayout{X: x, Y: y, W: w, H: h}
+	v := &VBoxLayout{X: x, Y: y, W: w, H: h}
+	v.SetPosition(x, y, x+w-1, y+h-1)
+	return v
 }
+
+func (v *VBoxLayout) SetPosition(x1, y1, x2, y2 int) {
+	v.ScreenObject.SetPosition(x1, y1, x2, y2)
+	v.X, v.Y = x1, y1
+	v.W, v.H = x2-x1+1, y2-y1+1
+}
+
+func (v *VBoxLayout) Show(scr *ScreenBuf) {} // Invisible container
 
 // Add appends a UIElement to the vertical layout.
 func (v *VBoxLayout) Add(el UIElement, m Margins, align Alignment) {
@@ -68,22 +79,39 @@ func (v *VBoxLayout) Apply() {
 		}
 
 		itm.Element.SetPosition(finalX, currY, finalX+finalW-1, currY+ih-1)
+
+		// If child is also a layout, trigger its recursive apply
+		if sub, ok := itm.Element.(interface{ Apply() }); ok {
+			sub.Apply()
+		}
+
 		currY += ih + itm.Margins.Bottom
 	}
 }
 
 // HBoxLayout stacks elements horizontally.
 type HBoxLayout struct {
+	ScreenObject
 	X, Y, W, H      int
 	Items           []LayoutItem
-	HorizontalAlign Alignment // Alignment for the entire block of items (e.g., AlignCenter for buttons)
-	Spacing         int       // Gap between items
+	HorizontalAlign Alignment
+	Spacing         int
 }
 
 // NewHBoxLayout creates a new horizontal layout manager.
 func NewHBoxLayout(x, y, w, h int) *HBoxLayout {
-	return &HBoxLayout{X: x, Y: y, W: w, H: h, HorizontalAlign: AlignLeft, Spacing: 1}
+	v := &HBoxLayout{X: x, Y: y, W: w, H: h, HorizontalAlign: AlignLeft, Spacing: 1}
+	v.SetPosition(x, y, x+w-1, y+h-1)
+	return v
 }
+
+func (h *HBoxLayout) SetPosition(x1, y1, x2, y2 int) {
+	h.ScreenObject.SetPosition(x1, y1, x2, y2)
+	h.X, h.Y = x1, y1
+	h.W, h.H = x2-x1+1, y2-y1+1
+}
+
+func (h *HBoxLayout) Show(scr *ScreenBuf) {} // Invisible container
 
 // Add appends a UIElement to the horizontal layout.
 func (h *HBoxLayout) Add(el UIElement, m Margins, align Alignment) {

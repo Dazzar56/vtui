@@ -54,6 +54,15 @@ func (lb *ListBox) GetSelectedIndices() []int {
 	}
 	return res
 }
+// SelectName searches for an item by its string value and moves the cursor to it.
+func (lb *ListBox) SelectName(name string) {
+	for i, item := range lb.Items {
+		if item == name {
+			lb.SetSelectPos(i)
+			return
+		}
+	}
+}
 
 func (lb *ListBox) SetPosition(x1, y1, x2, y2 int) {
 	lb.Table.SetPosition(x1, y1, x2, y2)

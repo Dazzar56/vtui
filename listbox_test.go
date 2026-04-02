@@ -129,6 +129,22 @@ func TestListBox_EmptyList(t *testing.T) {
 		t.Error("SelectPos should be 0 for empty list")
 	}
 }
+func TestListBox_SelectName(t *testing.T) {
+	items := []string{"apple", "banana", "cherry"}
+	lb := NewListBox(0, 0, 10, 5, items)
+
+	// 1. Select existing item
+	lb.SelectName("banana")
+	if lb.SelectPos != 1 {
+		t.Errorf("SelectName('banana') failed: expected index 1, got %d", lb.SelectPos)
+	}
+
+	// 2. Select non-existent item (should do nothing)
+	lb.SelectName("dragonfruit")
+	if lb.SelectPos != 1 {
+		t.Errorf("SelectName should not change position for missing items, got %d", lb.SelectPos)
+	}
+}
 func TestListBox_DynamicLayout(t *testing.T) {
 	SetDefaultPalette()
 	scr := NewScreenBuf()
