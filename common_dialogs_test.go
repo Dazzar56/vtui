@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"context"
 	"github.com/unxed/vtinput"
 )
 
@@ -11,11 +12,12 @@ import (
 type testVFS struct { currentPath string }
 func (v *testVFS) GetPath() string { return v.currentPath }
 func (v *testVFS) SetPath(p string) error { v.currentPath = p; return nil }
-func (v *testVFS) ReadDir(p string) ([]VFSItem, error) {
+func (v *testVFS) ReadDir(ctx context.Context, p string, onChunk func([]VFSItem)) error {
 	entries, _ := os.ReadDir(p)
 	items := make([]VFSItem, 0)
 	for _, e := range entries { items = append(items, VFSItem{Name: e.Name(), IsDir: e.IsDir()}) }
-	return items, nil
+	if len(items) > 0 && onChunk != nil { onChunk(items) }
+	return nil
 }
 func (v *testVFS) Join(elem ...string) string { return filepath.Join(elem...) }
 func (v *testVFS) Dir(p string) string { return filepath.Dir(p) }

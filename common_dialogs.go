@@ -1,5 +1,9 @@
 package vtui
 
+import (
+	"context"
+)
+
 // VFSItem represents a generic file or directory entry for UI dialogs.
 type VFSItem struct {
 	Name  string
@@ -11,7 +15,7 @@ type VFSItem struct {
 type VFSMinimal interface {
 	GetPath() string
 	SetPath(path string) error
-	ReadDir(path string) ([]VFSItem, error)
+	ReadDir(ctx context.Context, path string, onChunk func([]VFSItem)) error
 	Join(elem ...string) string
 	Dir(path string) string
 	Base(path string) string
@@ -32,13 +36,14 @@ func SelectDirDialog(title string, initialPath string, vfs VFSMinimal) *Window {
 	// List of directories
 	var items []string
 	updateList := func(p string) {
-		entries, _ := vfs.ReadDir(p)
 		items = []string{".."}
-		for _, e := range entries {
-			if e.IsDir {
-				items = append(items, e.Name)
+		vfs.ReadDir(context.Background(), p, func(chunk []VFSItem) {
+			for _, e := range chunk {
+				if e.IsDir {
+					items = append(items, e.Name)
+				}
 			}
-		}
+		})
 	}
 	updateList(vfs.GetPath())
 
@@ -122,20 +127,24 @@ func SelectFileDialog(title string, initialPath string, vfs VFSMinimal) *Window 
 	var isDirMap map[string]bool
 
 	updateList := func(p string) {
-		entries, _ := vfs.ReadDir(p)
 		items = []string{".."}
 		isDirMap = make(map[string]bool)
 		isDirMap[".."] = true
 
+		var allEntries []VFSItem
+		vfs.ReadDir(context.Background(), p, func(chunk []VFSItem) {
+			allEntries = append(allEntries, chunk...)
+		})
+
 		// Folders first
-		for _, e := range entries {
+		for _, e := range allEntries {
 			if e.IsDir {
 				items = append(items, e.Name)
 				isDirMap[e.Name] = true
 			}
 		}
 		// Then files
-		for _, e := range entries {
+		for _, e := range allEntries {
 			if !e.IsDir {
 				items = append(items, e.Name)
 				isDirMap[e.Name] = false

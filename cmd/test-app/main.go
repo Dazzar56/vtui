@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"context"
 	"path/filepath"
 	"time"
 
@@ -19,13 +20,16 @@ func (v *localVFS) SetPath(p string) error { v.path = p; return nil }
 func (v *localVFS) Join(e ...string) string { return filepath.Join(e...) }
 func (v *localVFS) Dir(p string) string { return filepath.Dir(p) }
 func (v *localVFS) Base(p string) string { return filepath.Base(p) }
-func (v *localVFS) ReadDir(p string) ([]vtui.VFSItem, error) {
+func (v *localVFS) ReadDir(ctx context.Context, p string, onChunk func([]vtui.VFSItem)) error {
 	entries, _ := os.ReadDir(p)
 	var items []vtui.VFSItem
 	for _, e := range entries {
 		items = append(items, vtui.VFSItem{Name: e.Name(), IsDir: e.IsDir()})
 	}
-	return items, nil
+	if len(items) > 0 && onChunk != nil {
+		onChunk(items)
+	}
+	return nil
 }
 
 // DemoWindow wraps vtui.Window to showcase Turbo Vision-style command routing.
