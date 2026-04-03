@@ -250,6 +250,25 @@ func TestEdit_SelectAllAndNavigate(t *testing.T) {
 		t.Error("Navigation should clear selection and clearFlag")
 	}
 }
+func TestEdit_FullCoverage_FarHotkeys(t *testing.T) {
+	SetDefaultPalette()
+	e := NewEdit(0, 0, 20, "Far Navigation")
+
+	// 1. Ctrl+A -> Select All
+	e.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_A, ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+	if e.selStart != 0 || e.selEnd != len(e.text) || !e.clearFlag {
+		t.Error("Edit Ctrl+A failed to select all or set clearFlag")
+	}
+
+	// 2. Any key after Ctrl+A should replace text
+	e.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'X'})
+	if e.GetText() != "X" {
+		t.Errorf("Replacement after Ctrl+A failed, got %q", e.GetText())
+	}
+}
 func TestEdit_FarHotkeys_SelectAll(t *testing.T) {
 	SetDefaultPalette()
 	e := NewEdit(0, 0, 20, "Select All Me")
