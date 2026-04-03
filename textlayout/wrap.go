@@ -120,16 +120,31 @@ func (we *WrapEngine) GetFragments(logLineIdx int) []LineFragment {
 			ByteOffsetEnd:   endOffset,
 			VisualWidth:     16, // Width of "[ Loading... ]"
 		}
-		we.fragmentCache[logLineIdx] = []LineFragment{frag}
-		return we.fragmentCache[logLineIdx]
+		return []LineFragment{frag} // DO NOT CACHE LOADING STUBS
 	}
 
 	lineData := we.tmpBuf
+	truncated := false
+
 	// Убираем \n или \r\n с конца
 	if len(lineData) > 0 && lineData[len(lineData)-1] == '\n' {
 		lineData = lineData[:len(lineData)-1]
 		if len(lineData) > 0 && lineData[len(lineData)-1] == '\r' {
 			lineData = lineData[:len(lineData)-1]
+		}
+	}
+
+	// PREVENT LONG-LINE FLASH:
+	// If lineData STILL contains '\n' in the middle (because LineIndex hasn't indexed it yet),
+	// truncate it to the first '\n' to prevent rendering multiple lines as one continuous paragraph.
+	for i, b := range lineData {
+		if b == '\n' {
+			lineData = lineData[:i]
+			if i > 0 && lineData[i-1] == '\r' {
+				lineData = lineData[:i-1]
+			}
+			truncated = true
+			break
 		}
 	}
 
@@ -153,8 +168,10 @@ func (we *WrapEngine) GetFragments(logLineIdx int) []LineFragment {
 			ByteOffsetEnd:   startOffset + len(lineData),
 			VisualWidth:     width,
 		}
-		we.fragmentCache[logLineIdx] = []LineFragment{frag}
-		return we.fragmentCache[logLineIdx]
+		if !truncated {
+			we.fragmentCache[logLineIdx] = []LineFragment{frag}
+		}
+		return []LineFragment{frag}
 	}
 
 	var fragments []LineFragment
@@ -214,7 +231,9 @@ func (we *WrapEngine) GetFragments(logLineIdx int) []LineFragment {
 		fragments = append(fragments, LineFragment{LogicalLineIdx: logLineIdx, ByteOffsetStart: startOffset, ByteOffsetEnd: startOffset})
 	}
 
-	we.fragmentCache[logLineIdx] = fragments
+	if !truncated {
+		we.fragmentCache[logLineIdx] = fragments
+	}
 	return fragments
 }
 
