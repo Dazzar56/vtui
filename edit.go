@@ -140,6 +140,17 @@ func (e *Edit) SetText(text string) {
 	e.selStart = -1
 	e.selAnchor = -1
 }
+// SelectAll selects the entire text and sets the clear flag,
+// so the next character typed will replace the content.
+func (e *Edit) SelectAll() {
+	if len(e.text) > 0 {
+		e.selStart = 0
+		e.selEnd = len(e.text)
+		e.selAnchor = 0
+		e.curPos = len(e.text)
+		e.clearFlag = true
+	}
+}
 func (e *Edit) GetData() any {
 	return e.GetText()
 }
@@ -304,8 +315,7 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 
 		DebugLog("    Edit: Typing char %d", event.Char)
 		if e.clearFlag {
-			e.text = []rune{}
-			e.curPos = 0
+			e.SetText("")
 			e.clearFlag = false
 		}
 
@@ -358,9 +368,15 @@ func (e *Edit) endSelection() {
 
 func (e *Edit) DeleteBlock() {
 	if e.selStart != -1 {
+		// Bounds check to prevent panics from stale selection state
+		if e.selStart < 0 { e.selStart = 0 }
+		if e.selEnd > len(e.text) { e.selEnd = len(e.text) }
+		if e.selStart > e.selEnd { e.selStart, e.selEnd = e.selEnd, e.selStart }
+
 		e.text = append(e.text[:e.selStart], e.text[e.selEnd:]...)
 		e.curPos = e.selStart
 		e.selStart = -1
+		e.selEnd = -1
 		e.selAnchor = -1
 	}
 }

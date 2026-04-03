@@ -208,3 +208,45 @@ func TestEdit_OnAction(t *testing.T) {
 		t.Error("OnAction callback was not triggered on Enter")
 	}
 }
+
+func TestEdit_SelectAllAndClear(t *testing.T) {
+	e := NewEdit(0, 0, 20, "initial path")
+	
+	// 1. Trigger SelectAll
+	e.SelectAll()
+	if e.selStart != 0 || e.selEnd != 12 {
+		t.Errorf("SelectAll failed: range [%d:%d]", e.selStart, e.selEnd)
+	}
+	if !e.clearFlag {
+		t.Error("SelectAll should set clearFlag")
+	}
+
+	// 2. Typing a character should replace everything
+	e.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true, Char: 'C',
+	})
+	
+	if e.GetText() != "C" {
+		t.Errorf("Typing after SelectAll failed: expected 'C', got %q", e.GetText())
+	}
+	if e.selStart != -1 {
+		t.Error("Selection should be cleared after typing")
+	}
+}
+
+func TestEdit_SelectAllAndNavigate(t *testing.T) {
+	e := NewEdit(0, 0, 20, "some text")
+	e.SelectAll()
+
+	// 3. Navigating (Left Arrow) should clear selection but NOT the text
+	e.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_LEFT,
+	})
+
+	if e.GetText() != "some text" {
+		t.Error("Navigation should not clear text when SelectAll is active")
+	}
+	if e.selStart != -1 || e.clearFlag {
+		t.Error("Navigation should clear selection and clearFlag")
+	}
+}
