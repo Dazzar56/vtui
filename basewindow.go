@@ -31,6 +31,9 @@ func (bw *BaseWindow) GetFocusedItem() UIElement {
 func (bw *BaseWindow) GetChildren() []UIElement {
 	return bw.rootGroup.GetChildren()
 }
+func (bw *BaseWindow) SetFocusedItem(item UIElement) {
+	bw.rootGroup.SetFocusedItem(item)
+}
 
 func NewBaseWindow(x1, y1, x2, y2 int, title string) *BaseWindow {
 	bw := &BaseWindow{

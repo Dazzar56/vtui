@@ -33,6 +33,16 @@ func (g *Group) GetFocusedItem() UIElement {
 	}
 	return nil
 }
+func (g *Group) SetFocusedItem(item UIElement) {
+	for i, itm := range g.items {
+		if itm == item {
+			if itm.CanFocus() && !itm.IsDisabled() {
+				g.setFocus(i)
+			}
+			return
+		}
+	}
+}
 func (g *Group) GetChildren() []UIElement {
 	return g.items
 }
