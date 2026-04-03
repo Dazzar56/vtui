@@ -13,10 +13,10 @@ import (
 type testVFS struct { currentPath string }
 func (v *testVFS) GetPath() string { return v.currentPath }
 func (v *testVFS) SetPath(p string) error { v.currentPath = p; return nil }
-func (v *testVFS) ReadDir(ctx context.Context, p string, onChunk func([]VFSItem)) error {
+func (v *testVFS) ReadDir(ctx context.Context, p string, onChunk func([]FSItem)) error {
 	entries, _ := os.ReadDir(p)
-	items := make([]VFSItem, 0)
-	for _, e := range entries { items = append(items, VFSItem{Name: e.Name(), IsDir: e.IsDir()}) }
+	items := make([]FSItem, 0)
+	for _, e := range entries { items = append(items, FSItem{Name: e.Name(), IsDir: e.IsDir()}) }
 	if len(items) > 0 && onChunk != nil { onChunk(items) }
 	return nil
 }

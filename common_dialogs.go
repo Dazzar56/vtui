@@ -4,25 +4,25 @@ import (
 	"context"
 )
 
-// VFSItem represents a generic file or directory entry for UI dialogs.
-type VFSItem struct {
+// FSItem represents a generic file or directory entry for UI dialogs.
+type FSItem struct {
 	Name  string
 	IsDir bool
 }
 
-// VFSMinimal is a subset of file operations required by UI dialogs.
+// FSProvider is a subset of file operations required by UI dialogs.
 // This keeps vtui independent of the actual file manager implementation.
-type VFSMinimal interface {
+type FSProvider interface {
 	GetPath() string
 	SetPath(path string) error
-	ReadDir(ctx context.Context, path string, onChunk func([]VFSItem)) error
+	ReadDir(ctx context.Context, path string, onChunk func([]FSItem)) error
 	Join(elem ...string) string
 	Dir(path string) string
 	Base(path string) string
 }
 
 // SelectDirDialog creates a standard directory selection dialog.
-func SelectDirDialog(title string, initialPath string, vfs VFSMinimal) *Window {
+func SelectDirDialog(title string, initialPath string, vfs FSProvider) *Window {
 	width := 50
 	height := 18
 	dlg := NewCenteredDialog(width, height, title)
@@ -35,7 +35,7 @@ func SelectDirDialog(title string, initialPath string, vfs VFSMinimal) *Window {
 	updateList := func(p string, targetToSelect string) {
 		go func() {
 			currentItems := []string{".."}
-			vfs.ReadDir(context.Background(), p, func(chunk []VFSItem) {
+			vfs.ReadDir(context.Background(), p, func(chunk []FSItem) {
 				for _, e := range chunk {
 					if e.IsDir && e.Name != ".." { currentItems = append(currentItems, e.Name) }
 				}
@@ -91,7 +91,7 @@ func SelectDirDialog(title string, initialPath string, vfs VFSMinimal) *Window {
 }
 
 // SelectFileDialog creates a standard file selection dialog.
-func SelectFileDialog(title string, initialPath string, vfs VFSMinimal) *Window {
+func SelectFileDialog(title string, initialPath string, vfs FSProvider) *Window {
 	width := 55
 	height := 20
 	dlg := NewCenteredDialog(width, height, title)
@@ -110,8 +110,8 @@ func SelectFileDialog(title string, initialPath string, vfs VFSMinimal) *Window 
 
 	updateList := func(p string, targetToSelect string) {
 		go func() {
-			var allEntries []VFSItem
-			vfs.ReadDir(context.Background(), p, func(chunk []VFSItem) {
+			var allEntries []FSItem
+			vfs.ReadDir(context.Background(), p, func(chunk []FSItem) {
 				allEntries = append(allEntries, chunk...)
 			})
 			FrameManager.PostTask(func() {

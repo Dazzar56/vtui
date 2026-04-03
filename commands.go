@@ -18,25 +18,12 @@ const (
 	CmReceivedFocus        // Фрейм получил focus
 	CmReleasedFocus        // Фрейм потерял focus
 
-	// Application level standard commands
-	CmCopy   = 100
-	CmMove   = 101
-	CmDelete = 102
-	CmView   = 103
-	CmEdit   = 104
-	CmSearch = 105
-	CmBackground = 106
-	CmMkDir      = 107
-	CmNew        = 108
-	CmLeftMedium    = 200
-	CmLeftDetailed  = 201
-	CmRightMedium   = 202
-	CmRightDetailed = 203
-
 	CmMenuLeft      = 302
 	CmMenuRight     = 303
 	CmMenuClose     = 304
-	CmFileChanged   = 305
+
+	// CmApp is the starting offset for application-specific commands.
+	CmApp = 1000
 )
 
 

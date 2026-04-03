@@ -20,11 +20,11 @@ func (v *localVFS) SetPath(p string) error { v.path = p; return nil }
 func (v *localVFS) Join(e ...string) string { return filepath.Join(e...) }
 func (v *localVFS) Dir(p string) string { return filepath.Dir(p) }
 func (v *localVFS) Base(p string) string { return filepath.Base(p) }
-func (v *localVFS) ReadDir(ctx context.Context, p string, onChunk func([]vtui.VFSItem)) error {
+func (v *localVFS) ReadDir(ctx context.Context, p string, onChunk func([]vtui.FSItem)) error {
 	entries, _ := os.ReadDir(p)
-	var items []vtui.VFSItem
+	var items []vtui.FSItem
 	for _, e := range entries {
-		items = append(items, vtui.VFSItem{Name: e.Name(), IsDir: e.IsDir()})
+		items = append(items, vtui.FSItem{Name: e.Name(), IsDir: e.IsDir()})
 	}
 	if len(items) > 0 && onChunk != nil {
 		onChunk(items)
@@ -41,9 +41,6 @@ func (d *DemoWindow) HandleCommand(cmd int, args any) bool {
 	switch cmd {
 	case vtui.CmQuit:
 		vtui.FrameManager.Shutdown()
-		return true
-	case vtui.CmCopy:
-		vtui.ShowMessage(" Action ", "Copy command intercepted via HandleCommand!", []string{"&Ok"})
 		return true
 	case 1001: // Custom application command
 		vtui.ShowMessage(" Action ", "Command 1 executed via HandleCommand!", []string{"&Ok"})
@@ -224,7 +221,7 @@ func main() {
 
 	opMenu := vtui.NewVMenu(" Operations ")
 	opMenu.SetPosition(x1+40, y1+7, x1+64, y1+12) // Height of 5 lines
-	opMenu.AddItem(vtui.MenuItem{Text: "&Copy File", Command: vtui.CmCopy})
+	opMenu.AddItem(vtui.MenuItem{Text: "&Copy File", Command: 1001})
 	opMenu.AddItem(vtui.MenuItem{Text: "&Move File"})
 	opMenu.AddSeparator()
 	opMenu.AddItem(vtui.MenuItem{Text: "&Delete"})
