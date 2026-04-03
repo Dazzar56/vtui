@@ -21,48 +21,74 @@ func ShowMessageOn(anchor Frame, title string, text string, buttons []string) *W
 // Internal helper to avoid code duplication
 func createMessageDialog(title string, text string, buttons []string) *Window {
 	const maxDialogWidth = 60
-	const padding = 4
+	const sidePadding = 4 // Total side margins (2 left + 2 right)
 
-	lines := WrapText(text, maxDialogWidth-padding)
+	// 1. Calculate text dimensions
+	lines := WrapText(text, maxDialogWidth-sidePadding)
 	textWidth := 0
 	for _, l := range lines {
 		w := runewidth.StringWidth(l)
 		if w > textWidth { textWidth = w }
 	}
-	if title != "" {
-		tw := runewidth.StringWidth(title) + 4
-		if tw > textWidth { textWidth = tw }
-	}
+
+	// 2. Calculate button dimensions
 	btnsWidth := 0
 	for _, b := range buttons {
-		btnsWidth += runewidth.StringWidth(b) + 5
+		clean, _, _ := ParseAmpersandString(b)
+		btnsWidth += runewidth.StringWidth(clean) + 4 // brackets + spaces
 	}
-	dlgWidth := textWidth + padding
-	if btnsWidth+padding > dlgWidth { dlgWidth = btnsWidth + padding }
+	spacing := 2
+	totalBtnsWidth := 0
+	if len(buttons) > 0 {
+		totalBtnsWidth = btnsWidth + (len(buttons)-1)*spacing
+	}
+
+	// 3. Finalize Dialog size
+	dlgWidth := textWidth + sidePadding
+	if totalBtnsWidth+sidePadding > dlgWidth {
+		dlgWidth = totalBtnsWidth + sidePadding
+	}
+	if title != "" {
+		tw := runewidth.StringWidth(title) + 6 // Title padding
+		if tw > dlgWidth { dlgWidth = tw }
+	}
 	if dlgWidth > maxDialogWidth { dlgWidth = maxDialogWidth }
-	dlgHeight := len(lines) + 4
-	if len(buttons) > 0 { dlgHeight += 2 }
+
+	dlgHeight := len(lines) + 4 // top/bottom padding + borders
+	if len(buttons) > 0 {
+		dlgHeight += 2 // button row + gap
+	}
 
 	dlg := NewCenteredDialog(dlgWidth, dlgHeight, title)
-	x1, y1 := dlg.X1, dlg.Y1
-	for i, l := range lines {
-		lineW := runewidth.StringWidth(l)
-		offX := (dlgWidth - lineW) / 2
-		dlg.AddItem(NewText(x1+offX, y1+2+i, l, Palette[ColDialogText]))
+
+	// 4. Use Layout Engine for positioning
+	vbox := NewVBoxLayout(dlg.X1+2, dlg.Y1+2, dlgWidth-4, dlgHeight-4)
+
+	// Add text lines
+	for _, l := range lines {
+		txt := NewText(0, 0, l, Palette[ColDialogText])
+		vbox.Add(txt, Margins{}, AlignCenter)
+		dlg.AddItem(txt)
 	}
 
+	// Add buttons row
 	if len(buttons) > 0 {
-		spacing := 2
-		totalBtnW := btnsWidth + (len(buttons)-1)*spacing
-		currX := x1 + (dlgWidth-totalBtnW)/2
-		btnY := y1 + dlgHeight - 2
+		hbox := NewHBoxLayout(0, 0, dlgWidth-4, 1)
+		hbox.HorizontalAlign = AlignCenter
+		hbox.Spacing = spacing
+
 		for i, b := range buttons {
 			btnID := i
-			btn := NewButton(currX, btnY, b)
+			btn := NewButton(0, 0, b)
 			btn.OnClick = func() { dlg.SetExitCode(btnID) }
+			hbox.Add(btn, Margins{}, AlignTop)
 			dlg.AddItem(btn)
-			currX += runewidth.StringWidth(btn.text) + spacing
 		}
+		vbox.Add(hbox, Margins{Top: 1}, AlignFill)
 	}
+
+	// 5. Calculate and apply all coordinates
+	vbox.Apply()
+
 	return dlg
 }

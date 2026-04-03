@@ -8,7 +8,6 @@ import (
 // Button represents an interactive button.
 type Button struct {
 	ScreenObject
-	text      string
 	OnClick   func()
 	IsDefault bool
 }

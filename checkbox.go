@@ -8,7 +8,6 @@ import (
 // Checkbox represents a flag with 2 or 3 states.
 type Checkbox struct {
 	ScreenObject
-	Text       string
 	State      int  // 0 - Unchecked, 1 - Checked, 2 - Undefined (3-state)
 	ThreeState bool // Enable support for the third state
 	OnChange   func(int)
