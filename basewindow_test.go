@@ -2,7 +2,7 @@ package vtui
 
 import (
 	"testing"
-
+	"io"
 )
 
 func TestBaseWindow_ShadowFlag(t *testing.T) {
@@ -154,7 +154,9 @@ func TestBaseWindow_HandleBroadcast_Propagation(t *testing.T) {
 func TestBaseWindow_Validation_CmDefault(t *testing.T) {
 	SetDefaultPalette()
 	fm := FrameManager
-	fm.Init(NewScreenBuf())
+	scr := NewScreenBuf()
+	scr.Writer = io.Discard
+	fm.Init(scr)
 	defer fm.Shutdown()
 
 	dlg := NewDialog(0, 0, 20, 5, "Enter Test")

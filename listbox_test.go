@@ -4,6 +4,7 @@ import (
 	"testing"
 	"github.com/unxed/vtinput"
 )
+import "io"
 
 func TestListBox_Scrolling(t *testing.T) {
 	items := []string{"1", "2", "3", "4", "5"}
@@ -102,6 +103,7 @@ func TestListBox_MouseClickItem(t *testing.T) {
 
 	// Re-render to ensure Table internal state (MarginTop) is updated in test environment
 	scr := NewScreenBuf()
+	scr.Writer = io.Discard
 	scr.AllocBuf(10, 5)
 	lb.Show(scr)
 
@@ -148,6 +150,7 @@ func TestListBox_SelectName(t *testing.T) {
 func TestListBox_DynamicLayout(t *testing.T) {
 	SetDefaultPalette()
 	scr := NewScreenBuf()
+	scr.Writer = io.Discard
 	scr.AllocBuf(20, 10)
 
 	lb := NewListBox(0, 0, 10, 5, []string{"Item1"})

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"github.com/unxed/vtinput"
 )
+import "io"
 
 type mockFrame struct {
 	BaseFrame
@@ -55,6 +56,7 @@ func TestFrameManager_IsBusy_Suppress(t *testing.T) {
 func TestFrameManager_OnRenderHook(t *testing.T) {
 	fm := &frameManager{}
 	scr := NewScreenBuf()
+	scr.Writer = io.Discard
 	scr.AllocBuf(10, 10)
 	fm.Init(scr)
 
@@ -75,6 +77,7 @@ func TestFrameManager_OnRenderHook(t *testing.T) {
 
 func TestFrameManager_NoDoubleDispatch(t *testing.T) {
 	scr := NewScreenBuf()
+	scr.Writer = io.Discard
 	scr.AllocBuf(10, 10)
 	fm := &frameManager{}
 	fm.Init(scr)
@@ -97,7 +100,9 @@ func TestFrameManager_NoDoubleDispatch(t *testing.T) {
 
 func TestFrameManager_GetTopFrameType(t *testing.T) {
 	fm := &frameManager{}
-	fm.Init(NewScreenBuf())
+	scr := NewScreenBuf()
+	scr.Writer = io.Discard
+	fm.Init(scr)
 
 	// Empty stack
 	if fm.GetTopFrameType() != -1 {
@@ -118,7 +123,9 @@ func TestFrameManager_GetTopFrameType(t *testing.T) {
 }
 func TestFrameManager_MouseCapture(t *testing.T) {
 	fm := &frameManager{}
-	fm.Init(NewScreenBuf())
+	scr := NewScreenBuf()
+	scr.Writer = io.Discard
+	fm.Init(scr)
 
 	var mouseEvents []*vtinput.InputEvent
 	frame := newMockFrame(10, 10, 10, 10, false)
@@ -169,7 +176,9 @@ func TestFrameManager_MouseCapture(t *testing.T) {
 
 func TestFrameManager_ModalDialogBlocksClicks(t *testing.T) {
 	fm := &frameManager{}
-	fm.Init(NewScreenBuf())
+	scr := NewScreenBuf()
+	scr.Writer = io.Discard
+	fm.Init(scr)
 
 	// Background frame that should not receive the click
 	bgFrame := newMockFrame(0, 0, 50, 50, false)
@@ -256,7 +265,9 @@ func TestFrameManager_PostTask(t *testing.T) {
 }
 func TestFrameManager_FocusOnRemove(t *testing.T) {
 	fm := &frameManager{}
-	fm.Init(NewScreenBuf())
+	scr := NewScreenBuf()
+	scr.Writer = io.Discard
+	fm.Init(scr)
 
 	f1FocusReceived := false
 	f1 := &mockFrame{}
@@ -283,6 +294,7 @@ func TestFrameManager_FocusOnRemove(t *testing.T) {
 func TestFrameManager_KeyBarUpdate(t *testing.T) {
 	fm := &frameManager{}
 	scr := NewScreenBuf()
+	scr.Writer = io.Discard
 	scr.AllocBuf(80, 25)
 	fm.Init(scr)
 	fm.KeyBar = NewKeyBar()
@@ -310,7 +322,9 @@ func (m *menuFrame) GetMenuBar() *MenuBar { return m.menu }
 
 func TestFrameManager_ContextualMenuBar(t *testing.T) {
 	fm := &frameManager{}
-	fm.Init(NewScreenBuf())
+	scr := NewScreenBuf()
+	scr.Writer = io.Discard
+	fm.Init(scr)
 
 	globalMenu := NewMenuBar([]string{"Global"})
 	fm.MenuBar = globalMenu
@@ -345,7 +359,9 @@ func TestFrameManager_ContextualMenuBar(t *testing.T) {
 
 func TestFrameManager_ContextualLabels(t *testing.T) {
 	fm := &frameManager{}
-	fm.Init(NewScreenBuf())
+	scr := NewScreenBuf()
+	scr.Writer = io.Discard
+	fm.Init(scr)
 	fm.KeyBar = NewKeyBar()
 
 	ks := &KeySet{Normal: KeyBarLabels{"TestLabel"}}
@@ -366,7 +382,9 @@ func TestFrameManager_ContextualLabels(t *testing.T) {
 }
 func TestFrameManager_CommandRouting(t *testing.T) {
 	fm := &frameManager{}
-	fm.Init(NewScreenBuf())
+	scr := NewScreenBuf()
+	scr.Writer = io.Discard
+	fm.Init(scr)
 
 	f1 := &mockFrame{}
 	f1.onProcessKey = func(e *vtinput.InputEvent) bool { return false }
@@ -393,7 +411,9 @@ func (c *cmdMockFrame) HandleBroadcast(cmd int, args any) bool {
 
 func TestFrameManager_Broadcast(t *testing.T) {
 	fm := &frameManager{}
-	fm.Init(NewScreenBuf())
+	scr := NewScreenBuf()
+	scr.Writer = io.Discard
+	fm.Init(scr)
 
 	count1 := 0
 	f1 := &cmdMockFrame{onCmd: func(cmd int, args any) bool { count1++; return true }}
@@ -415,7 +435,9 @@ func TestFrameManager_Broadcast(t *testing.T) {
 
 func TestFrameManager_Broadcast_RedrawTrigger(t *testing.T) {
 	fm := &frameManager{}
-	fm.Init(NewScreenBuf())
+	scr := NewScreenBuf()
+	scr.Writer = io.Discard
+	fm.Init(scr)
 	
 	f := &cmdMockFrame{onCmd: func(cmd int, args any) bool { return true }}
 	fm.Push(f)
@@ -446,7 +468,9 @@ func TestFrameManager_Broadcast_Shutdown(t *testing.T) {
 
 func TestFrameManager_CommandBubbling(t *testing.T) {
 	fm := &frameManager{}
-	fm.Init(NewScreenBuf())
+	scr := NewScreenBuf()
+	scr.Writer = io.Discard
+	fm.Init(scr)
 
 	fBottom := &cmdMockFrame{}
 	fTop := &cmdMockFrame{}
@@ -483,6 +507,7 @@ func TestFrameManager_CommandBubbling(t *testing.T) {
 func TestFrameManager_ModalPriorityOverMenu(t *testing.T) {
 	fm := &frameManager{}
 	scr := NewScreenBuf()
+	scr.Writer = io.Discard
 	scr.AllocBuf(80, 25)
 	fm.Init(scr)
 	fm.Push(NewDesktop())
@@ -519,6 +544,7 @@ func TestFrameManager_ModalPriorityOverMenu(t *testing.T) {
 func TestFrameManager_MenuAccessibleDuringNonModal(t *testing.T) {
 	fm := &frameManager{}
 	scr := NewScreenBuf()
+	scr.Writer = io.Discard
 	scr.AllocBuf(80, 25)
 	fm.Init(scr)
 	fm.Push(NewDesktop())
@@ -547,7 +573,9 @@ func TestFrameManager_MenuAccessibleDuringNonModal(t *testing.T) {
 }
 func TestFrameManager_CleanupAllDoneFrames(t *testing.T) {
 	fm := &frameManager{}
-	fm.Init(NewScreenBuf())
+	scr := NewScreenBuf()
+	scr.Writer = io.Discard
+	fm.Init(scr)
 
 	f1 := &mockFrame{} // Bottom frame
 	f2 := &mockFrame{} // Top frame
@@ -575,6 +603,7 @@ func TestFrameManager_CleanupAllDoneFrames(t *testing.T) {
 func TestFrameManager_MenuBarNavigabilityWithSubMenu(t *testing.T) {
 	fm := &frameManager{}
 	scr := NewScreenBuf()
+	scr.Writer = io.Discard
 	scr.AllocBuf(80, 25)
 	fm.Init(scr)
 	fm.Push(NewDesktop())
@@ -625,7 +654,9 @@ type modalOwnerFrame struct {
 func (m *modalOwnerFrame) GetMenuBar() *MenuBar { return m.mb }
 func TestFrameManager_HeadlessTransparency(t *testing.T) {
 	fm := &frameManager{}
-	fm.Init(NewScreenBuf())
+	scr := NewScreenBuf()
+	scr.Writer = io.Discard
+	fm.Init(scr)
 
 	f := &mockFrame{}
 	fm.AddScreenHeadless(f)
@@ -651,7 +682,9 @@ func TestFrameManager_HeadlessTransparency(t *testing.T) {
 
 func TestFrameManager_NeedsAttention_Suppression(t *testing.T) {
 	fm := &frameManager{}
-	fm.Init(NewScreenBuf())
+	scr := NewScreenBuf()
+	scr.Writer = io.Discard
+	fm.Init(scr)
 
 	// Используем mockFrame, так как BaseFrame не реализует интерфейс Frame полностью
 	dlg := &mockFrame{}
@@ -672,7 +705,9 @@ func TestFrameManager_NeedsAttention_Suppression(t *testing.T) {
 
 func TestFrameManager_NoAutoCloseForHeadless(t *testing.T) {
 	fm := &frameManager{}
-	fm.Init(NewScreenBuf())
+	scr := NewScreenBuf()
+	scr.Writer = io.Discard
+	fm.Init(scr)
 
 	// Добавляем фоновый экран 0
 	fm.Push(NewDesktop())
@@ -705,6 +740,7 @@ func TestFrameManager_NoAutoCloseForHeadless(t *testing.T) {
 func TestFrameManager_F9WorksForMenuOwningModal(t *testing.T) {
 	fm := &frameManager{}
 	scr := NewScreenBuf()
+	scr.Writer = io.Discard
 	scr.AllocBuf(80, 25)
 	fm.Init(scr)
 	fm.Push(NewDesktop())
@@ -735,7 +771,9 @@ func TestFrameManager_F9WorksForMenuOwningModal(t *testing.T) {
 }
 func TestFrameManager_CycleScreens(t *testing.T) {
 	fm := &frameManager{}
-	fm.Init(NewScreenBuf())
+	scr := NewScreenBuf()
+	scr.Writer = io.Discard
+	fm.Init(scr)
 
 	w1 := NewWindow(0, 0, 10, 10, "W1")
 	w2 := NewWindow(0, 0, 10, 10, "W2")
@@ -778,7 +816,9 @@ func TestFrameManager_CycleScreens(t *testing.T) {
 }
 func TestFrameManager_CycleBackwards(t *testing.T) {
 	fm := &frameManager{}
-	fm.Init(NewScreenBuf())
+	scr := NewScreenBuf()
+	scr.Writer = io.Discard
+	fm.Init(scr)
 	fm.Push(NewDesktop())           // Screen 0
 	fm.AddScreen(NewWindow(0,0,5,5, "W1")) // Screen 1
 	fm.AddScreen(NewWindow(0,0,5,5, "W2")) // Screen 2, ActiveIdx = 2
@@ -803,7 +843,9 @@ func TestFrameManager_CycleBackwards(t *testing.T) {
 
 func TestFrameManager_ShortcutPriority(t *testing.T) {
 	fm := &frameManager{}
-	fm.Init(NewScreenBuf())
+	scr := NewScreenBuf()
+	scr.Writer = io.Discard
+	fm.Init(scr)
 	fm.Push(NewDesktop())
 
 	ctrlWPressed := false
@@ -844,7 +886,9 @@ func TestFrameManager_ShortcutPriority(t *testing.T) {
 
 func TestFrameManager_CycleSingleScreen(t *testing.T) {
 	fm := &frameManager{}
-	fm.Init(NewScreenBuf())
+	scr := NewScreenBuf()
+	scr.Writer = io.Discard
+	fm.Init(scr)
 	fm.Push(NewDesktop())
 	fm.Push(NewWindow(0, 0, 10, 10, "W1"))
 
@@ -856,7 +900,9 @@ func TestFrameManager_CycleSingleScreen(t *testing.T) {
 
 func TestFrameManager_TaskCleanup_MultiScreen(t *testing.T) {
 	fm := &frameManager{}
-	fm.Init(NewScreenBuf())
+	scr := NewScreenBuf()
+	scr.Writer = io.Discard
+	fm.Init(scr)
 	fm.Push(NewDesktop())
 
 	// Screen 0: Add background task window
@@ -914,7 +960,9 @@ func TestAppScreen_AttentionState(t *testing.T) {
 
 func TestFrameManager_ScreenAutoClose(t *testing.T) {
 	fm := &frameManager{}
-	fm.Init(NewScreenBuf()) // Creates Screen 0
+	scr := NewScreenBuf()
+	scr.Writer = io.Discard
+	fm.Init(scr) // Creates Screen 0
 
 	fm.Push(NewDesktop()) // Must explicitly push Desktop
 	w1 := NewWindow(0, 0, 10, 10, "W1")
@@ -951,6 +999,7 @@ func (t *titleFrame) GetTitle() string { return t.title }
 func TestFrameManager_F12ScreensMenu(t *testing.T) {
 	fm := &frameManager{}
 	scr := NewScreenBuf()
+	scr.Writer = io.Discard
 	scr.AllocBuf(80, 25)
 	fm.Init(scr)
 
@@ -995,7 +1044,9 @@ func TestFrameManager_F12ScreensMenu(t *testing.T) {
 
 func TestFrameManager_TaskCleanup(t *testing.T) {
 	fm := &frameManager{}
-	fm.Init(NewScreenBuf())
+	scr := NewScreenBuf()
+	scr.Writer = io.Discard
+	fm.Init(scr)
 
 	w1 := NewWindow(0, 0, 10, 10, "TaskWin")
 	fm.Push(w1)
@@ -1020,7 +1071,9 @@ func TestFrameManager_TaskCleanup(t *testing.T) {
 }
 func TestFrameManager_BoundVsUnboundTask(t *testing.T) {
 	fm := &frameManager{}
-	fm.Init(NewScreenBuf())
+	scr := NewScreenBuf()
+	scr.Writer = io.Discard
+	fm.Init(scr)
 	fm.Push(NewDesktop())
 
 	f1 := &mockFrame{}
@@ -1048,7 +1101,9 @@ func TestFrameManager_BoundVsUnboundTask(t *testing.T) {
 
 func TestFrameManager_SwitcherLogic(t *testing.T) {
 	fm := &frameManager{}
-	fm.Init(NewScreenBuf())
+	scr := NewScreenBuf()
+	scr.Writer = io.Discard
+	fm.Init(scr)
 	fm.Push(NewDesktop()) // ActiveIdx = 0
 	fm.AddScreen(NewWindow(0,0,10,10, "W2")) // ActiveIdx = 1
 
@@ -1080,7 +1135,9 @@ func TestFrameManager_SwitcherLogic(t *testing.T) {
 
 func TestFrameManager_SwitcherRichContent(t *testing.T) {
 	fm := &frameManager{}
-	fm.Init(NewScreenBuf())
+	scr := NewScreenBuf()
+	scr.Writer = io.Discard
+	fm.Init(scr)
 	fm.Push(NewDesktop())
 	
 	// Screen 1: With progress
@@ -1110,6 +1167,7 @@ func TestFrameManager_SwitcherRichContent(t *testing.T) {
 func TestFrameManager_ModalDialogBlocksF9(t *testing.T) {
 	fm := &frameManager{}
 	scr := NewScreenBuf()
+	scr.Writer = io.Discard
 	scr.AllocBuf(80, 25)
 	fm.Init(scr)
 	fm.Push(NewDesktop())
@@ -1134,7 +1192,9 @@ func TestFrameManager_ModalDialogBlocksF9(t *testing.T) {
 }
 func TestFrameManager_PushToFrameScreen_Active(t *testing.T) {
 	fm := &frameManager{}
-	fm.Init(NewScreenBuf())
+	scr := NewScreenBuf()
+	scr.Writer = io.Discard
+	fm.Init(scr)
 	fm.Push(NewDesktop())
 
 	anchor := &mockFrame{}
@@ -1150,7 +1210,9 @@ func TestFrameManager_PushToFrameScreen_Active(t *testing.T) {
 
 func TestFrameManager_PushToFrameScreen_Background(t *testing.T) {
 	fm := &frameManager{}
-	fm.Init(NewScreenBuf())
+	scr := NewScreenBuf()
+	scr.Writer = io.Discard
+	fm.Init(scr)
 	fm.Push(NewDesktop())
 
 	anchor := &mockFrame{}
@@ -1175,7 +1237,9 @@ func TestFrameManager_PushToFrameScreen_Background(t *testing.T) {
 }
 func TestFrameManager_SwitchScreenFocus(t *testing.T) {
 	fm := &frameManager{}
-	fm.Init(NewScreenBuf())
+	scr := NewScreenBuf()
+	scr.Writer = io.Discard
+	fm.Init(scr)
 
 	f1Focus := false
 	f1 := &mockFrame{}
@@ -1209,7 +1273,9 @@ func TestFrameManager_SwitchScreenFocus(t *testing.T) {
 }
 func TestFrameManager_TargetedNotificationFlow(t *testing.T) {
 	fm := &frameManager{}
-	fm.Init(NewScreenBuf())
+	scr := NewScreenBuf()
+	scr.Writer = io.Discard
+	fm.Init(scr)
 	fm.Push(NewDesktop())
 
 	// 1. Screen 0: Blocking Task
@@ -1243,7 +1309,9 @@ func TestFrameManager_TargetedNotificationFlow(t *testing.T) {
 }
 func TestFrameManager_PushToFrameScreen_LostAnchor(t *testing.T) {
 	fm := &frameManager{}
-	fm.Init(NewScreenBuf())
+	scr := NewScreenBuf()
+	scr.Writer = io.Discard
+	fm.Init(scr)
 	fm.Push(NewDesktop())
 
 	anchor := &mockFrame{}
@@ -1262,7 +1330,9 @@ func TestFrameManager_PushToFrameScreen_LostAnchor(t *testing.T) {
 }
 func TestFrameManager_DoubleClickDetection(t *testing.T) {
 	fm := &frameManager{}
-	fm.Init(NewScreenBuf())
+	scr := NewScreenBuf()
+	scr.Writer = io.Discard
+	fm.Init(scr)
 
 	var lastEvent *vtinput.InputEvent
 	frame := &mockFrame{}
@@ -1326,7 +1396,9 @@ func TestFrameManager_DoubleClickDetection(t *testing.T) {
 
 func TestFrameManager_CloseActiveScreen_Shifting(t *testing.T) {
 	fm := &frameManager{}
-	fm.Init(NewScreenBuf()) // Creates Screen 0
+	scr := NewScreenBuf()
+	scr.Writer = io.Discard
+	fm.Init(scr) // Creates Screen 0
 
 	// Add Screen 1
 	w1 := NewWindow(0, 0, 10, 10, "W1")

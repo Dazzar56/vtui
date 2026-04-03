@@ -8,6 +8,7 @@ import (
 	"time"
 	"github.com/unxed/vtinput"
 )
+import "io"
 
 // testVFS implements VFSMinimal for testing without coupling to f4's VFS.
 type testVFS struct { currentPath string }
@@ -253,4 +254,27 @@ func TestSelectFileDialog_LayoutBestPractice(t *testing.T) {
 	if bx1 < dlg.X1 {
 		t.Errorf("Button out of bounds: X1=%d", bx1)
 	}
+}
+func TestLayout_StandardDialogs_Validity(t *testing.T) {
+	SetDefaultPalette()
+	scr := NewScreenBuf()
+	scr.Writer = io.Discard
+	scr.AllocBuf(80, 25)
+	FrameManager.Init(scr)
+	v := &testVFS{currentPath: "/tmp"}
+
+	t.Run("SelectFileDialog", func(t *testing.T) {
+		dlg := SelectFileDialog("Test", "/tmp", v)
+		AssertLayout(t, dlg)
+	})
+
+	t.Run("InputBox", func(t *testing.T) {
+		dlg := InputBox("Title", "Prompt", "Val", nil)
+		AssertLayout(t, dlg)
+	})
+
+	t.Run("MessageDialog", func(t *testing.T) {
+		dlg := createMessageDialog("Title", "Multi\nLine\nText", []string{"&Ok", "&Cancel"})
+		AssertLayout(t, dlg)
+	})
 }

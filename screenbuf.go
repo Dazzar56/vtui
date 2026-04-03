@@ -2,6 +2,7 @@ package vtui
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"sync"
@@ -32,12 +33,14 @@ type ScreenBuf struct {
 	HostPalette      [256]uint32
 	HostPaletteValid [256]bool
 	quantCache       map[uint32]uint8
+
+	Writer io.Writer // Output destination, defaults to os.Stdout
 }
 
 // NewScreenBuf creates a new ScreenBuf instance.
 func NewScreenBuf() *ScreenBuf {
 	return &ScreenBuf{
-		dirty: true, // Initially the buffer is "dirty"
+		dirty: true,
 	}
 }
 
@@ -406,9 +409,13 @@ func (s *ScreenBuf) Flush() {
 			builder.WriteString("\x1b[?25h")
 		}
 
-		// 4. Single write to stdout.
+		// 4. Single write to output destination.
 		if builder.Len() > 0 {
-			os.Stdout.WriteString(builder.String())
+			if s.Writer != nil {
+				io.WriteString(s.Writer, builder.String())
+			} else {
+				os.Stdout.WriteString(builder.String())
+			}
 		}
 	}
 }

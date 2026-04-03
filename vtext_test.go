@@ -1,10 +1,12 @@
 package vtui
 
 import "testing"
+import "io"
 
 func TestVText_Rendering(t *testing.T) {
 	SetDefaultPalette()
 	scr := NewScreenBuf()
+	scr.Writer = io.Discard
 	scr.AllocBuf(5, 10)
 
 	color := uint64(777)

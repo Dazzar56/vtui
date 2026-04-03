@@ -5,6 +5,7 @@ import (
 
 	"github.com/unxed/vtinput"
 )
+import "io"
 
 func TestDesktop_ExitKeys(t *testing.T) {
 	// Desktop uses global FrameManager.
@@ -12,7 +13,9 @@ func TestDesktop_ExitKeys(t *testing.T) {
 	defer func() { FrameManager.Screens = oldScreens }()
 
 	// 1. Test F10
-	FrameManager.Init(NewScreenBuf())
+	scr := NewScreenBuf()
+	scr.Writer = io.Discard
+	FrameManager.Init(scr)
 	d1 := NewDesktop()
 	FrameManager.Push(d1)
 
@@ -22,7 +25,9 @@ func TestDesktop_ExitKeys(t *testing.T) {
 	}
 
 	// 2. Test ESC (Re-init manager for fresh state)
-	FrameManager.Init(NewScreenBuf())
+	scr2 := NewScreenBuf()
+	scr2.Writer = io.Discard
+	FrameManager.Init(scr2)
 	d2 := NewDesktop()
 	FrameManager.Push(d2)
 	

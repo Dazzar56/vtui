@@ -2,6 +2,7 @@ package vtui
 
 import (
 	"testing"
+	"io"
 
 	"github.com/unxed/vtinput"
 )
@@ -32,6 +33,7 @@ func TestVMenu_BoundaryNavigation(t *testing.T) {
 func TestVMenu_FocusVisualization(t *testing.T) {
 	SetDefaultPalette()
 	scr := NewScreenBuf()
+	scr.Writer = io.Discard
 	scr.AllocBuf(20, 5)
 	m := NewVMenu("Menu")
 	m.SetPosition(0, 0, 10, 4)

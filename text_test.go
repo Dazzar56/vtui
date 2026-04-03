@@ -1,10 +1,12 @@
 package vtui
 
 import "testing"
+import "io"
 
 func TestText_Truncation(t *testing.T) {
 	SetDefaultPalette()
 	scr := NewScreenBuf()
+	scr.Writer = io.Discard
 	scr.AllocBuf(10, 1)
 
 	// Width is 5 (0 to 4)

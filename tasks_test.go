@@ -4,11 +4,14 @@ import (
 	"testing"
 	"time"
 )
+import "io"
 
 func TestRunAsync_TaskExecutionAndCancellation(t *testing.T) {
 	// Setup isolated FrameManager for the test
 	fm := &frameManager{}
-	fm.Init(NewScreenBuf())
+	scr := NewScreenBuf()
+	scr.Writer = io.Discard
+	fm.Init(scr)
 	fm.TaskChan = make(chan func(), 10)
 
 	oldFm := FrameManager

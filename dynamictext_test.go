@@ -3,6 +3,7 @@ package vtui
 import (
 	"testing"
 )
+import "io"
 
 func TestDynamicText_Update(t *testing.T) {
 	SetDefaultPalette()
@@ -13,6 +14,7 @@ func TestDynamicText_Update(t *testing.T) {
 	})
 
 	scr := NewScreenBuf()
+	scr.Writer = io.Discard
 	scr.AllocBuf(10, 1)
 
 	// Every Show() call should trigger the callback

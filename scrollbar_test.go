@@ -3,6 +3,7 @@ package vtui
 import (
 	"testing"
 )
+import "io"
 
 func TestScrollBarMath(t *testing.T) {
 	// Verify scrollbar thumb positioning logic
@@ -37,6 +38,7 @@ func TestScrollBarMath(t *testing.T) {
 func TestDrawScrollBar(t *testing.T) {
 	SetDefaultPalette()
 	scr := NewScreenBuf()
+	scr.Writer = io.Discard
 	scr.AllocBuf(10, 10)
 
 	attr := Palette[ColTableBox]
@@ -63,6 +65,7 @@ func TestDrawScrollBar(t *testing.T) {
 
 func TestDrawScrollBar_EdgeCases(t *testing.T) {
 	scr := NewScreenBuf()
+	scr.Writer = io.Discard
 	scr.AllocBuf(10, 10)
 	attr := uint64(1)
 

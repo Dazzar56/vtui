@@ -7,6 +7,7 @@ import (
 
 	"github.com/unxed/vtinput"
 )
+import "io"
 
 func TestHelpView_Navigation(t *testing.T) {
 	tmpDir := t.TempDir()
@@ -107,6 +108,7 @@ func TestHelpView_VisualRendering(t *testing.T) {
 	hv.selectedIdx = -1 // Deselect link for baseline check
 
 	scr := NewScreenBuf()
+	scr.Writer = io.Discard
 	scr.AllocBuf(32, 7)
 	hv.Show(scr)
 
@@ -222,6 +224,7 @@ func TestHelpView_MultiLinkLineRendering(t *testing.T) {
 	hv.SetPosition(0, 0, 40, 5)
 
 	scr := NewScreenBuf()
+	scr.Writer = io.Discard
 	scr.AllocBuf(42, 7)
 
 	// 1. Выбрана первая ссылка (L1)

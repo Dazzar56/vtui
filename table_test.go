@@ -5,6 +5,7 @@ import (
 
 	"github.com/unxed/vtinput"
 )
+import "io"
 
 // mockRow implementation for tests
 type mockRow struct {
@@ -50,6 +51,7 @@ func (m mockMultiColSelectableRow) IsColSelected(col int) bool {
 func TestTable_SelectableRowRendering(t *testing.T) {
 	SetDefaultPalette()
 	scr := NewScreenBuf()
+	scr.Writer = io.Discard
 	scr.AllocBuf(15, 5)
 
 	cols := []TableColumn{{Title: "C1", Width: 10, Alignment: AlignLeft}}
@@ -81,6 +83,7 @@ func TestTable_SelectableRowRendering(t *testing.T) {
 func TestTable_CellSelection(t *testing.T) {
 	SetDefaultPalette()
 	scr := NewScreenBuf()
+	scr.Writer = io.Discard
 	scr.AllocBuf(20, 5)
 
 	cols := []TableColumn{
@@ -249,6 +252,7 @@ func TestTable_Rendering(t *testing.T) {
 	SetDefaultPalette() // Must initialize colors before rendering
 
 	scr := NewScreenBuf()
+	scr.Writer = io.Discard
 	scr.AllocBuf(15, 5)
 
 	cols := []TableColumn{
@@ -315,6 +319,7 @@ func TestTable_NoHeaderGeometry(t *testing.T) {
 	tbl.SetRows([]TableRow{mockRow{"R1", "B"}, mockRow{"R2", "B"}})
 
 	scr := NewScreenBuf()
+	scr.Writer = io.Discard
 	scr.AllocBuf(10, 5)
 	tbl.Show(scr)
 
@@ -330,6 +335,7 @@ func TestTable_OptionalScrollBar(t *testing.T) {
 
 	t.Run("ScrollBar Off (Default)", func(t *testing.T) {
 		scr := NewScreenBuf()
+		scr.Writer = io.Discard
 		scr.AllocBuf(12, 5)
 		tbl := NewTable(0, 0, 11, 5, cols)
 		tbl.SetRows(rows)
@@ -341,6 +347,7 @@ func TestTable_OptionalScrollBar(t *testing.T) {
 
 	t.Run("ScrollBar On", func(t *testing.T) {
 		scr := NewScreenBuf()
+		scr.Writer = io.Discard
 		scr.AllocBuf(12, 5)
 		tbl := NewTable(0, 0, 11, 5, cols)
 		tbl.SetRows(rows)

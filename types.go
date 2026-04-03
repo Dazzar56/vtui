@@ -47,6 +47,7 @@ type UIElement interface {
 	GetGrowMode() GrowMode
 	Show(scr *ScreenBuf)
 	Hide(scr *ScreenBuf)
+	IsVisible() bool
 	SetFocus(bool)
 	IsFocused() bool
 	CanFocus() bool

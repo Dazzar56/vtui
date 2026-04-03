@@ -5,6 +5,7 @@ import (
 
 	"github.com/unxed/vtinput"
 )
+import "io"
 
 // checkCell is a helper to verify the character and attributes at a specific coordinate in the ScreenBuf.
 func checkCell(t *testing.T, scr *ScreenBuf, x, y int, expectedChar uint64, expectedAttr uint64) {
@@ -28,6 +29,7 @@ func checkCell(t *testing.T, scr *ScreenBuf, x, y int, expectedChar uint64, expe
 
 func TestScreenBuf_Write(t *testing.T) {
 	scr := NewScreenBuf()
+	scr.Writer = io.Discard
 	scr.AllocBuf(10, 5)
 	attr := uint64(123)
 
@@ -57,6 +59,7 @@ func TestScreenBuf_Write(t *testing.T) {
 
 func TestScreenBuf_FillRect(t *testing.T) {
 	scr := NewScreenBuf()
+	scr.Writer = io.Discard
 	scr.AllocBuf(20, 10)
 	attr := uint64(456)
 	fillChar := 'X'
@@ -84,6 +87,7 @@ func TestFrame_Rendering(t *testing.T) {
 
 	t.Run("SingleBox", func(t *testing.T) {
 		scr := NewScreenBuf()
+		scr.Writer = io.Discard
 		scr.AllocBuf(20, 10)
 		frame := NewBorderedFrame(1, 1, 18, 8, SingleBox, "")
 		frame.DisplayObject(scr)
@@ -98,6 +102,7 @@ func TestFrame_Rendering(t *testing.T) {
 
 	t.Run("DoubleBox", func(t *testing.T) {
 		scr := NewScreenBuf()
+		scr.Writer = io.Discard
 		scr.AllocBuf(20, 10)
 		frame := NewBorderedFrame(1, 1, 18, 8, DoubleBox, "")
 		frame.DisplayObject(scr)
@@ -113,6 +118,7 @@ func TestFrame_Rendering(t *testing.T) {
 	t.Run("TitledFrame", func(t *testing.T) {
 		title := "Title"
 		scr := NewScreenBuf()
+		scr.Writer = io.Discard
 		scr.AllocBuf(30, 10)
 		// Frame width is 22 (from 4 to 25)
 		frame := NewBorderedFrame(4, 2, 25, 8, DoubleBox, title)
@@ -138,6 +144,7 @@ func TestFrame_Rendering(t *testing.T) {
 func TestFrame_CloseButtonRendering(t *testing.T) {
 	SetDefaultPalette()
 	scr := NewScreenBuf()
+	scr.Writer = io.Discard
 	scr.AllocBuf(40, 10)
 	// Frame from X=5 to X=25. Close button [×] should be at 25-4=21, 22, 23.
 	frame := NewBorderedFrame(5, 5, 25, 10, DoubleBox, "")
@@ -207,6 +214,7 @@ func TestKeyBar_Modifiers(t *testing.T) {
 	kb.SetVisible(true)
 
 	scr := NewScreenBuf()
+	scr.Writer = io.Discard
 	scr.AllocBuf(40, 1)
 	kb.SetPosition(0, 0, 39, 0)
 	SetDefaultPalette()
@@ -296,7 +304,9 @@ func TestVMenu_Callbacks(t *testing.T) {
 
 	oldFm := FrameManager
 	localFm := &frameManager{}
-	localFm.Init(NewScreenBuf())
+	scr := NewScreenBuf()
+	scr.Writer = io.Discard
+	localFm.Init(scr)
 	FrameManager = localFm
 	defer func() { FrameManager = oldFm }()
 
@@ -485,6 +495,7 @@ func TestEdit_Editing(t *testing.T) {
 
 func TestEdit_Rendering(t *testing.T) {
 	scr := NewScreenBuf()
+	scr.Writer = io.Discard
 	scr.AllocBuf(10, 1)
 	e := NewEdit(0, 0, 10, "abc")
 	e.curPos = 1
@@ -546,6 +557,7 @@ func TestEdit_Unicode_Selection(t *testing.T) {
 
 	// Rendering into 4-cell buffer
 	scr := NewScreenBuf()
+	scr.Writer = io.Discard
 	scr.AllocBuf(4, 1)
 	e.SetPosition(0, 0, 3, 0)
 	e.Show(scr)
@@ -593,6 +605,7 @@ func TestVMenu_Navigation(t *testing.T) {
 
 func TestVMenu_Rendering(t *testing.T) {
 	scr := NewScreenBuf()
+	scr.Writer = io.Discard
 	scr.AllocBuf(15, 10)
 	SetDefaultPalette()
 	m := NewVMenu("Title")
@@ -792,7 +805,9 @@ func TestMenuBar_SubMenuActivation(t *testing.T) {
 	// Setup a local FrameManager to catch the pushed VMenu
 	oldFm := FrameManager
 	localFm := &frameManager{}
-	localFm.Init(NewScreenBuf())
+	scr := NewScreenBuf()
+	scr.Writer = io.Discard
+	localFm.Init(scr)
 	FrameManager = localFm
 	defer func() { FrameManager = oldFm }()
 
@@ -820,6 +835,7 @@ func TestMenuBar_OrphanedSubMenu(t *testing.T) {
 	// Setup a local FrameManager to simulate the environment
 	fm := &frameManager{}
 	scr := NewScreenBuf()
+	scr.Writer = io.Discard
 	scr.AllocBuf(80, 25)
 	fm.Init(scr)
 	fm.Push(NewDesktop())
@@ -872,7 +888,9 @@ func TestMenuBar_SubMenuCycling(t *testing.T) {
 	// Setup FrameManager and MenuBar with two submenus
 	oldFm := FrameManager
 	localFm := &frameManager{}
-	localFm.Init(NewScreenBuf())
+	scr := NewScreenBuf()
+	scr.Writer = io.Discard
+	localFm.Init(scr)
 	FrameManager = localFm
 	defer func() { FrameManager = oldFm }()
 
@@ -908,6 +926,7 @@ func TestMenuBar_SubMenuCleanup_Deep(t *testing.T) {
 	// Setup FrameManager and MenuBar
 	fm := &frameManager{}
 	scr := NewScreenBuf()
+	scr.Writer = io.Discard
 	scr.AllocBuf(80, 25)
 	fm.Init(scr)
 	fm.Push(NewDesktop())
@@ -975,6 +994,7 @@ func TestVMenu_NavigationCallbacks(t *testing.T) {
 func TestVMenu_ShortcutRendering(t *testing.T) {
 	SetDefaultPalette()
 	scr := NewScreenBuf()
+	scr.Writer = io.Discard
 	scr.AllocBuf(30, 10)
 
 	m := NewVMenu("Shortcuts")
@@ -995,7 +1015,9 @@ func TestVMenu_ShortcutRendering(t *testing.T) {
 
 func TestMenuBar_DynamicSubMenuWidth(t *testing.T) {
 	fm := &frameManager{}
-	fm.Init(NewScreenBuf())
+	scr := NewScreenBuf()
+	scr.Writer = io.Discard
+	fm.Init(scr)
 	oldFm := FrameManager
 	FrameManager = fm
 	defer func() { FrameManager = oldFm }()

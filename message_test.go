@@ -1,10 +1,13 @@
 package vtui
 
 import "testing"
+import "io"
 
 func TestShowMessage_Structure(t *testing.T) {
 	SetDefaultPalette()
-	FrameManager.Init(NewScreenBuf())
+	scr := NewScreenBuf()
+	scr.Writer = io.Discard
+	FrameManager.Init(scr)
 
 	title := "Warning"
 	text := "This is a test message\nwith two lines."
