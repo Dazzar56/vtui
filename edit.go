@@ -217,6 +217,9 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 
 	if ctrl && !shift {
 		switch event.VirtualKeyCode {
+		case vtinput.VK_A:
+			e.SelectAll()
+			return true
 		case vtinput.VK_C, vtinput.VK_INSERT:
 			if e.selStart != -1 {
 				e.copySelection()

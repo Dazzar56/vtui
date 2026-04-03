@@ -250,3 +250,35 @@ func TestEdit_SelectAllAndNavigate(t *testing.T) {
 		t.Error("Navigation should clear selection and clearFlag")
 	}
 }
+func TestEdit_FarHotkeys_SelectAll(t *testing.T) {
+	SetDefaultPalette()
+	e := NewEdit(0, 0, 20, "Select All Me")
+
+	e.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_A, ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+
+	if e.selStart != 0 || e.selEnd != len(e.text) {
+		t.Errorf("Edit Ctrl+A failed: range [%d:%d]", e.selStart, e.selEnd)
+	}
+	if !e.clearFlag {
+		t.Error("Ctrl+A in Edit should set clearFlag")
+	}
+}
+func TestEdit_CtrlA_SelectAll(t *testing.T) {
+	SetDefaultPalette()
+	e := NewEdit(0, 0, 20, "Select All Me")
+
+	e.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_A, ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+
+	if e.selStart != 0 || e.selEnd != len(e.text) {
+		t.Errorf("Edit Ctrl+A failed: range [%d:%d]", e.selStart, e.selEnd)
+	}
+	if !e.clearFlag {
+		t.Error("Ctrl+A in Edit should set clearFlag")
+	}
+}
