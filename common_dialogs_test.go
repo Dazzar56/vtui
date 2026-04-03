@@ -254,6 +254,7 @@ func TestSelectFileDialog_LayoutBestPractice(t *testing.T) {
 		t.Errorf("Button out of bounds: X1=%d", bx1)
 	}
 }
+
 func TestLayout_StandardDialogs_Validity(t *testing.T) {
 	SetDefaultPalette()
 	fmscr := NewSilentScreenBuf()
@@ -273,6 +274,18 @@ func TestLayout_StandardDialogs_Validity(t *testing.T) {
 
 	t.Run("MessageDialog", func(t *testing.T) {
 		dlg := createMessageDialog("Title", "Multi\nLine\nText", []string{"&Ok", "&Cancel"})
+		AssertLayout(t, dlg)
+	})
+
+	t.Run("ComboBoxDialog", func(t *testing.T) {
+		dlg := NewCenteredDialog(40, 10, "Combo Test")
+		cb := NewComboBox(0, 0, 20, []string{"A", "B"})
+		dlg.AddItem(cb)
+
+		vbox := NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 40-4, 10-4)
+		vbox.Add(cb, Margins{}, AlignLeft)
+		vbox.Apply()
+
 		AssertLayout(t, dlg)
 	})
 }

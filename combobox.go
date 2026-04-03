@@ -14,7 +14,7 @@ type ComboBox struct {
 
 func NewComboBox(x, y, width int, items []string) *ComboBox {
 	cb := &ComboBox{
-		Edit: NewEdit(x, y, width-1, ""), // Leave 1 character on the right for the arrow
+		Edit: NewEdit(0, 0, width-1, ""),
 		Menu: NewVMenu(""),
 	}
 	cb.canFocus = true
@@ -23,7 +23,6 @@ func NewComboBox(x, y, width int, items []string) *ComboBox {
 		cb.Menu.AddItem(MenuItem{Text: item})
 	}
 
-	// Set menu behavior
 	cb.Menu.SetOwner(cb)
 	cb.Menu.OnAction = func(idx int) {
 		cb.Edit.SetText(cb.Menu.items[idx].Text)
@@ -35,7 +34,17 @@ func NewComboBox(x, y, width int, items []string) *ComboBox {
 
 func (cb *ComboBox) SetPosition(x1, y1, x2, y2 int) {
 	cb.ScreenObject.SetPosition(x1, y1, x2, y2)
-	cb.Edit.SetPosition(x1, y1, x2-1, y1)
+	cb.applyLayout()
+}
+
+func (cb *ComboBox) applyLayout() {
+	hbox := NewHBoxLayout(cb.X1, cb.Y1, cb.X2-cb.X1+1, 1)
+	hbox.Spacing = 0
+	hbox.Add(cb.Edit, Margins{}, AlignFill)
+	// Add a dummy text element for the arrow to participate in the layout math
+	arrow := NewText(0, 0, "↓", 0)
+	hbox.Add(arrow, Margins{}, AlignTop)
+	hbox.Apply()
 }
 
 func (cb *ComboBox) Show(scr *ScreenBuf) {
@@ -44,13 +53,13 @@ func (cb *ComboBox) Show(scr *ScreenBuf) {
 }
 
 func (cb *ComboBox) DisplayObject(scr *ScreenBuf) {
-	if !cb.IsVisible() { return }
+	if !cb.IsVisible() {
+		return
+	}
 
-	// Rendering edit field
 	cb.Edit.focused = cb.focused
 	cb.Edit.Show(scr)
 
-	// Rendering dropdown arrow
 	attr := Palette[ColDialogText]
 	if cb.focused {
 		attr = Palette[ColDialogSelectedButton]
@@ -58,7 +67,6 @@ func (cb *ComboBox) DisplayObject(scr *ScreenBuf) {
 	if cb.IsDisabled() {
 		attr = DimColor(attr)
 	}
-	// Use symbol ↓ (U+2193)
 	scr.Write(cb.X2, cb.Y1, StringToCharInfo("↓", attr))
 }
 
