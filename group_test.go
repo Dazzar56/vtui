@@ -125,3 +125,23 @@ func TestGroup_NoFocusableItems(t *testing.T) {
 		t.Errorf("Expected focusIdx to be -1, got %d", g.focusIdx)
 	}
 }
+
+func TestGroup_SetFocusedItem(t *testing.T) {
+	g := NewGroup(0, 0, 20, 10)
+	b1 := NewButton(0, 0, "B1")
+	b2 := NewButton(0, 1, "B2")
+	g.AddItem(b1)
+	g.AddItem(b2)
+
+	// Initial focus is on b1
+	if g.GetFocusedItem() != b1 { t.Fatal("Initial focus fail") }
+
+	// Set focus to b2
+	g.SetFocusedItem(b2)
+	if g.GetFocusedItem() != b2 {
+		t.Error("SetFocusedItem failed to move focus to b2")
+	}
+	if !b2.IsFocused() || b1.IsFocused() {
+		t.Error("Focus flags not updated after SetFocusedItem")
+	}
+}
