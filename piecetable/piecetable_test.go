@@ -272,3 +272,38 @@ func TestPieceTable_StreamingIntegrity(t *testing.T) {
 		t.Errorf("Resulting text is wrong: %q", string(streamBytes))
 	}
 }
+func TestPieceTable_ExtremeFragmentation(t *testing.T) {
+	// Forces hundreds of pieces and tests reading across many of them.
+	pt := New([]byte("A"))
+	expected := "A"
+
+	// 1. Create many pieces via interleaved insertions.
+	// We insert at position 0 to avoid the 'append-at-end' merge optimization.
+	for i := 0; i < 500; i++ {
+		pt.Insert(0, []byte("X"))
+		expected = "X" + expected
+	}
+
+	if len(pt.pieces) < 500 {
+		t.Errorf("Expected fragmentation, got %d pieces", len(pt.pieces))
+	}
+
+	// 2. Test GetRange spanning many pieces
+	// Read everything except the first and last chars
+	res, _ := pt.GetRange(1, 499)
+	if len(res) != 499 {
+		t.Errorf("GetRange length mismatch: expected 499, got %d", len(res))
+	}
+
+	// 3. Test multi-piece deletion
+	// Remove middle 400 'X' chars
+	pt.Delete(50, 400)
+	if pt.Size() != 101 {
+		t.Errorf("Size after multi-piece delete mismatch: expected 101, got %d", pt.Size())
+	}
+
+	// Verify content remains valid
+	if pt.String() != expected[:50]+expected[450:] {
+		t.Error("Content corrupted after multi-piece delete")
+	}
+}
