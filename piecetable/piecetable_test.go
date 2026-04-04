@@ -176,3 +176,42 @@ func TestPieceTable_AppendRange_Boundary(t *testing.T) {
 		t.Errorf("AppendRange modified slice capacity/length improperly: %q", string(dest))
 	}
 }
+func TestPieceTable_EmptyOperations(t *testing.T) {
+	pt := New([]byte("abc"))
+
+	// 1. Zero length insert
+	pt.Insert(1, []byte(""))
+	if pt.Size() != 3 || pt.String() != "abc" {
+		t.Error("Zero length insert modified data")
+	}
+
+	// 2. Zero length delete
+	pt.Delete(1, 0)
+	if pt.Size() != 3 || pt.String() != "abc" {
+		t.Error("Zero length delete modified data")
+	}
+
+	// 3. Out of bounds delete
+	pt.Delete(1, 10)
+	if pt.Size() != 3 {
+		t.Error("Out of bounds delete should be ignored")
+	}
+}
+
+func TestPieceTable_BoundaryInsert(t *testing.T) {
+	// Original: [AA][BB]
+	pt := New([]byte("AABB"))
+	// Insert at 2 (between AA and BB)
+	pt.Insert(2, []byte("XX"))
+	// Now pieces: [AA][XX][BB]
+
+	// Delete [XX] exactly
+	pt.Delete(2, 2)
+
+	if pt.String() != "AABB" {
+		t.Errorf("Boundary delete failed, got %q", pt.String())
+	}
+	if len(pt.pieces) != 2 {
+		t.Errorf("Expected pieces to collapse/stay clean, got %d pieces", len(pt.pieces))
+	}
+}
