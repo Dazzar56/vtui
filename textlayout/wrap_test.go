@@ -347,3 +347,48 @@ func TestWrapEngine_LazyCache_LargeJump(t *testing.T) {
 		t.Errorf("Expected 5001 total rows, got %d", total)
 	}
 }
+func TestWrapEngine_CJKBoundaryWrap(t *testing.T) {
+	// Test that a CJK character (width 2) is moved to the next line
+	// entirely if it doesn't fit at the end of the current one.
+	// "ABC" (3) + "世" (2) = 5. Width = 4.
+	pt := piecetable.New([]byte("ABC世"))
+	li := piecetable.NewLineIndex()
+	li.Rebuild(pt)
+	we := NewWrapEngine(pt, li)
+	we.SetWidth(4)
+
+	frags := we.GetFragments(0)
+	// Expected: "ABC" (row 0), "世" (row 1)
+	if len(frags) != 2 {
+		t.Fatalf("Expected 2 fragments, got %d", len(frags))
+	}
+	if frags[0].VisualWidth != 3 {
+		t.Errorf("First frag width: expected 3, got %d", frags[0].VisualWidth)
+	}
+	if frags[1].VisualWidth != 2 {
+		t.Errorf("Second frag width: expected 2, got %d", frags[1].VisualWidth)
+	}
+}
+
+func TestWrapEngine_CacheResilience(t *testing.T) {
+	// Tests if the engine handles a shortened LineIndex while having a high validUntil.
+	pt := piecetable.New([]byte("L1\nL2\nL3\nL4\nL5"))
+	li := piecetable.NewLineIndex()
+	li.Rebuild(pt)
+	we := NewWrapEngine(pt, li)
+	we.SetWidth(80)
+
+	// Fill cache
+	we.GetTotalVisualRows()
+	if we.validUntil != 4 { t.Fatalf("Setup fail: validUntil=%d", we.validUntil) }
+
+	// Shorten the document and index
+	pt.Delete(0, 10) // Delete almost everything
+	li.Rebuild(pt)   // Index now has fewer lines
+
+	// This should not panic even though validUntil > li.LineCount()
+	total := we.GetTotalVisualRows()
+	if total > 5 {
+		t.Errorf("Engine did not reset total rows after index change, got %d", total)
+	}
+}

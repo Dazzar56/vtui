@@ -215,3 +215,28 @@ func TestPieceTable_BoundaryInsert(t *testing.T) {
 		t.Errorf("Expected pieces to collapse/stay clean, got %d pieces", len(pt.pieces))
 	}
 }
+func TestPieceTable_FragmentationStress(t *testing.T) {
+	// Create a document and perform many tiny operations to force piece splitting.
+	pt := New([]byte("INITIAL"))
+
+	// Interleaved inserts
+	for i := 0; i < 100; i++ {
+		pt.Insert(pt.Size()/2, []byte("x"))
+	}
+
+	// Interleaved deletes
+	for i := 0; i < 50; i++ {
+		pt.Delete(i, 1)
+	}
+
+	expectedLen := 7 + 100 - 50
+	if pt.Size() != expectedLen {
+		t.Errorf("Stress size mismatch: expected %d, got %d", expectedLen, pt.Size())
+	}
+
+	// Verify we can still read the whole document without errors
+	_, err := pt.Bytes()
+	if err != nil {
+		t.Errorf("Fragmentation caused corruption: %v", err)
+	}
+}
