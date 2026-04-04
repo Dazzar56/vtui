@@ -79,7 +79,8 @@ func (mb *MenuBar) DisplayObject(scr *ScreenBuf) {
 			hiAttr = Palette[ColMenuBarSelectedHighlight]
 		} else if allDisabled {
 			// Dim the top level menu if it leads to nothing useful
-			itemAttr = SetRGBFore(itemAttr, GetRGBFore(itemAttr)/2)
+			itemAttr = DimColor(itemAttr)
+			hiAttr = DimColor(hiAttr)
 		}
 
 		p.DrawStringHighlighted(currX, mb.Y1, "  "+item.Label+"  ", itemAttr, hiAttr)

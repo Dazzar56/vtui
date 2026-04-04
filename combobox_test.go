@@ -39,3 +39,28 @@ func TestComboBox_DropdownOnly(t *testing.T) {
 		t.Error("DropdownOnly ComboBox should not allow manual text entry")
 	}
 }
+func TestComboBox_OpenFlip(t *testing.T) {
+	SetDefaultPalette()
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(80, 10) // Small height
+	FrameManager.Init(scr)
+
+	cb := NewComboBox(0, 8, 20, []string{"Item 1", "Item 2"})
+
+	// ComboBox is at Y=8. Default open is downwards (Y=9).
+	// But screen height is 10, so Y=9 is the last line.
+	// With 2 items + border, menu height is 4.
+	// It MUST flip upwards to fit.
+	cb.Open()
+
+	top := FrameManager.GetTopFrame()
+	if top == nil || top.GetType() != TypeMenu {
+		t.Fatal("Menu not opened")
+	}
+
+	_, y1, _, _ := top.GetPosition()
+	// ComboBox is at Y=8. Upward flip with height 4 should start at 8-4 = 4.
+	if y1 >= 8 {
+		t.Errorf("ComboBox menu did not flip upwards. Y1=%d, ComboBoxY=%d", y1, cb.Y1)
+	}
+}

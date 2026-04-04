@@ -1060,3 +1060,39 @@ func TestVMenu_ActionOrdering_Integration(t *testing.T) {
 		t.Error("MenuBar should be inactive after item selection")
 	}
 }
+func TestMenuBar_DisabledItemDimming(t *testing.T) {
+	SetDefaultPalette()
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(80, 5)
+	FrameManager.Init(scr)
+
+	mb := NewMenuBar(nil)
+	mb.Items = []MenuBarItem{
+		{
+			Label: "&Active",
+			SubItems: []MenuItem{{Text: "Cmd", Command: 100}},
+		},
+		{
+			Label: "&Disabled",
+			SubItems: []MenuItem{{Text: "Cmd", Command: 101}},
+		},
+	}
+	mb.SetPosition(0, 0, 79, 0)
+
+	// Disable command 101
+	FrameManager.DisabledCommands.Disable(101)
+
+	mb.Show(scr)
+
+	// Get X of "&Disabled"
+	x1 := mb.GetItemX(1)
+	cell := scr.GetCell(x1+2, 0) // Skip internal padding and space
+
+	// Should be dimmed (compared to active item)
+	activeX := mb.GetItemX(0)
+	activeCell := scr.GetCell(activeX+2, 0)
+
+	if cell.Attributes == activeCell.Attributes {
+		t.Error("Disabled MenuBar item should have different attributes (dimmed)")
+	}
+}

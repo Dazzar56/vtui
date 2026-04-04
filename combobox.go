@@ -117,8 +117,14 @@ func (cb *ComboBox) Open() {
 	h := len(cb.Menu.items) + 2
 	if h > 10 { h = 10 } // Limit height
 
-	// If little space below combo box, open upwards (simplified)
-	cb.Menu.SetPosition(cb.X1, cb.Y1+1, cb.X2, cb.Y1+h)
+	y := cb.Y1 + 1
+	if FrameManager != nil && FrameManager.scr != nil {
+		// If it doesn't fit below, and there is more space above, flip it
+		if y+h > FrameManager.scr.height && cb.Y1 >= h {
+			y = cb.Y1 - h
+		}
+	}
+	cb.Menu.SetPosition(cb.X1, y, cb.X2, y+h-1)
 	cb.Menu.ClearDone()
 	cb.Menu.HideShadow = true
 	FrameManager.Push(cb.Menu)
