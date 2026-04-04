@@ -34,10 +34,12 @@ type Table struct {
 	ScrollView
 	Columns        []TableColumn
 	Rows           []TableRow
+
 	SelectCol      int
 	CellSelection  bool
 	ShowHeader     bool
 	ShowSeparators bool
+	AlwaysShowCursor bool
 
 	ColorTextIdx             int
 	ColorSelectedTextIdx     int
@@ -178,7 +180,11 @@ func (t *Table) drawRow(scr *ScreenBuf, y int, rowIdx int, attr uint64) {
 					if isSelected {
 						cellAttr = Palette[t.ColorItemSelectTextIdx]
 					} else {
-						cellAttr = Palette[t.ColorTextIdx]
+						if t.AlwaysShowCursor {
+							cellAttr = Palette[t.ColorSelectedTextIdx]
+						} else {
+							cellAttr = Palette[t.ColorTextIdx]
+						}
 					}
 				}
 			}

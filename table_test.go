@@ -78,6 +78,7 @@ func TestTable_SelectableRowRendering(t *testing.T) {
 	// row2 (selected, cursor) -> ColorItemSelectCursorIdx
 	checkCell(t, scr, 0, 2, 'S', Palette[ColDialogHighlightSelectedButton])
 }
+
 func TestTable_CellSelection(t *testing.T) {
 	SetDefaultPalette()
 	scr := NewSilentScreenBuf()
@@ -380,4 +381,25 @@ func TestParseAmpersandString_Unicode(t *testing.T) {
 	if pos != 10 { // "Сохранить " (10 runes)
 		t.Errorf("Hotkey pos mismatch: got %d", pos)
 	}
+}
+
+func TestTable_AlwaysShowCursor(t *testing.T) {
+	SetDefaultPalette()
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(10, 5)
+
+	cols := []TableColumn{{Title: "C1", Width: 10}}
+	tbl := NewTable(0, 0, 9, 3, cols)
+	tbl.SetRows([]TableRow{mockRow{"R1", ""}})
+
+	tbl.SetFocus(false)
+
+	// Без флага курсор исчезает (использует обычный текст)
+	tbl.Show(scr)
+	checkCell(t, scr, 0, 1, 'R', Palette[ColTableText])
+
+	// С флагом курсор остается (использует цвет выделенного текста)
+	tbl.AlwaysShowCursor = true
+	tbl.Show(scr)
+	checkCell(t, scr, 0, 1, 'R', Palette[ColTableSelectedText])
 }
