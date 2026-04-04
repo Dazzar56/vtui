@@ -301,3 +301,21 @@ func TestEdit_CtrlA_SelectAll(t *testing.T) {
 		t.Error("Ctrl+A in Edit should set clearFlag")
 	}
 }
+
+func TestEdit_InsertString_Selection(t *testing.T) {
+	e := NewEdit(0, 0, 20, "original")
+	// Select "rigin"
+	e.selStart = 1
+	e.selEnd = 6
+	e.curPos = 6
+
+	// Programmatic insertion (e.g. from f4 Ctrl+Enter)
+	e.InsertString("NEW")
+
+	if e.GetText() != "oNEWal" {
+		t.Errorf("InsertString failed to overwrite selection. Got %q", e.GetText())
+	}
+	if e.selStart != -1 {
+		t.Error("Selection should be cleared after InsertString")
+	}
+}

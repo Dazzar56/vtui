@@ -173,3 +173,31 @@ func TestScreenBuf_Clipping(t *testing.T) {
 	scr.Write(0, 9, StringToCharInfo("END", attr))
 	checkCell(t, scr, 0, 9, 'E', attr)
 }
+
+func TestScreenBuf_ApplyShadow_Clipping(t *testing.T) {
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(10, 10)
+	
+	// Fill with white
+	white := SetRGBBoth(0, 0xFFFFFF, 0xFFFFFF)
+	scr.FillRect(0, 0, 9, 9, ' ', white)
+	
+	// Set clip rect to top half
+	scr.PushClipRect(0, 0, 9, 4)
+	
+	// Apply shadow to bottom half (should be clipped and do nothing)
+	scr.ApplyShadow(0, 5, 9, 9)
+	
+	// Cell at (5,5) must still be white
+	if scr.GetCell(5, 5).Attributes != white {
+		t.Error("ApplyShadow was not clipped correctly")
+	}
+	
+	// Apply shadow partially inside clip
+	scr.ApplyShadow(0, 0, 9, 9)
+	
+	// Cell at (2,2) should be darker than white
+	if GetRGBFore(scr.GetCell(2, 2).Attributes) >= 0xFFFFFF {
+		t.Error("Shadow not applied inside clip rect")
+	}
+}

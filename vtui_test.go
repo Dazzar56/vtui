@@ -1096,3 +1096,24 @@ func TestMenuBar_DisabledItemDimming(t *testing.T) {
 		t.Error("Disabled MenuBar item should have different attributes (dimmed)")
 	}
 }
+
+func TestMenuBar_ActiveHotkeys(t *testing.T) {
+	SetDefaultPalette()
+	fm := FrameManager
+	fm.Init(NewSilentScreenBuf())
+	
+	mb := NewMenuBar([]string{"&Files", "&Options"})
+	mb.Active = true
+	mb.SelectPos = 0 // On Files
+
+	// When active, pressing 'o' should switch to Options even without Alt
+	mb.ProcessKey(&vtinput.InputEvent{
+		Type:    vtinput.KeyEventType,
+		KeyDown: true,
+		Char:    'o',
+	})
+
+	if mb.SelectPos != 1 {
+		t.Errorf("Expected SelectPos 1 (Options) after hotkey, got %d", mb.SelectPos)
+	}
+}

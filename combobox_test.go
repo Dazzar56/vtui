@@ -39,6 +39,26 @@ func TestComboBox_DropdownOnly(t *testing.T) {
 		t.Error("DropdownOnly ComboBox should not allow manual text entry")
 	}
 }
+func TestComboBox_DropdownOnly_Enter(t *testing.T) {
+	SetDefaultPalette()
+	fm := FrameManager
+	fm.Init(NewSilentScreenBuf())
+
+	cb := NewComboBox(0, 0, 20, []string{"A", "B"})
+	cb.DropdownOnly = true
+
+	// Press Enter in DropdownOnly mode should open the menu
+	cb.ProcessKey(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_RETURN,
+	})
+
+	top := fm.GetTopFrame()
+	if top == nil || top.GetType() != TypeMenu {
+		t.Error("Enter should open dropdown menu when DropdownOnly is true")
+	}
+}
 func TestComboBox_OpenFlip(t *testing.T) {
 	SetDefaultPalette()
 	scr := NewSilentScreenBuf()
