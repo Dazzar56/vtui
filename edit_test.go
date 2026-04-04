@@ -319,3 +319,62 @@ func TestEdit_InsertString_Selection(t *testing.T) {
 		t.Error("Selection should be cleared after InsertString")
 	}
 }
+func TestEdit_Validation_RealTime(t *testing.T) {
+	// Tests that IsValidInput correctly blocks keystrokes in Edit control
+	e := NewEdit(0, 0, 10, "")
+
+	// 1. Numeric filter
+	e.Validator = &FilterValidator{ValidChars: "0123456789"}
+
+	// Try typing '1' - accepted
+	e.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: '1'})
+	if e.GetText() != "1" { t.Errorf("Expected '1', got %q", e.GetText()) }
+
+	// Try typing 'A' - rejected
+	e.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'A'})
+	if e.GetText() != "1" { t.Errorf("Keystroke 'A' should have been blocked by FilterValidator, text is %q", e.GetText()) }
+
+	// 2. Mask validation
+	e.SetText("")
+	e.Validator = &MaskValidator{Mask: "##-##"} // 2 digits, dash, 2 digits
+
+	// Type '1' - ok
+	e.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: '1'})
+	// Type 'X' - rejected
+	e.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'X'})
+
+	if e.GetText() != "1" { t.Errorf("Mask mismatch char should be blocked. Got %q", e.GetText()) }
+
+	// Type another valid digit to reach the separator naturally
+	e.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: '2'})
+	if e.GetText() != "12" { t.Errorf("Expected '12', got %q", e.GetText()) }
+
+	// Type '-' at correct position (index 2)
+	e.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: '-'})
+	if e.GetText() != "12-" { t.Errorf("Valid mask character should be accepted. Got %q", e.GetText()) }
+}
+
+func TestEdit_Validation_FinalTrigger(t *testing.T) {
+	// Tests that Valid(CmOK) triggers error UI
+	SetDefaultPalette()
+	fm := FrameManager
+	fm.Init(NewSilentScreenBuf())
+
+	dlg := NewDialog(0, 0, 20, 10, "Test")
+	edit := NewEdit(2, 2, 10, "abc")
+	edit.Validator = &IntRangeValidator{Min: 1, Max: 10}
+	dlg.AddItem(edit)
+	fm.Push(dlg)
+
+	// Validate with CmOK (like clicking OK button)
+	res := edit.Valid(CmOK)
+
+	if res {
+		t.Error("Final validation should return false for invalid data ('abc' is not int)")
+	}
+
+	// Check if message box appeared
+	if fm.GetTopFrameType() != TypeDialog || fm.GetTopFrame() == dlg {
+		t.Error("Validator.Error() should have pushed a message box")
+	}
+}
