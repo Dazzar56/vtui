@@ -307,3 +307,43 @@ func TestPieceTable_ExtremeFragmentation(t *testing.T) {
 		t.Error("Content corrupted after multi-piece delete")
 	}
 }
+func TestPieceTable_ReadAtBoundary(t *testing.T) {
+	// Specifically targets the logic that stitches data from multiple pieces.
+	// Piece 1: [0..9] (Original), Piece 2: [10..14] (Add), Piece 3: [15..24] (Original)
+	pt := New([]byte("012345678956789")) // "0123456789" then "56789"
+	pt.Insert(10, []byte("ABCDE"))        // Result: "0123456789ABCDE56789"
+
+	// Pieces are:
+	// 0: Original, Start 0, Len 10 ("0123456789")
+	// 1: Add,      Start 0, Len 5  ("ABCDE")
+	// 2: Original, Start 10, Len 5 ("56789")
+
+	tests := []struct {
+		off, len int
+		expected string
+	}{
+		{9, 2, "9A"},   // Spans Piece 0 and 1
+		{14, 2, "E5"},  // Spans Piece 1 and 2
+		{10, 5, "ABCDE"}, // Exactly Piece 1
+		{0, 20, "0123456789ABCDE56789"}, // All pieces
+		{8, 9, "89ABCDE56"}, // Spans all three pieces
+	}
+
+	for _, tt := range tests {
+		data, err := pt.GetRange(tt.off, tt.len)
+		if err != nil {
+			t.Errorf("GetRange(%d, %d) error: %v", tt.off, tt.len, err)
+			continue
+		}
+		if string(data) != tt.expected {
+			t.Errorf("GetRange(%d, %d): expected %q, got %q", tt.off, tt.len, tt.expected, string(data))
+		}
+
+		// Also test AppendRange (zero-allocation variant)
+		buf := make([]byte, 0, tt.len)
+		buf, _ = pt.AppendRange(buf, tt.off, tt.len)
+		if string(buf) != tt.expected {
+			t.Errorf("AppendRange(%d, %d) failed", tt.off, tt.len)
+		}
+	}
+}
