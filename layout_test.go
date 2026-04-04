@@ -156,3 +156,37 @@ func TestLayout_NegativeMarginsSafety(t *testing.T) {
 		t.Errorf("Negative margins should be respected if provided: (%d, %d)", x1, y1)
 	}
 }
+func TestLayout_NestedBoxFill(t *testing.T) {
+	// Tests that AlignFill correctly propagates through nested layouts.
+	// Layouts only stretch elements on the CROSS axis.
+
+	// Outer HBox (W=100, H=10)
+	hbox := NewHBoxLayout(0, 0, 100, 10)
+	hbox.Spacing = 0
+
+	// VBox (W=20, H=1) as child.
+	// AlignFill in HBox means "stretching vertically to fill H=10"
+	vbox := NewVBoxLayout(0, 0, 20, 1)
+	hbox.Add(vbox, Margins{}, AlignFill)
+
+	// Inside VBox, a button.
+	// AlignFill in VBox means "stretching horizontally to fill W=20"
+	btn := NewButton(0, 0, "B") // width 5: "[ B ]"
+	vbox.Add(btn, Margins{Left: 2, Right: 2}, AlignFill)
+
+	hbox.Apply()
+
+	// 1. Verify VBox stretched vertically
+	_, vy1, _, vy2 := vbox.GetPosition()
+	if vy1 != 0 || vy2 != 9 {
+		t.Errorf("Nested VBox did not fill HBox height. Got Y: %d..%d, want 0..9", vy1, vy2)
+	}
+
+	// 2. Verify Button stretched horizontally inside VBox
+	// VBox width is 20. Margins 2+2=4. Final width 16.
+	// X1 = 0 + 2 = 2. X2 = 2 + 16 - 1 = 17.
+	bx1, _, bx2, _ := btn.GetPosition()
+	if bx1 != 2 || bx2 != 17 {
+		t.Errorf("Nested button did not fill VBox width correctly. Got X: %d..%d, want 2..17", bx1, bx2)
+	}
+}

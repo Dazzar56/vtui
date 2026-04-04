@@ -162,6 +162,12 @@ func (h *HBoxLayout) Apply() {
 		}
 
 		itm.Element.SetPosition(currX, finalY, currX+iw-1, finalY+finalH-1)
+
+		// If child is also a layout, trigger its recursive apply
+		if sub, ok := itm.Element.(interface{ Apply() }); ok {
+			sub.Apply()
+		}
+
 		currX += iw + itm.Margins.Right + h.Spacing
 	}
 }

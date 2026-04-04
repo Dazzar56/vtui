@@ -56,3 +56,26 @@ func TestMaskValidator_Uppercase(t *testing.T) {
 		t.Error("Upper case letters should be valid for '&'")
 	}
 }
+
+func TestMaskValidator_SpecialMarkers(t *testing.T) {
+	// ! - Any (Upper), @ - Any
+	v := &MaskValidator{Mask: "!@#"}
+
+	// 1. Valid inputs
+	if !v.IsValidInput("A12") { t.Error("Valid input rejected") }
+	if !v.IsValidInput("!%1") { t.Error("Symbols should be allowed by ! and @") }
+
+	// 2. Marker # constraint
+	if v.IsValidInput("AB A") { t.Error("Letter in digit slot (#) should be rejected") }
+
+	// 3. Length constraint
+	if v.IsValidInput("ABCD") { t.Error("Input exceeding mask length should be rejected") }
+}
+
+func TestMaskValidator_LiteralEscaping(t *testing.T) {
+	// Test that non-marker characters in mask are treated as literals
+	v := &MaskValidator{Mask: "Ref-####"}
+
+	if !v.IsValidInput("Ref-1") { t.Error("Valid prefix rejected") }
+	if v.IsValidInput("Rex-1") { t.Error("Mismatching literal 'x' instead of 'f' should be rejected") }
+}
