@@ -1117,3 +1117,34 @@ func TestMenuBar_ActiveHotkeys(t *testing.T) {
 		t.Errorf("Expected SelectPos 1 (Options) after hotkey, got %d", mb.SelectPos)
 	}
 }
+func TestMenuBar_AltHotkey_Deep(t *testing.T) {
+	mb := NewMenuBar([]string{"&File", "&Edit", "&Search"})
+	mb.Active = false
+
+	// Test activation via Alt+S (Search)
+	mb.ProcessKey(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		Char:            's',
+		ControlKeyState: vtinput.LeftAltPressed,
+	})
+
+	if !mb.Active {
+		t.Error("MenuBar should be active after Alt+S")
+	}
+	if mb.SelectPos != 2 {
+		t.Errorf("Expected Search (2) to be selected, got %d", mb.SelectPos)
+	}
+
+	// Test activation via Alt+E (Edit)
+	mb.Active = false
+	mb.ProcessKey(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		Char:            'e',
+		ControlKeyState: vtinput.LeftAltPressed,
+	})
+	if mb.SelectPos != 1 {
+		t.Errorf("Expected Edit (1) to be selected, got %d", mb.SelectPos)
+	}
+}

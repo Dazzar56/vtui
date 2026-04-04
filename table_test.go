@@ -403,3 +403,34 @@ func TestTable_AlwaysShowCursor(t *testing.T) {
 	tbl.Show(scr)
 	checkCell(t, scr, 0, 1, 'R', Palette[ColTableSelectedText])
 }
+func TestTable_FormatCell(t *testing.T) {
+	tbl := &Table{}
+
+	// 1. Left Align
+	res := tbl.formatCell("ABC", 5, AlignLeft)
+	if res != "ABC  " {
+		t.Errorf("Left align failed: %q", res)
+	}
+
+	// 2. Right Align
+	res = tbl.formatCell("ABC", 5, AlignRight)
+	if res != "  ABC" {
+		t.Errorf("Right align failed: %q", res)
+	}
+
+	// 3. Center Align
+	res = tbl.formatCell("A", 3, AlignCenter)
+	if res != " A " {
+		t.Errorf("Center align (odd) failed: %q", res)
+	}
+	res = tbl.formatCell("A", 4, AlignCenter)
+	if res != " A  " {
+		t.Errorf("Center align (even) failed: %q", res)
+	}
+
+	// 4. Truncation
+	res = tbl.formatCell("LongString", 4, AlignLeft)
+	if res != "Long" {
+		t.Errorf("Truncation failed: %q", res)
+	}
+}

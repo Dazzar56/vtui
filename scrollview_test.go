@@ -46,3 +46,38 @@ func TestListViewer_MoveRelative(t *testing.T) {
 	sv.MoveRelative(-10)
 	if sv.SelectPos != 0 { t.Errorf("MoveRelative underflow failed, got %d", sv.SelectPos) }
 }
+
+func TestScrollView_SelectableSkipping(t *testing.T) {
+	// Setup a list where index 1 and 3 are unselectable (separators)
+	sv := &ScrollView{ItemCount: 5, ViewHeight: 5}
+	sv.IsSelectable = func(i int) bool {
+		return i != 1 && i != 3
+	}
+
+	// 1. Start at 0, move down. Should skip 1 and land on 2.
+	sv.SetSelectPos(0)
+	sv.MoveRelative(1)
+	if sv.SelectPos != 2 {
+		t.Errorf("Skipping forward failed: expected 2, got %d", sv.SelectPos)
+	}
+
+	// 2. Move down from 2. Should skip 3 and land on 4.
+	sv.MoveRelative(1)
+	if sv.SelectPos != 4 {
+		t.Errorf("Skipping forward (2) failed: expected 4, got %d", sv.SelectPos)
+	}
+
+	// 3. Move up from 4. Should skip 3 and land on 2.
+	sv.MoveRelative(-1)
+	if sv.SelectPos != 2 {
+		t.Errorf("Skipping backward failed: expected 2, got %d", sv.SelectPos)
+	}
+
+	// 4. Wrapping check
+	sv.Wrap = true
+	sv.SetSelectPos(4)
+	sv.MoveRelative(1) // Should skip 0 (unselectable if we changed the logic, but here 0 is ok)
+	if sv.SelectPos != 0 {
+		t.Errorf("Wrap move failed: expected 0, got %d", sv.SelectPos)
+	}
+}
