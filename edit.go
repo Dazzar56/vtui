@@ -289,6 +289,11 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 				e.clearFlag = false
 				return true
 			}
+		case vtinput.VK_V:
+			if text := GetClipboard(); text != "" {
+				e.InsertString(text)
+			}
+			return true
 		}
 	}
 
@@ -301,6 +306,11 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 				e.clearFlag = false
 				return true
 			}
+		case vtinput.VK_INSERT:
+			if text := GetClipboard(); text != "" {
+				e.InsertString(text)
+			}
+			return true
 		}
 	}
 

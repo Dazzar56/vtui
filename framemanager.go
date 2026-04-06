@@ -98,6 +98,7 @@ type frameManager struct {
 	scr            *ScreenBuf
 	RedrawChan     chan struct{}
 	TaskChan       chan func()
+	EventChan      chan *vtinput.InputEvent
 	EventFilter    func(*vtinput.InputEvent) bool
 	injectedEvents []*vtinput.InputEvent
 	OnRender       func(scr *ScreenBuf)
@@ -119,6 +120,7 @@ type frameManager struct {
 	lastMouseClickTime time.Time
 	lastMouseX, lastMouseY int
 	lastMouseButton uint32
+	Reader *vtinput.Reader
 }
 
 // FrameManager is the global instance of the frame manager.
@@ -464,6 +466,31 @@ func (fm *frameManager) Shutdown() {
 func (fm *frameManager) IsShutdown() bool {
 	return fm.Screens == nil
 }
+// WaitForFar2lReply safely blocks and waits for a specific Far2l reply from the event channel.
+// Any other events received during this time are stashed to be processed later.
+func (fm *frameManager) WaitForFar2lReply(expectedID uint8, timeout time.Duration) *vtinput.Far2lStack {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		select {
+		case e, ok := <-fm.EventChan:
+			if !ok {
+				return nil
+			}
+			if e.Type == vtinput.Far2lEventType && e.Far2lCommand == "reply" {
+				stk := vtinput.Far2lStack(e.Far2lData)
+				id := stk.PopU8()
+				if id == expectedID {
+					return &stk
+				}
+			}
+			// Stash other events to be processed later by the main loop
+			fm.injectedEvents = append(fm.injectedEvents, e)
+		case <-time.After(10 * time.Millisecond):
+			// Yield and check deadline
+		}
+	}
+	return nil
+}
 
 // CycleWindows updates the selection in the switcher overlay
 func (fm *frameManager) CycleWindows(forward bool) bool {
@@ -671,6 +698,7 @@ func (fm *frameManager) Stop() {
 
 // Run starts the main application event loop.
 func (fm *frameManager) Run(reader *vtinput.Reader) {
+	fm.Reader = reader
 	fm.running = true
 	// Restore cursor visibility on exit
 	defer func() {
@@ -682,7 +710,7 @@ func (fm *frameManager) Run(reader *vtinput.Reader) {
 		fm.scr.Flush()
 	}()
 
-	eventChan := make(chan *vtinput.InputEvent, 1)
+	fm.EventChan = make(chan *vtinput.InputEvent, 1024)
 	stopChan := make(chan struct{})
 	go func() {
 		for {
@@ -692,10 +720,10 @@ func (fm *frameManager) Run(reader *vtinput.Reader) {
 			default:
 				e, err := reader.ReadEvent()
 				if err != nil {
-					close(eventChan)
+					close(fm.EventChan)
 					return
 				}
-				eventChan <- e
+				fm.EventChan <- e
 			}
 		}
 	}()
@@ -750,7 +778,7 @@ func (fm *frameManager) Run(reader *vtinput.Reader) {
 				}
 				fm.Redraw()
 				loopAgain = true
-			case ev, ok := <-eventChan:
+			case ev, ok := <-fm.EventChan:
 				if !ok {
 					DebugLog("FM: eventChan closed, exiting Run() // in Event waiting (Blocking)")
 					return
@@ -760,6 +788,20 @@ func (fm *frameManager) Run(reader *vtinput.Reader) {
 		}
 
 		if loopAgain {
+			continue
+		}
+		if e.Type == vtinput.Far2lEventType {
+			// Protocol level events handled inside dispatchEvent to cover both main loop and drain loop
+			fm.dispatchEvent(e, injected)
+			continue
+		}
+		if e.Type == vtinput.ResizeEventType {
+			width, height, _ := term.GetSize(int(os.Stdin.Fd()))
+			fm.scr.AllocBuf(width, height)
+			for _, f := range fm.frames {
+				f.ResizeConsole(width, height)
+			}
+			fm.Redraw()
 			continue
 		}
 
@@ -774,7 +816,7 @@ func (fm *frameManager) Run(reader *vtinput.Reader) {
 		for fm.running && !fm.IsShutdown() {
 			idleTimer.Reset(2 * time.Millisecond)
 			select {
-			case ev, ok := <-eventChan:
+			case ev, ok := <-fm.EventChan:
 				if !idleTimer.Stop() {
 					select { case <-idleTimer.C: default: }
 				}
@@ -902,6 +944,24 @@ func (fm *frameManager) renderPhase() {
 }
 
 func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) {
+	if ev.Type == vtinput.Far2lEventType {
+		DebugLog("FM_DISPATCH: Processing Far2l event: cmd=%q", ev.Far2lCommand)
+		if ev.Far2lCommand == "ok" {
+			DebugLog("FM_DISPATCH: Far2l extensions successfully negotiated with host. Setting Far2lEnabled = true")
+			Far2lEnabled = true
+			return
+		}
+		// Protocol replies (from host to our requests) MUST NOT be swallowed here,
+		// because ExpectFar2lReply is waiting for them in a different thread/context.
+		if ev.Far2lCommand == "reply" {
+			DebugLog("FM_DISPATCH: Passing Far2l reply through...")
+			return
+		}
+
+		// Interaction requests (from remote terminal to f4) are handled by the active frame
+		// (usually PanelsFrame) which manages the terminal view.
+	}
+
 	if len(fm.frames) == 0 {
 		return
 	}
