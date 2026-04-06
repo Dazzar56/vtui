@@ -71,16 +71,26 @@ func SetFar2lClipboard(text string) bool {
 		if status == 1 {
 			// 2. SetData
 			stk = &vtinput.Far2lStack{}
-			stk.PushU32(1) // CF_TEXT
-			stk.PushU32(uint32(len(text)))
+			// IMPORTANT: Push in REVERSE order for C++ Pop (LIFO)
+			// C++ expects: Pop(fmt), Pop(len), Pop(data)
 			stk.PushBytes([]byte(text))
+			stk.PushU32(uint32(len(text)))
+			stk.PushU32(1)  // CF_TEXT
 			stk.PushU8('s') // FARTTY_INTERACT_CLIP_SETDATA
 			stk.PushU8('c') // FARTTY_INTERACT_CLIPBOARD
+
 			DebugLog("VTUI_FAR2L: Requesting CLIP_SETDATA...")
 			setReply := Far2lInteract(stk, true)
+
+			success := false
 			if setReply != nil {
 				setStatus := setReply.PopU8()
 				DebugLog("VTUI_FAR2L: CLIP_SETDATA status=%d", setStatus)
+				if setStatus == 1 {
+					success = true
+					// CLIP_SETDATA also returns uint64 dataID if successful
+					_ = setReply.PopU64()
+				}
 			}
 
 			// 3. Close
@@ -88,7 +98,8 @@ func SetFar2lClipboard(text string) bool {
 			stk.PushU8('c') // FARTTY_INTERACT_CLIP_CLOSE
 			stk.PushU8('c') // FARTTY_INTERACT_CLIPBOARD
 			Far2lInteract(stk, false)
-			return true
+
+			return success
 		}
 	}
 	return false
@@ -112,19 +123,21 @@ func GetFar2lClipboard() (string, bool) {
 		_ = reply.PopU64() // Clear stack
 		if status == 1 {
 			stk = &vtinput.Far2lStack{}
-			stk.PushU32(1) // CF_TEXT
+			// C++ expects: Pop(fmt)
+			stk.PushU32(1)  // CF_TEXT
 			stk.PushU8('g') // FARTTY_INTERACT_CLIP_GETDATA
 			stk.PushU8('c') // FARTTY_INTERACT_CLIPBOARD
 			getReply := Far2lInteract(stk, true)
 
 			res := ""
 			if getReply != nil {
+				// C++ sends: Push(id), Push(data), Push(len)
+				// We must pop in reverse: len, data, id
 				l := getReply.PopU32()
 				if l != 0xFFFFFFFF && l > 0 {
 					res = string(getReply.PopBytes(int(l)))
 				}
-				// CLIP_GETDATA also returns uint64 dataID at the bottom
-				_ = getReply.PopU64()
+				_ = getReply.PopU64() // dataID
 			}
 
 			stk = &vtinput.Far2lStack{}
