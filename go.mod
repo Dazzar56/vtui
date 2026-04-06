@@ -8,5 +8,10 @@ require (
 	golang.org/x/term v0.40.0
 )
 
+require (
+	github.com/rivo/uniseg v0.2.0 // indirect
+	golang.org/x/sys v0.41.0 // indirect
+)
+
 // This line tells Go to use a local copy of vtinput
 replace github.com/unxed/vtinput => ../vtinput
