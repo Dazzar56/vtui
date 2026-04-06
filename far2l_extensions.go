@@ -133,10 +133,18 @@ func GetFar2lClipboard() (string, bool) {
 			if getReply != nil {
 				// C++ sends: Push(id), Push(data), Push(len)
 				// We must pop in reverse: len, data, id
+
 				l := getReply.PopU32()
 				if l != 0xFFFFFFFF && l > 0 {
-					res = string(getReply.PopBytes(int(l)))
+					data := getReply.PopBytes(int(l))
+					// CRITICAL: Trim trailing NUL bytes from C-style clipboard string
+					for len(data) > 0 && data[len(data)-1] == 0 {
+						data = data[:len(data)-1]
+					}
+					res = string(data)
+					DebugLog("VTUI_FAR2L: CLIP_GETDATA success, clean_len=%d", len(res))
 				}
+
 				_ = getReply.PopU64() // dataID
 			}
 
