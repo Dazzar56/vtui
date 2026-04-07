@@ -465,3 +465,19 @@ func TestEdit_WordSelection_FarSpec(t *testing.T) {
 		t.Errorf("Selection fail: expected [0:12], got [%d:%d]", e.selStart, e.selEnd)
 	}
 }
+func TestEdit_WordJumps_DifferentDividers(t *testing.T) {
+	// Прыжок вправо должен останавливаться при смене одного знака препинания на другой (D1 -> D2)
+	e := NewEdit(0, 0, 20, "...///")
+	e.curPos = 0
+
+	// Ctrl+Right
+	// Первый шаг (обязательный) -> индекс 1.
+	// Цикл:
+	// Индекс 2: Prev='.', Curr='.' (D->D, одинаковые) -> продолжаем.
+	// Индекс 3: Prev='.', Curr='/' (D1->D2, разные) -> STOP.
+	e.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT, ControlKeyState: vtinput.LeftCtrlPressed})
+
+	if e.curPos != 3 {
+		t.Errorf("Expected stop on first slash (index 3), got %d", e.curPos)
+	}
+}
