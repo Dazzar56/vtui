@@ -2,6 +2,7 @@ package vtui
 
 import (
 	"unicode"
+	"strings"
 
 	"github.com/unxed/vtinput"
 	"github.com/mattn/go-runewidth"
@@ -208,6 +209,23 @@ func (e *Edit) Valid(cmd int) bool {
 	}
 	return true
 }
+
+const (
+	catSpace = iota
+	catDivider
+	catWord
+)
+
+func getCharCategory(r rune) int {
+	if r == ' ' || r == '\t' {
+		return catSpace
+	}
+	if strings.ContainsRune("~!%^&*()+|{}:\"<>?`-=\\[];',./", r) {
+		return catDivider
+	}
+	return catWord
+}
+
 // InsertString inserts text at the current cursor position.
 func (e *Edit) InsertString(text string) {
 	if e.selStart != -1 {
@@ -328,8 +346,21 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 		if e.curPos == 0 && !shift && !ctrl { return false } // Escape focus to previous
 		if shift { e.beginSelection() } else { e.selStart = -1; e.selAnchor = -1 }
 		if ctrl {
-			for e.curPos > 0 && unicode.IsSpace(e.text[e.curPos-1]) { e.curPos-- }
-			for e.curPos > 0 && !unicode.IsSpace(e.text[e.curPos-1]) { e.curPos-- }
+			if e.curPos > 0 {
+				e.curPos--
+				if shift { e.endSelection() }
+				for e.curPos > 0 {
+					prev, curr := e.text[e.curPos-1], e.text[e.curPos]
+					pCat, cCat := getCharCategory(prev), getCharCategory(curr)
+					if (pCat == catSpace && cCat == catWord) ||
+						(pCat == catSpace && cCat == catDivider) ||
+						(pCat == catDivider && cCat == catWord) {
+						break
+					}
+					e.curPos--
+					if shift { e.endSelection() }
+				}
+			}
 		} else {
 			if e.curPos > 0 { e.curPos-- }
 		}
@@ -341,8 +372,35 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 		if e.curPos == len(e.text) && !shift && !ctrl { return false } // Escape focus to next
 		if shift { e.beginSelection() } else { e.selStart = -1; e.selAnchor = -1 }
 		if ctrl {
-			for e.curPos < len(e.text) && !unicode.IsSpace(e.text[e.curPos]) { e.curPos++ }
-			for e.curPos < len(e.text) && unicode.IsSpace(e.text[e.curPos]) { e.curPos++ }
+			if e.curPos < len(e.text) {
+				e.curPos++
+				if shift { e.endSelection() }
+				for e.curPos < len(e.text) {
+					prev, curr := e.text[e.curPos-1], e.text[e.curPos]
+					pCat, cCat := getCharCategory(prev), getCharCategory(curr)
+					stop := false
+					if pCat == catWord && cCat == catDivider {
+						stop = true
+					}
+					if pCat == catSpace && cCat == catWord {
+						stop = true
+					}
+					if pCat == catSpace && cCat == catDivider {
+						stop = true
+					}
+					if pCat == catDivider && cCat == catWord {
+						stop = true
+					}
+					if pCat == catDivider && cCat == catDivider && prev != curr {
+						stop = true
+					}
+					if stop {
+						break
+					}
+					e.curPos++
+					if shift { e.endSelection() }
+				}
+			}
 		} else {
 			if e.curPos < len(e.text) { e.curPos++ }
 		}
