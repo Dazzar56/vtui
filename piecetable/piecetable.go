@@ -273,6 +273,18 @@ func (pt *PieceTable) LoadState(s TableState) {
 	copy(pt.pieces, s.Pieces)
 	pt.size = s.Size
 }
+// Equals compares two table states for structural identity.
+func (s TableState) Equals(other TableState) bool {
+	if s.Size != other.Size || len(s.Pieces) != len(other.Pieces) {
+		return false
+	}
+	for i := range s.Pieces {
+		if s.Pieces[i] != other.Pieces[i] {
+			return false
+		}
+	}
+	return true
+}
 
 // GetRange returns a byte slice for the specified range.
 func (pt *PieceTable) GetRange(offset, length int) ([]byte, error) {
