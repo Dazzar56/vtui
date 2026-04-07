@@ -93,7 +93,8 @@ func RecordCrash(panicVal any, stack []byte) string {
 	crashDir := getCrashDir()
 	os.MkdirAll(crashDir, 0755)
 
-	timestamp := time.Now().Format("20060102_150405")
+	now := time.Now()
+	timestamp := now.Format("20060102_150405")
 	filename := filepath.Join(crashDir, fmt.Sprintf("crash_%s.log", timestamp))
 
 	f, err := os.Create(filename)
@@ -103,7 +104,7 @@ func RecordCrash(panicVal any, stack []byte) string {
 	defer f.Close()
 
 	fmt.Fprintf(f, "=== F4 CRASH REPORT ===\n")
-	fmt.Fprintf(f, "Time: %s\n", time.Now().Format(time.RFC3339))
+	fmt.Fprintf(f, "Date, Time: %s\n", now.Format("2006-01-02 15:04:05"))
 
 	if info, ok := debug.ReadBuildInfo(); ok {
 		var vcsRev, vcsDirty string
