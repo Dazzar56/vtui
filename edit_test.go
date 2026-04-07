@@ -242,6 +242,28 @@ func TestEdit_SelectAllAndClear(t *testing.T) {
 		t.Error("Selection should be cleared after typing")
 	}
 }
+func TestEdit_HistoryNavigationShortcuts(t *testing.T) {
+	e := NewEdit(0, 0, 10, "")
+	e.AddHistory("cmd1")
+
+	// 1. Ctrl+E -> HistoryUp
+	e.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_E, ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+	if e.GetText() != "cmd1" {
+		t.Errorf("Ctrl+E failed: expected 'cmd1', got %q", e.GetText())
+	}
+
+	// 2. Ctrl+X -> HistoryDown (clears since we only have 1 item)
+	e.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_X, ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+	if e.GetText() != "" {
+		t.Errorf("Ctrl+X failed to cycle down: expected empty string, got %q", e.GetText())
+	}
+}
 
 func TestEdit_SelectAllAndNavigate(t *testing.T) {
 	e := NewEdit(0, 0, 20, "some text")
