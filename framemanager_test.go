@@ -984,12 +984,12 @@ func TestFrameManager_F12ScreensMenu(t *testing.T) {
 		t.Errorf("Expected menu title ' Screens ', got %q", menu.title)
 	}
 
-	if len(menu.items) != 2 {
-		t.Fatalf("Expected 2 menu items, got %d", len(menu.items))
+	if len(menu.Items) != 2 {
+		t.Fatalf("Expected 2 menu items, got %d", len(menu.Items))
 	}
 
-	if menu.items[1].Text != "* Editor B" {
-		t.Errorf("Expected active item to have '*' prefix, got %q", menu.items[1].Text)
+	if menu.Items[1].Text != "* Editor B" {
+		t.Errorf("Expected active item to have '*' prefix, got %q", menu.Items[1].Text)
 	}
 }
 

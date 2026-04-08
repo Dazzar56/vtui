@@ -25,7 +25,7 @@ func NewComboBox(x, y, width int, items []string) *ComboBox {
 
 	cb.Menu.SetOwner(cb)
 	cb.Menu.OnAction = func(idx int) {
-		cb.Edit.SetText(cb.Menu.items[idx].Text)
+		cb.Edit.SetText(cb.Menu.Items[idx].Text)
 	}
 
 	cb.SetPosition(x, y, x+width-1, y)
@@ -117,7 +117,7 @@ func (cb *ComboBox) Open() {
 		return
 	}
 	// Calculate menu position below combo box
-	h := len(cb.Menu.items) + 2
+	h := len(cb.Menu.Items) + 2
 	if h > 10 { h = 10 } // Limit height
 
 	y := cb.Y1 + 1

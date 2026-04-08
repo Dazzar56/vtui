@@ -21,7 +21,7 @@ type MenuItem struct {
 type VMenu struct {
 	ScrollView
 	title      string
-	items      []MenuItem
+	Items      []MenuItem
 	done       bool
 	exitCode   int
 	OnAction   func(int)
@@ -34,12 +34,12 @@ func NewVMenu(title string) *VMenu {
 	clean, _, _ := ParseAmpersandString(title)
 	m := &VMenu{
 		title: clean,
-		items: []MenuItem{},
+		Items: []MenuItem{},
 	}
 	m.canFocus = true
 	m.Wrap = true
 	m.IsSelectable = func(i int) bool {
-		return i >= 0 && i < len(m.items) && !m.items[i].Separator
+		return i >= 0 && i < len(m.Items) && !m.Items[i].Separator
 	}
 	m.ShowScrollBar = true
 	m.MarginTop = 1
@@ -50,10 +50,10 @@ func NewVMenu(title string) *VMenu {
 
 // AddItem adds a new item to the menu.
 func (m *VMenu) AddItem(item MenuItem) {
-	m.items = append(m.items, item)
-	m.ItemCount = len(m.items)
-	if len(m.items) == 1 {
-		if m.items[0].Separator {
+	m.Items = append(m.Items, item)
+	m.ItemCount = len(m.Items)
+	if len(m.Items) == 1 {
+		if m.Items[0].Separator {
 			m.SelectPos = 0
 		} else {
 			m.SetSelectPos(0)
@@ -63,11 +63,11 @@ func (m *VMenu) AddItem(item MenuItem) {
 
 // AddSeparator adds a separator line.
 func (m *VMenu) AddSeparator() {
-	m.items = append(m.items, MenuItem{Separator: true})
-	m.ItemCount = len(m.items)
+	m.Items = append(m.Items, MenuItem{Separator: true})
+	m.ItemCount = len(m.Items)
 }
 
-func (m *VMenu) GetItemCount() int { return len(m.items) }
+func (m *VMenu) GetItemCount() int { return len(m.Items) }
 
 // ProcessKey processes navigation keys.
 func (m *VMenu) ProcessKey(e *vtinput.InputEvent) bool {
@@ -103,7 +103,7 @@ func (m *VMenu) ProcessKey(e *vtinput.InputEvent) bool {
 		m.SetExitCode(-1); return FrameManager.GetTopFrame() == Frame(m)
 	case vtinput.VK_RETURN:
 		if m.SelectPos >= 0 && m.SelectPos < m.ItemCount {
-			item := m.items[m.SelectPos]
+			item := m.Items[m.SelectPos]
 			if item.Separator { return true }
 			if FrameManager.DisabledCommands.IsDisabled(item.Command) { return true }
 
@@ -124,7 +124,7 @@ func (m *VMenu) ProcessKey(e *vtinput.InputEvent) bool {
 
 	if e.Char != 0 {
 		charLower := unicode.ToLower(e.Char)
-		for i, item := range m.items {
+		for i, item := range m.Items {
 			if item.Separator { continue }
 			if ExtractHotkey(item.Text) == charLower {
 				if FrameManager.DisabledCommands.IsDisabled(item.Command) {
@@ -193,9 +193,9 @@ func (m *VMenu) ProcessMouse(e *vtinput.InputEvent) bool {
 
 	if e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
 		clickIdx := m.GetClickIndex(int(e.MouseY))
-		if clickIdx != -1 && !m.items[clickIdx].Separator {
+		if clickIdx != -1 && !m.Items[clickIdx].Separator {
 			m.SetSelectPos(clickIdx)
-			item := m.items[clickIdx]
+			item := m.Items[clickIdx]
 			if FrameManager.DisabledCommands.IsDisabled(item.Command) {
 				return true
 			}
@@ -252,9 +252,9 @@ func (m *VMenu) DisplayObject(scr *ScreenBuf) {
 		itemIdx := i + m.TopPos
 		currY := m.Y1 + 1 + i
 		if currY >= m.Y2 { break }
-		if itemIdx >= len(m.items) { continue }
+		if itemIdx >= len(m.Items) { continue }
 
-		item := m.items[itemIdx]
+		item := m.Items[itemIdx]
 		isDisabled := !item.Separator && FrameManager.DisabledCommands.IsDisabled(item.Command)
 
 		attr := colText

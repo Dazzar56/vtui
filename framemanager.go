@@ -606,7 +606,7 @@ func (fm *frameManager) showScreensMenu() {
 	}
 
 	menu.OnAction = func(idx int) {
-		fm.SwitchScreen(menu.items[idx].UserData.(int))
+		fm.SwitchScreen(menu.Items[idx].UserData.(int))
 	}
 
 	menuH := len(fm.Screens) + 2
