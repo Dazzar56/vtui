@@ -352,11 +352,12 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 				for e.curPos > 0 {
 					prev, curr := e.text[e.curPos-1], e.text[e.curPos]
 					pCat, cCat := getCharCategory(prev), getCharCategory(curr)
-					if (pCat == catSpace && cCat == catWord) ||
-						(pCat == catSpace && cCat == catDivider) ||
-						(pCat == catDivider && cCat == catWord) {
-						break
-					}
+				if (shift && pCat != catSpace && cCat == catSpace) ||
+					(pCat == catSpace && cCat == catWord) ||
+					(pCat == catSpace && cCat == catDivider) ||
+					(pCat == catDivider && cCat == catWord) {
+					break
+				}
 					e.curPos--
 					if shift { e.endSelection() }
 				}
@@ -379,6 +380,9 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 					prev, curr := e.text[e.curPos-1], e.text[e.curPos]
 					pCat, cCat := getCharCategory(prev), getCharCategory(curr)
 					stop := false
+					if shift && pCat != catSpace && cCat == catSpace {
+						stop = true
+					}
 					if pCat == catWord && cCat == catDivider {
 						stop = true
 					}
