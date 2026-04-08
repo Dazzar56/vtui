@@ -118,11 +118,11 @@ func TestEdit_History(t *testing.T) {
 		Type:            vtinput.KeyEventType,
 		KeyDown:         true,
 		VirtualKeyCode:  vtinput.VK_DOWN,
-		ControlKeyState: vtinput.LeftAltPressed,
+		ControlKeyState: vtinput.LeftCtrlPressed,
 	})
 
 	if !handled {
-		t.Error("Alt+Down should be handled when History is present")
+		t.Error("Ctrl+Down should be handled when History is present")
 	}
 }
 func TestEdit_HistorySelection(t *testing.T) {
@@ -144,15 +144,15 @@ func TestEdit_HistorySelection(t *testing.T) {
 func TestEdit_HistoryTrigger(t *testing.T) {
 	e := NewEdit(0, 0, 10, "")
 
-	// 1. Alt+Down without history -> should return false
-	if e.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN, ControlKeyState: vtinput.LeftAltPressed}) {
-		t.Error("Edit should NOT handle Alt+Down when history is empty")
+	// 1. Ctrl+Down without history -> should return false
+	if e.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN, ControlKeyState: vtinput.LeftCtrlPressed}) {
+		t.Error("Edit should NOT handle Ctrl+Down when history is empty")
 	}
 
-	// 2. Alt+Down with history -> should return true
+	// 2. Ctrl+Down with history -> should return true
 	e.History = []string{"cmd"}
-	if !e.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN, ControlKeyState: vtinput.LeftAltPressed}) {
-		t.Error("Edit should handle Alt+Down when history is available")
+	if !e.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN, ControlKeyState: vtinput.LeftCtrlPressed}) {
+		t.Error("Edit should handle Ctrl+Down when history is available")
 	}
 }
 func TestEdit_HistoryManagement(t *testing.T) {
