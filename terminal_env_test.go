@@ -3,7 +3,6 @@ package vtui
 import (
 	"strings"
 	"testing"
-	"os"
 )
 
 type mockTermOut struct {
@@ -17,8 +16,14 @@ func (m *mockTermOut) Sync() error { return nil }
 
 func TestTerminalEnv_AltScreenManagement(t *testing.T) {
 	mock := &mockTermOut{}
-	termOut = mock
-	defer func() { termOut = os.Stdout }()
+	oldGetTermOut := getTermOut
+	getTermOut = func() interface {
+		WriteString(string) (int, error)
+		Sync() error
+	} {
+		return mock
+	}
+	defer func() { getTermOut = oldGetTermOut }()
 
 	// Reset internal state
 	isPrepared = true
@@ -47,8 +52,14 @@ func TestTerminalEnv_AltScreenManagement(t *testing.T) {
 
 func TestTerminalEnv_Suspend(t *testing.T) {
 	mock := &mockTermOut{}
-	termOut = mock
-	defer func() { termOut = os.Stdout }()
+	oldGetTermOut := getTermOut
+	getTermOut = func() interface {
+		WriteString(string) (int, error)
+		Sync() error
+	} {
+		return mock
+	}
+	defer func() { getTermOut = oldGetTermOut }()
 
 	// Simulate active TUI in AltScreen
 	isPrepared = true

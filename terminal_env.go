@@ -20,11 +20,14 @@ var (
 	inputRestore func()
 	isPrepared   bool
 	inAltScreen  bool
-	termOut      interface {
-		WriteString(string) (int, error)
-		Sync() error
-	} = os.Stdout
 )
+
+var getTermOut = func() interface {
+	WriteString(string) (int, error)
+	Sync() error
+} {
+	return os.Stdout
+}
 
 // PrepareTerminal puts the terminal into raw mode, enables advanced input,
 // and switches to the alternate screen buffer. Returns a restore function.
@@ -42,12 +45,13 @@ func Suspend() {
 	termMu.Lock()
 	defer termMu.Unlock()
 	if isPrepared {
+		out := getTermOut()
 		if inAltScreen {
-			termOut.WriteString(seqAltScreenOff)
+			out.WriteString(seqAltScreenOff)
 			inAltScreen = false
 		}
-		termOut.WriteString(seqDefaultCursor + seqResetPalette + seqResetAttributes)
-		termOut.Sync()
+		out.WriteString(seqDefaultCursor + seqResetPalette + seqResetAttributes)
+		out.Sync()
 		if inputRestore != nil {
 			inputRestore()
 			inputRestore = nil
@@ -68,12 +72,13 @@ func Resume() error {
 		}
 		inputRestore = r
 
-		termOut.WriteString(seqBlinkingUnderline)
+		out := getTermOut()
+		out.WriteString(seqBlinkingUnderline)
 		if !inAltScreen {
-			termOut.WriteString(seqAltScreenOn)
+			out.WriteString(seqAltScreenOn)
 			inAltScreen = true
 		}
-		termOut.Sync()
+		out.Sync()
 		isPrepared = true
 
 		// Force a full redraw if FrameManager is running
@@ -93,16 +98,17 @@ func SetAltScreen(enable bool) {
 
 	if inAltScreen != enable {
 		inAltScreen = enable
+		out := getTermOut()
 		if enable {
-			termOut.WriteString(seqAltScreenOn)
+			out.WriteString(seqAltScreenOn)
 			// When returning to alt screen, it's usually empty, so force a redraw
 			if FrameManager != nil && FrameManager.scr != nil {
 				FrameManager.scr.HardReset()
 				FrameManager.Redraw()
 			}
 		} else {
-			termOut.WriteString(seqAltScreenOff)
+			out.WriteString(seqAltScreenOff)
 		}
-		termOut.Sync()
+		out.Sync()
 	}
 }
