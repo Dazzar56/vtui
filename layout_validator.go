@@ -30,13 +30,12 @@ func ValidateLayout(c Container) []error {
 	for i, item := range items {
 		x1, y1, x2, y2 := item.GetPosition()
 		id := item.GetId()
-		if id == "" { id = fmt.Sprintf("Type:%T", item) }
+		if id == "" {
+			id = fmt.Sprintf("Type:%T", item)
+		}
 
-		// 1. Boundary & Padding Check (Rule 3 & 4)
-		// Standard padding for dialogs: 2 cells from outer edge (1 for border, 1 for "air")
+		// 1. Boundary & Padding Check
 		minX, minY, maxX, maxY := px1+2, py1+2, px2-2, py2-2
-		
-		// Special case: Separators can touch left/right borders
 		if _, ok := item.(*Separator); ok {
 			minX, maxX = px1, px2
 		}
@@ -48,48 +47,47 @@ func ValidateLayout(c Container) []error {
 			})
 		}
 
-		// 2. Overlap & Proximity Check (Rule 1 & 2)
+		// 2. Overlap & Proximity Check
 		for j := i + 1; j < len(items); j++ {
 			other := items[j]
 			ox1, oy1, ox2, oy2 := other.GetPosition()
 			oid := other.GetId()
-			if oid == "" { oid = fmt.Sprintf("Type:%T", other) }
+			if oid == "" {
+				oid = fmt.Sprintf("Type:%T", other)
+			}
 
-			// Check Overlap
-			if x1 <= ox2 && x2 >= ox1 && y1 <= oy2 && y2 >= oy1 {
+			gapX := max(ox1-x2, x1-ox2) - 1
+			gapY := max(oy1-y2, y1-oy2) - 1
+
+			// Overlap is always an error
+			if gapX < 0 && gapY < 0 {
 				errs = append(errs, LayoutError{
 					Element1: item, Element2: other,
 					Message: fmt.Sprintf("Elements [%s] and [%s] overlap", id, oid),
 				})
+				continue
 			}
 
-			// Check Proximity ("Air" rule)
-			gapX := max(ox1-x2, x1-ox2) - 1
-			gapY := max(oy1-y2, y1-oy2) - 1
+			isDeco := func(el UIElement) bool {
+				_, s := el.(*Separator); _, f := el.(*BorderedFrame); _, g := el.(*GroupBox)
+				return s || f || g
+			}
 
-			if gapX < 1 && gapY < 1 {
-				_, isSep1 := item.(*Separator)
-				_, isSep2 := other.(*Separator)
-				_, isTxt1 := item.(*Text)
-				_, isTxt2 := other.(*Text)
+			// Horizontal proximity: mandatory 1 cell air for non-decorative items
+			if gapX == 0 && gapY <= 0 && !isDeco(item) && !isDeco(other) {
+				errs = append(errs, LayoutError{
+					Element1: item, Element2: other,
+					Message: fmt.Sprintf("Elements [%s] and [%s] are too close horizontally (need 1 cell air)", id, oid),
+				})
+			}
 
-				// Decorative elements allowed to touch others
-				_, isBf1 := item.(*BorderedFrame)
-				_, isGb1 := item.(*GroupBox)
-				isBox1 := isBf1 || isGb1
-
-				_, isBf2 := other.(*BorderedFrame)
-				_, isGb2 := other.(*GroupBox)
-				isBox2 := isBf2 || isGb2
-
-				// In TUIs, Separators and decorative Boxes are allowed to touch anything.
-				// Also contiguous lines of text are allowed to stack.
-				isAllowedToTouch := isSep1 || isSep2 || isBox1 || isBox2 || (isTxt1 && isTxt2 && gapY <= 0)
-
-				if !isAllowedToTouch {
+			// Vertical proximity: Buttons must always have air
+			if gapY == 0 && gapX <= 0 {
+				isBtn := func(el UIElement) bool { _, b := el.(*Button); return b }
+				if (isBtn(item) || isBtn(other)) && !isDeco(item) && !isDeco(other) {
 					errs = append(errs, LayoutError{
 						Element1: item, Element2: other,
-						Message: fmt.Sprintf("Elements [%s] and [%s] are too close (no air)", id, oid),
+						Message: fmt.Sprintf("Button [%s] must have vertical air from [%s]", id, oid),
 					})
 				}
 			}

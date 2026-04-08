@@ -38,19 +38,47 @@ func TestLayoutValidator_Logic(t *testing.T) {
 		if len(errs) == 0 { t.Error("Failed to detect padding violation") }
 	})
 
-	t.Run("Glued elements (no air)", func(t *testing.T) {
+	t.Run("Glued elements (horizontal air required)", func(t *testing.T) {
 		dlg := NewDialog(0, 0, 30, 20, "Test")
-		b1 := NewButton(2, 2, "B1") // ends at 7
-		b2 := NewButton(8, 2, "B2") // starts at 8, touching
+		b1 := NewButton(2, 2, "B1") // x1:2, x2:7
+		b2 := NewButton(8, 2, "B2") // x1:8, touching b1 horizontally
 		dlg.AddItem(b1)
 		dlg.AddItem(b2)
-		
+
 		errs := ValidateLayout(dlg)
-		foundGlued := false
+		found := false
 		for _, e := range errs {
-			if strings.Contains(e.Error(), "too close") { foundGlued = true }
+			if strings.Contains(e.Error(), "horizontally") { found = true }
 		}
-		if !foundGlued { t.Error("Failed to detect glued elements") }
+		if !found { t.Error("Failed to detect horizontal air violation") }
+	})
+
+	t.Run("Compact TUI (vertical touch allowed for labels)", func(t *testing.T) {
+		dlg := NewDialog(0, 0, 30, 20, "Test")
+		l1 := NewText(2, 2, "Line 1", 0)
+		l2 := NewText(2, 3, "Line 2", 0) // Touching vertically
+		dlg.AddItem(l1)
+		dlg.AddItem(l2)
+
+		errs := ValidateLayout(dlg)
+		if len(errs) > 0 {
+			t.Errorf("Vertical touch should be allowed for non-buttons, got: %v", errs)
+		}
+	})
+
+	t.Run("Button vertical air requirement", func(t *testing.T) {
+		dlg := NewDialog(0, 0, 30, 20, "Test")
+		l1 := NewText(2, 2, "Label", 0)
+		b1 := NewButton(2, 3, "Btn") // Touching label vertically
+		dlg.AddItem(l1)
+		dlg.AddItem(b1)
+
+		errs := ValidateLayout(dlg)
+		found := false
+		for _, e := range errs {
+			if strings.Contains(e.Error(), "vertical air") { found = true }
+		}
+		if !found { t.Error("Failed to detect button lacking vertical air") }
 	})
 
 	t.Run("Correct layout", func(t *testing.T) {
