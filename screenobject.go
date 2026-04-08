@@ -128,10 +128,6 @@ func (so *ScreenObject) SetVisible(v bool) {
 func (so *ScreenObject) SetFocus(f bool) {
 	if so.focused != f {
 		so.focused = f
-		// Optional: Log focus changes only for focusable items to avoid spam
-		if so.canFocus {
-			DebugLog("FOCUS: [%p] set to %v (ID: %s)", so, f, so.Id)
-		}
 	}
 }
 

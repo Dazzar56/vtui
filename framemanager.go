@@ -130,7 +130,6 @@ func (fm *frameManager) SyncCurrentScreen() {
 	if len(fm.Screens) > 0 {
 		fm.Screens[fm.ActiveIdx].Frames = fm.frames
 		fm.Screens[fm.ActiveIdx].CapturedFrame = fm.capturedFrame
-		DebugLog("FM: SyncCurrentScreen() - Screen %d has %d frames", fm.ActiveIdx, len(fm.frames))
 	}
 }
 
@@ -237,7 +236,7 @@ func (fm *frameManager) Init(scr *ScreenBuf) {
 	fm.Screens = []*AppScreen{{Frames: fm.frames}}
 	fm.ActiveIdx = 0
 	fm.RedrawChan = make(chan struct{}, 1)
-	fm.TaskChan = make(chan func(), 64)
+	fm.TaskChan = make(chan func(), 1024)
 	fm.injectedEvents = make([]*vtinput.InputEvent, 0)
 	SetDefaultPalette()
 
@@ -424,7 +423,6 @@ func (fm *frameManager) PostTask(task func()) {
 		default:
 			// Очередь полна. Не блокируемся, чтобы не вызвать дедлок.
 			// В нормальной ситуации UI-поток скоро освободит место.
-			DebugLog("FRAMEWORK: TaskChan overflow, dropping task.")
 		}
 	}
 }
