@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 )
 
@@ -57,6 +58,13 @@ func GetClipboard() string {
 }
 
 func setExternalClipboard(text string) bool {
+	if runtime.GOOS == "windows" {
+		cmd := exec.Command("clip")
+		cmd.Stdin = strings.NewReader(text)
+		if err := cmd.Run(); err == nil {
+			return true
+		}
+	}
 	if _, err := exec.LookPath("wl-copy"); err == nil && os.Getenv("WAYLAND_DISPLAY") != "" {
 		cmd := exec.Command("wl-copy")
 		cmd.Stdin = strings.NewReader(text)
@@ -89,6 +97,13 @@ func setExternalClipboard(text string) bool {
 }
 
 func getExternalClipboard() (string, bool) {
+	if runtime.GOOS == "windows" {
+		// PowerShell — самый надежный способ прочитать буфер обмена без CGO
+		out, err := exec.Command("powershell", "-NoProfile", "-Command", "Get-Clipboard").Output()
+		if err == nil {
+			return strings.TrimSpace(string(out)), true
+		}
+	}
 	if _, err := exec.LookPath("wl-paste"); err == nil && os.Getenv("WAYLAND_DISPLAY") != "" {
 		if out, err := exec.Command("wl-paste", "--no-newline").Output(); err == nil {
 			return string(out), true

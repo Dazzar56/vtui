@@ -34,15 +34,19 @@ type ScreenBuf struct {
 	HostPaletteValid [256]bool
 	quantCache       map[uint32]uint8
 
-	Writer io.Writer // Output destination, defaults to os.Stdout
+	Renderer SurfaceRenderer
+	Writer   io.Writer // Output destination, defaults to os.Stdout
 }
 
 // NewScreenBuf creates a new ScreenBuf instance.
 func NewScreenBuf() *ScreenBuf {
-	return &ScreenBuf{
+	s := &ScreenBuf{
 		dirty: true,
 	}
+	s.Renderer = &AnsiRenderer{parent: s}
+	return s
 }
+
 // NewSilentScreenBuf creates a ScreenBuf that discards all output.
 // Ideal for unit tests to prevent ANSI sequences from polluting the console.
 func NewSilentScreenBuf() *ScreenBuf {
@@ -324,16 +328,14 @@ func (s *ScreenBuf) GetCell(x, y int) CharInfo {
 func rgb(c uint32) (r, g, b byte) {
 	return byte((c >> 16) & 0xFF), byte((c >> 8) & 0xFF), byte(c & 0xFF)
 }
-// Flush compares `buf` and `shadow` and outputs the difference to the terminal.
+// Flush синхронизирует состояние виртуального буфера с физическим экраном через Renderer.
 func (s *ScreenBuf) Flush() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if s.lockCount > 0 || s.buf == nil {
+	if s.lockCount > 0 || s.buf == nil || s.Renderer == nil {
 		return
 	}
-
-	var builder strings.Builder
 
 	var activePal *[256]uint32
 	if s.ActivePalette != nil {
@@ -342,95 +344,82 @@ func (s *ScreenBuf) Flush() {
 		activePal = s.ThemePalette
 	}
 
-	cacheCleared := false
-	if activePal != nil {
-		for i := 0; i < 256; i++ {
-			if !s.HostPaletteValid[i] || s.HostPalette[i] != activePal[i] {
-				if !cacheCleared {
-					s.quantCache = make(map[uint32]uint8)
-					cacheCleared = true
-				}
-				r, g, b := rgb(activePal[i])
-				builder.WriteString(fmt.Sprintf("\x1b]4;%d;rgb:%02x/%02x/%02x\x07", i, r, g, b))
-				s.HostPalette[i] = activePal[i]
-				s.HostPaletteValid[i] = true
-			}
+	s.Renderer.SetPalette(activePal)
+	s.Renderer.Render(s.buf, s.shadow, s.width, s.height, s.dirty)
+	s.Renderer.SetCursor(s.cursorX, s.cursorY, s.cursorVisible)
+
+	s.dirty = false
+	s.cursorDirty = false
+	copy(s.shadow, s.buf)
+}
+
+// AnsiRenderer реализует SurfaceRenderer через ESC-последовательности.
+type AnsiRenderer struct {
+	parent   *ScreenBuf
+	lastAttr uint64
+}
+
+func (r *AnsiRenderer) SetPalette(pal *[256]uint32) {
+	if pal == nil { return }
+	var builder strings.Builder
+	for i := 0; i < 256; i++ {
+		if !r.parent.HostPaletteValid[i] || r.parent.HostPalette[i] != pal[i] {
+			r.parent.quantCache = make(map[uint32]uint8)
+			pr, pg, pb := rgb(pal[i])
+			builder.WriteString(fmt.Sprintf("\x1b]4;%d;rgb:%02x/%02x/%02x\x07", i, pr, pg, pb))
+			r.parent.HostPalette[i] = pal[i]
+			r.parent.HostPaletteValid[i] = true
 		}
 	}
-	if s.quantCache == nil {
-		s.quantCache = make(map[uint32]uint8)
-	}
+	r.write(builder.String())
+}
 
-	// 1. Hide the cursor to avoid flickering during rendering.
-	builder.WriteString("\x1b[?25l")
+func (r *AnsiRenderer) Render(buf, shadow []CharInfo, w, h int, force bool) {
+	var b strings.Builder
+	b.WriteString("\x1b[?25l") // Hide cursor during draw
 
-	lastAttr := ^uint64(0)
 	lastX, lastY := -1, -1
+	r.lastAttr = ^uint64(0)
 
-	// Optimization: if nothing is dirty and cursor is in place, do nothing.
-	// (Simplified check for now, can be improved).
+	var activePal *[256]uint32
+	if r.parent.ActivePalette != nil { activePal = r.parent.ActivePalette } else { activePal = r.parent.ThemePalette }
 
-	// 2. Main comparison and sequence generation loop.
-	changesCount := 0
-	for y := 0; y < s.height; y++ {
-		for x := 0; x < s.width; x++ {
-			idx := y*s.width + x
-
-			if !s.dirty && s.buf[idx] == s.shadow[idx] {
-				continue
-			}
-
-			if changesCount == 0 {
-				// First change found, prepare the builder
-				builder.WriteString("\x1b[?25l") // Hide cursor
-			}
-			changesCount++
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			idx := y*w + x
+			if !force && buf[idx] == shadow[idx] { continue }
 
 			if x != lastX+1 || y != lastY {
-				builder.WriteString(fmt.Sprintf("\x1b[%d;%dH", y+1, x+1))
+				b.WriteString(fmt.Sprintf("\x1b[%d;%dH", y+1, x+1))
 			}
 
-			attr := s.buf[idx].Attributes
-			builder.WriteString(attributesToANSI(attr, lastAttr, activePal, s.Force256Colors, s.quantCache))
-			lastAttr = attr
+			attr := buf[idx].Attributes
+			b.WriteString(attributesToANSI(attr, r.lastAttr, activePal, r.parent.Force256Colors, r.parent.quantCache))
+			r.lastAttr = attr
 
-			charRaw := s.buf[idx].Char
-
-			if charRaw == WideCharFiller {
-				// The terminal already advanced the cursor when drawing the left half.
-				// We just update our internal tracker.
+			char := buf[idx].Char
+			if char == WideCharFiller {
 				lastX, lastY = x, y
 				continue
 			}
-
-			if charRaw == 0 {
-				builder.WriteByte(' ')
-			} else {
-				builder.WriteRune(rune(charRaw))
-			}
-
+			if char == 0 { b.WriteByte(' ') } else { b.WriteRune(rune(char)) }
 			lastX, lastY = x, y
 		}
 	}
+	r.write(b.String())
+}
 
-	if changesCount > 0 || s.dirty || s.cursorDirty {
-		s.dirty = false
-		s.cursorDirty = false
-		copy(s.shadow, s.buf)
+func (r *AnsiRenderer) SetCursor(x, y int, vis bool) {
+	out := fmt.Sprintf("\x1b[%d;%dH", y+1, x+1)
+	if vis { out += "\x1b[?25h" } else { out += "\x1b[?25l" }
+	r.write(out)
+}
 
-		// 3. Move cursor to final position and make visible if needed.
-		builder.WriteString(fmt.Sprintf("\x1b[%d;%dH", s.cursorY+1, s.cursorX+1))
-		if s.cursorVisible {
-			builder.WriteString("\x1b[?25h")
-		}
-
-		// 4. Single write to output destination.
-		if builder.Len() > 0 {
-			if s.Writer != nil {
-				io.WriteString(s.Writer, builder.String())
-			} else {
-				os.Stdout.WriteString(builder.String())
-			}
-		}
+func (r *AnsiRenderer) write(s string) {
+	if s == "" { return }
+	if r.parent.Writer != nil {
+		io.WriteString(r.parent.Writer, s)
+	} else {
+		os.Stdout.WriteString(s)
 	}
 }

@@ -110,3 +110,9 @@ type HighlighterProvider interface {
 	// Create generates a new Highlighter instance for a specific file.
 	Create(filename string, content string) Highlighter
 }
+// SurfaceRenderer определяет, как логический буфер CharInfo переносится на экран.
+type SurfaceRenderer interface {
+	Render(buf, shadow []CharInfo, width, height int, forceRedraw bool)
+	SetCursor(x, y int, visible bool)
+	SetPalette(palette *[256]uint32)
+}
