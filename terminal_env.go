@@ -32,6 +32,7 @@ var getTermOut = func() interface {
 // PrepareTerminal puts the terminal into raw mode, enables advanced input,
 // and switches to the alternate screen buffer. Returns a restore function.
 func PrepareTerminal() (func(), error) {
+	initTerminalOS()
 	err := Resume()
 	if err != nil {
 		return nil, err
