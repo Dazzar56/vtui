@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 	"sync"
 )
 
@@ -375,6 +376,7 @@ func (r *AnsiRenderer) SetPalette(pal *[256]uint32) {
 }
 
 func (r *AnsiRenderer) Render(buf, shadow []CharInfo, w, h int, force bool) {
+	renderStart := time.Now()
 	var b strings.Builder
 	b.WriteString("\x1b[?25l") // Hide cursor during draw
 
@@ -406,7 +408,17 @@ func (r *AnsiRenderer) Render(buf, shadow []CharInfo, w, h int, force bool) {
 			lastX, lastY = x, y
 		}
 	}
-	r.write(b.String())
+
+	prepDur := time.Since(renderStart)
+	writeStart := time.Now()
+	payload := b.String()
+	r.write(payload)
+	writeDur := time.Since(writeStart)
+
+	// Only log slow renders to avoid flooding the log file
+	if prepDur + writeDur > 10*time.Millisecond {
+		DebugLog("PROFILE: Render Slow! Prep:%v Write:%v Bytes:%d", prepDur, writeDur, len(payload))
+	}
 }
 
 func (r *AnsiRenderer) SetCursor(x, y int, vis bool) {
