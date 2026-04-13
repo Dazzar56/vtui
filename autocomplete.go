@@ -223,5 +223,7 @@ func (ac *AutoCompleteMenu) ProcessMouse(e *vtinput.InputEvent) bool {
 		ac.navigated = true
 		return true
 	}
-	return ac.Window.ProcessMouse(e)
+	// Consume all mouse events within the menu bounds to prevent
+	// the parent Window class from initiating a drag or resize operation.
+	return true
 }
