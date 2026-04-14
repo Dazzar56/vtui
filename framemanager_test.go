@@ -43,6 +43,49 @@ func (m *mockFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 
 func (m *mockFrame) GetType() FrameType { return TypeUser }
 func (m *mockFrame) GetTitle() string   { return "MockFrame" }
+func TestFrameManager_GlobalUIPriority(t *testing.T) {
+	oldFm := FrameManager
+	fm := &frameManager{}
+	fm.Init(NewSilentScreenBuf())
+	FrameManager = fm
+	defer func() { FrameManager = oldFm }()
+
+	// Настраиваем KeyBar на нижней строке
+	kb := NewKeyBar()
+	kb.SetPosition(0, 24, 79, 24)
+	kb.SetVisible(true)
+	fm.KeyBar = kb
+
+	// Создаем полноэкранный фрейм, который перекрывает координаты KeyBar
+	frameClicked := false
+	f := &mockFrame{}
+	f.SetPosition(0, 0, 79, 24)
+	f.onProcessMouse = func(e *vtinput.InputEvent) bool {
+		frameClicked = true
+		return true
+	}
+	fm.Push(f)
+
+	// Симулируем клик в области KeyBar (Y=24)
+	ev := &vtinput.InputEvent{
+		Type:        vtinput.MouseEventType,
+		KeyDown:     true,
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+		MouseX:      10,
+		MouseY:      24,
+	}
+
+	// Вызываем внутренний метод диспетчеризации
+	fm.dispatchEvent(ev, false)
+
+	if frameClicked {
+		t.Error("Global UI priority failed: background frame received mouse event belonging to KeyBar")
+	}
+
+	if len(fm.injectedEvents) == 0 {
+		t.Error("KeyBar failed to intercept and process the mouse event via FrameManager")
+	}
+}
 
 type busyFrame struct {
 	mockFrame
