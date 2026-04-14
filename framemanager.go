@@ -998,17 +998,24 @@ func (fm *frameManager) renderPhase() {
 			fm.OnRender(fm.scr)
 		}
 
-		// Draw Global Attention Indicator [!] if background screens need input
-		hasHiddenAttention := false
-		for i, s := range fm.Screens {
-			if i != fm.ActiveIdx && s.NeedsAttention() {
-				hasHiddenAttention = true
-				break
+		// Draw Workspace count [N] and highlight if background needs attention
+		if len(fm.Screens) > 1 {
+			hasAttention := false
+			for i, s := range fm.Screens {
+				if i != fm.ActiveIdx && s.NeedsAttention() {
+					hasAttention = true
+					break
+				}
 			}
-		}
-		if hasHiddenAttention {
-			attr := SetRGBBoth(0, 0xFFFFFF, 0xFF0000) // White on Red
-			fm.scr.Write(fm.scr.width-3, 0, StringToCharInfo("[!]", attr))
+
+			// Orange (0xFF8700) for attention, otherwise light gray
+			attr := SetRGBBoth(0, 0xD3D7CF, 0x2E3436)
+			if hasAttention {
+				attr = SetRGBFore(attr, 0xFF8700)
+			}
+
+			indicator := fmt.Sprintf("[%d]", len(fm.Screens))
+			fm.scr.Write(fm.scr.width-len(indicator), 0, StringToCharInfo(indicator, attr))
 		}
 
 		fm.scr.Flush()
