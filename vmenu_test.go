@@ -49,3 +49,31 @@ func TestVMenu_FocusVisualization(t *testing.T) {
 	checkCell(t, scr, 3, 0, 'M', Palette[ColDialogHighlightBoxTitle])
 }
 
+func TestVMenu_OnKeyDownHook(t *testing.T) {
+	m := NewVMenu("Hook Test")
+	m.AddItem(MenuItem{Text: "Item 1"})
+
+	m.AddItem(MenuItem{Text: "Item 2"})
+
+	hookCalled := false
+	m.OnKeyDown = func(e *vtinput.InputEvent) bool {
+		if e.VirtualKeyCode == vtinput.VK_F5 {
+			hookCalled = true
+			return true // Swallowed
+		}
+		return false
+	}
+
+	// 1. Test intercepting key
+	handled := m.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F5})
+	if !handled || !hookCalled {
+		t.Error("OnKeyDown hook was not called or did not swallow the event")
+	}
+
+	// 2. Test falling through for other keys
+	handled = m.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
+	if !handled {
+		t.Error("Standard navigation should still work if hook returns false")
+	}
+}
+
