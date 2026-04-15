@@ -102,6 +102,15 @@ func (rg *RadioGroup) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	}
 
+	if e.Char == ' ' {
+		if rg.Selected != rg.focusIdx {
+			rg.Selected = rg.focusIdx
+			if rg.OnChange != nil { rg.OnChange(rg.Selected) }
+			rg.FireAction(nil, rg.Selected)
+		}
+		return true
+	}
+
 	if e.Char != 0 {
 		hkChar := unicode.ToLower(e.Char)
 		for i, itm := range rg.Items {

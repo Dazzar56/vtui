@@ -47,7 +47,7 @@ func (cb *Checkbox) ProcessKey(e *vtinput.InputEvent) bool {
 	if !e.KeyDown { return false }
 	if cb.IsDisabled() { return false }
 
-	if e.VirtualKeyCode == vtinput.VK_SPACE {
+	if e.VirtualKeyCode == vtinput.VK_SPACE || e.Char == ' ' {
 		cb.Toggle()
 		return true
 	}
