@@ -600,6 +600,56 @@ func (e *Edit) OpenHistory() {
 		e.clearFlag = false
 	}
 
+	menu.OnKeyDown = func(ev *vtinput.InputEvent) bool {
+		// Handle deleting items from history
+		if ev.VirtualKeyCode == vtinput.VK_DELETE || ev.VirtualKeyCode == vtinput.VK_BACK {
+			if len(menu.Items) == 0 {
+				return true
+			}
+			idx := menu.SelectPos
+			e.History = append(e.History[:idx], e.History[idx+1:]...)
+			if e.HistoryID != "" && GlobalHistoryProvider != nil {
+				GlobalHistoryProvider.SaveHistory(e.HistoryID, e.History)
+			}
+			menu.Items = append(menu.Items[:idx], menu.Items[idx+1:]...)
+			menu.ItemCount = len(menu.Items)
+
+			if menu.SelectPos >= menu.ItemCount && menu.ItemCount > 0 {
+				menu.SetSelectPos(menu.ItemCount - 1)
+			} else if menu.ItemCount > 0 {
+				menu.SetSelectPos(menu.SelectPos) // Refresh view
+			}
+
+			if menu.ItemCount == 0 {
+				menu.Close()
+			}
+			FrameManager.Redraw()
+			return true
+		}
+
+		// Handle Enter (Execute) vs Shift+Enter (Insert only)
+		if ev.VirtualKeyCode == vtinput.VK_RETURN {
+			if len(menu.Items) == 0 {
+				return true
+			}
+			shift := (ev.ControlKeyState & vtinput.ShiftPressed) != 0
+			idx := menu.SelectPos
+			e.SetText(e.History[idx])
+			e.SetFocus(true)
+			e.clearFlag = false
+			menu.Close()
+
+			if !shift && e.OnAction != nil {
+				// PostTask ensures execution happens safely after the menu closes
+				FrameManager.PostTask(func() {
+					e.FireAction(e.OnAction, nil)
+				})
+			}
+			return true
+		}
+		return false
+	}
+
 	FrameManager.Push(menu)
 }
 

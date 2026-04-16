@@ -201,6 +201,89 @@ func TestEdit_HistoryButtonClick(t *testing.T) {
 		t.Error("Edit should handle click on history button")
 	}
 }
+func TestEdit_HistoryMenu_DeletionAndExecution(t *testing.T) {
+	SetDefaultPalette()
+	fm := FrameManager
+	fm.Init(NewSilentScreenBuf())
+
+	e := NewEdit(0, 0, 20, "")
+	e.History = []string{"cmd1", "cmd2", "cmd3"}
+
+	executed := false
+	e.OnAction = func() { executed = true }
+
+	e.OpenHistory()
+	top := fm.GetTopFrame()
+	menu, ok := top.(*VMenu)
+	if !ok {
+		t.Fatal("OpenHistory did not push a VMenu")
+	}
+
+	// 1. Delete "cmd1"
+	menu.ProcessKey(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_DELETE,
+	})
+
+	if len(e.History) != 2 || e.History[0] != "cmd2" {
+		t.Errorf("Deletion failed, history: %v", e.History)
+	}
+	if menu.ItemCount != 2 || menu.Items[0].Text != "cmd2" {
+		t.Errorf("Menu items not updated after deletion")
+	}
+
+	// 2. Shift+Enter on "cmd2" (Insert without execution)
+	menu.ProcessKey(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_RETURN,
+		ControlKeyState: vtinput.ShiftPressed,
+	})
+
+	if e.GetText() != "cmd2" {
+		t.Errorf("Shift+Enter failed to insert text, got %q", e.GetText())
+	}
+	if executed {
+		t.Error("Shift+Enter erroneously triggered execution")
+	}
+	if !menu.IsDone() {
+		t.Error("Shift+Enter did not close the menu")
+	}
+
+	// 3. Enter on "cmd3" (Insert WITH execution)
+	e.OpenHistory()
+	menu2 := fm.GetTopFrame().(*VMenu)
+
+	// Navigate to "cmd3" (index 1)
+	menu2.ProcessKey(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_DOWN,
+	})
+
+	menu2.ProcessKey(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_RETURN,
+	})
+
+	// Pump tasks to process PostTask execution
+	for i := 0; i < 5; i++ {
+		select {
+		case task := <-fm.TaskChan:
+			task()
+		default:
+		}
+	}
+
+	if e.GetText() != "cmd3" {
+		t.Errorf("Enter failed to insert text, got %q", e.GetText())
+	}
+	if !executed {
+		t.Error("Enter failed to trigger execution")
+	}
+}
 func TestEdit_OnAction(t *testing.T) {
 	e := NewEdit(0, 0, 10, "test")
 	called := false
