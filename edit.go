@@ -639,11 +639,9 @@ func (e *Edit) OpenHistory() {
 			e.clearFlag = false
 			menu.Close()
 
-			if !shift && e.OnAction != nil {
-				// PostTask ensures execution happens safely after the menu closes
-				FrameManager.PostTask(func() {
-					e.FireAction(e.OnAction, nil)
-				})
+			if !shift {
+				// Inject a real Enter event so the parent frame handles execution
+				FrameManager.InjectEvents([]*vtinput.InputEvent{ev})
 			}
 			return true
 		}
