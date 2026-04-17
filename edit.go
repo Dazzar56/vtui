@@ -281,7 +281,7 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 	if e.IsDisabled() { return false }
 
 	// Navigation with selection reset or set
-	DebugLog("  Edit.ProcessKey: VK=%X Char=%d", event.VirtualKeyCode, event.Char)
+	DebugLog("  Edit.ProcessKey: VK=%s Char=%d", vtinput.VKString(event.VirtualKeyCode), event.Char)
 	shift := (event.ControlKeyState & vtinput.ShiftPressed) != 0
 	ctrl := (event.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
 	alt := (event.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
