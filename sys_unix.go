@@ -4,11 +4,12 @@ package vtui
 
 import (
 	"os"
-	"syscall"
+
+	"golang.org/x/sys/unix"
 )
 
 func RedirectStderr(f *os.File) error {
-	return syscall.Dup2(int(f.Fd()), 2)
+	return unix.Dup2(int(f.Fd()), 2)
 }
 
 func countOpenFDs() int {
