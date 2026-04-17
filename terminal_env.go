@@ -21,7 +21,6 @@ var (
 	isPrepared   bool
 	inAltScreen  bool
 )
-var WindowsProcessedOutput = true
 
 var getTermOut = func() interface {
 	WriteString(string) (int, error)
