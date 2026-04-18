@@ -60,12 +60,11 @@ type AppScreen struct {
 }
 
 func (s *AppScreen) GetTitle() string {
-	for i := len(s.Frames) - 1; i >= 0; i-- {
-		if s.Frames[i].GetType() >= TypeUser {
-			return s.Frames[i].GetTitle()
-		}
+	if len(s.Frames) == 0 {
+		return "Workspace"
 	}
-	return "Workspace"
+	// Возвращаем заголовок самого верхнего фрейма, очищенный от декоративных пробелов
+	return strings.TrimSpace(s.Frames[len(s.Frames)-1].GetTitle())
 }
 
 func (s *AppScreen) GetProgress() int {
@@ -143,6 +142,9 @@ func (fm *frameManager) GetActiveFrames(sIdx int) []Frame {
 }
 
 func (fm *frameManager) SwitchScreen(idx int) {
+	if idx < 0 || idx >= len(fm.Screens) {
+		return
+	}
 	if idx == fm.ActiveIdx && len(fm.frames) > 0 {
 		return
 	}
@@ -153,10 +155,16 @@ func (fm *frameManager) SwitchScreen(idx int) {
 	}
 
 	fm.SyncCurrentScreen()
-	fm.ActiveIdx = idx
-	fm.frames = fm.Screens[idx].Frames
-	fm.capturedFrame = fm.Screens[idx].CapturedFrame
-	DebugLog("FM: Switched to Screen %d (Workspace: %s)", idx, fm.Screens[idx].GetTitle())
+
+	// MRU Reordering: Move the selected screen to the end of the array
+	screen := fm.Screens[idx]
+	fm.Screens = append(fm.Screens[:idx], fm.Screens[idx+1:]...)
+	fm.Screens = append(fm.Screens, screen)
+
+	fm.ActiveIdx = len(fm.Screens) - 1
+	fm.frames = fm.Screens[fm.ActiveIdx].Frames
+	fm.capturedFrame = fm.Screens[fm.ActiveIdx].CapturedFrame
+	DebugLog("FM: Switched to Screen %d (Workspace: %s)", fm.ActiveIdx, fm.Screens[fm.ActiveIdx].GetTitle())
 
 	// 2. Notify new screen it's gaining focus
 	if len(fm.frames) > 0 {
@@ -290,6 +298,10 @@ func (fm *frameManager) PushToFrameScreen(anchor Frame, f Frame) {
 					s.Frames = append(s.Frames, f)
 					// Initialize focus state for the new frame
 					f.ProcessKey(&vtinput.InputEvent{Type: vtinput.FocusEventType, SetFocus: true})
+					// Auto-switch to this screen if the frame is modal (pull user attention)
+					if f.IsModal() {
+						fm.SwitchScreen(i)
+					}
 				}
 				return
 			}
@@ -507,10 +519,11 @@ func (fm *frameManager) CycleWindows(forward bool) bool {
 		fm.switcherIdx = fm.ActiveIdx
 	}
 
+	// Active screen is always at len-1. 'Forward' goes to MRU-previous (len-2).
 	if forward {
-		fm.switcherIdx = (fm.switcherIdx + 1) % len(fm.Screens)
-	} else {
 		fm.switcherIdx = (fm.switcherIdx - 1 + len(fm.Screens)) % len(fm.Screens)
+	} else {
+		fm.switcherIdx = (fm.switcherIdx + 1) % len(fm.Screens)
 	}
 	fm.Redraw()
 	return true

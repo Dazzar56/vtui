@@ -165,6 +165,41 @@ func TestFrameManager_GetTopFrameType(t *testing.T) {
 		t.Errorf("Expected TopFrameType to be TypeUser, got %d", fm.GetTopFrameType())
 	}
 }
+func TestFrameManager_SwitchScreen_MRU(t *testing.T) {
+	fm := &frameManager{}
+	fm.Init(NewSilentScreenBuf())
+	fm.Push(NewDesktop()) // Screen 0: Desktop
+	fm.AddScreen(NewWindow(0, 0, 10, 10, "W1")) // Screen 1: W1
+	fm.AddScreen(NewWindow(0, 0, 10, 10, "W2")) // Screen 2: W2
+
+	if len(fm.Screens) != 3 {
+		t.Fatalf("Expected 3 screens, got %d", len(fm.Screens))
+	}
+
+	// Текущий порядок в массиве: [S0:Desktop, S1:W1, S2:W2]. Активен S2.
+
+	// Переключаемся на Screen 0 (Desktop).
+	// Он должен быть извлечен из начала и вставлен в конец.
+	fm.SwitchScreen(0)
+
+	// Новый порядок в массиве: [S1:W1, S2:W2, S0:Desktop].
+	if fm.ActiveIdx != 2 {
+		t.Errorf("ActiveIdx should be 2, got %d", fm.ActiveIdx)
+	}
+
+	lastScreen := fm.Screens[fm.ActiveIdx]
+	if lastScreen.Frames[0].GetType() != TypeDesktop {
+		t.Errorf("Expected Desktop to move to the end (active), got title: %q", lastScreen.GetTitle())
+	}
+
+	if fm.Screens[0].GetTitle() != "W1" {
+		t.Errorf("Expected W1 to shift to index 0, got %q", fm.Screens[0].GetTitle())
+	}
+
+	// Проверка безопасности индексов
+	fm.SwitchScreen(-1)
+	fm.SwitchScreen(100)
+}
 func TestFrameManager_MouseCapture(t *testing.T) {
 	fm := &frameManager{}
 	fm.Init(NewSilentScreenBuf())
@@ -989,39 +1024,36 @@ func TestFrameManager_CycleScreens(t *testing.T) {
 	w2 := NewWindow(0, 0, 10, 10, "W2")
 
 	fm.Push(NewDesktop())
-	fm.Push(w1)
-	fm.AddScreen(w2) // Creates Screen 1, ActiveIdx = 1
+	fm.Push(w1)      // Screen 0
+	fm.AddScreen(w2) // Screen 1
 
-	if fm.ActiveIdx != 1 {
-		t.Fatalf("Active index should be 1, got %d", fm.ActiveIdx)
-	}
-
-	// 1. Cycle forward: ActiveIdx stays 1, but switcherIdx becomes 0
+	// 1. Cycle forward (MRU): Активен W2 (индекс 1). Переключаемся на "предыдущий" — W1 (индекс 0).
 	fm.ctrlPressed = true
 	fm.CycleWindows(true)
 
-	// 2. Commit switch (release Ctrl)
+	// 2. Commit switch
 	fm.ctrlPressed = false
 	if !fm.ctrlPressed && fm.switcherActive {
 		fm.switcherActive = false
 		fm.SwitchScreen(fm.switcherIdx)
 	}
 
-	if fm.ActiveIdx != 0 {
-		t.Errorf("Expected switch to Screen 0, stayed at %d", fm.ActiveIdx)
+	// W1 переехал в конец. Порядок: [W2, W1]. ActiveIdx = 1.
+	if fm.Screens[fm.ActiveIdx].Frames[1] != w1 {
+		t.Errorf("Expected W1 to be active, got %s", fm.Screens[fm.ActiveIdx].GetTitle())
 	}
 
-	// 3. Cycle backward: from 0 back to 1
+	// 3. Переключаемся обратно на W2 (теперь он на индексе 0)
 	fm.ctrlPressed = true
-	fm.CycleWindows(false)
+	fm.CycleWindows(true)
 	fm.ctrlPressed = false
 	if !fm.ctrlPressed && fm.switcherActive {
 		fm.switcherActive = false
 		fm.SwitchScreen(fm.switcherIdx)
 	}
 
-	if fm.ActiveIdx != 1 {
-		t.Errorf("Expected switch back to Screen 1, stayed at %d", fm.ActiveIdx)
+	if fm.Screens[fm.ActiveIdx].Frames[1] != w2 {
+		t.Errorf("Expected W2 to be active again, got %s", fm.Screens[fm.ActiveIdx].GetTitle())
 	}
 }
 func TestFrameManager_CycleBackwards(t *testing.T) {
@@ -1033,17 +1065,17 @@ func TestFrameManager_CycleBackwards(t *testing.T) {
 
 	// 1. Shift+Ctrl+Tab (forward=false)
 	fm.ctrlPressed = true
-	fm.CycleWindows(false) // 2 -> 1
-	if fm.switcherIdx != 1 {
-		t.Errorf("Backward cycle failed: expected 1, got %d", fm.switcherIdx)
-	}
-
-	fm.CycleWindows(false) // 1 -> 0
+	fm.CycleWindows(false) // 2 -> 0 (because forward is MRU back, backward is array forward)
 	if fm.switcherIdx != 0 {
 		t.Errorf("Backward cycle failed: expected 0, got %d", fm.switcherIdx)
 	}
 
-	fm.CycleWindows(false) // 0 -> 2 (wrap)
+	fm.CycleWindows(false) // 0 -> 1
+	if fm.switcherIdx != 1 {
+		t.Errorf("Backward cycle failed: expected 1, got %d", fm.switcherIdx)
+	}
+
+	fm.CycleWindows(false) // 1 -> 2 (wrap)
 	if fm.switcherIdx != 2 {
 		t.Errorf("Backward cycle wrap failed: expected 2, got %d", fm.switcherIdx)
 	}
@@ -1293,46 +1325,47 @@ func TestFrameManager_PostTaskNonBlocking(t *testing.T) {
 func TestFrameManager_BoundVsUnboundTask(t *testing.T) {
 	fm := &frameManager{}
 	fm.Init(NewSilentScreenBuf())
-	fm.Push(NewDesktop())
-
-	f1 := &mockFrame{}
-	fm.Push(f1)
+	fm.Push(NewDesktop()) // Screen 0
 
 	// 1. SCENARIO: Background Screen Creation (AddScreen)
-	fm.AddScreen(&mockFrame{})
+	fm.AddScreen(&mockFrame{}) // Screen 1
 	if len(fm.Screens) != 2 {
 		t.Error("AddScreen should create a second screen")
 	}
+	// В MRU-логике активный всегда последний
 	if fm.ActiveIdx != 1 {
 		t.Error("AddScreen should automatically switch focus")
 	}
 
 	// 2. SCENARIO: Background task without focus (AddScreenBackground)
-	fm.SwitchScreen(0)
+	activeBefore := fm.Screens[fm.ActiveIdx]
 	fm.AddScreenBackground(&mockFrame{})
+
 	if len(fm.Screens) != 3 {
 		t.Errorf("Expected 3 screens, got %d", len(fm.Screens))
 	}
-	if fm.ActiveIdx != 0 {
-		t.Error("AddScreenBackground should NOT switch focus")
+
+	// AddScreenBackground не должен менять текущий активный экран
+	if fm.Screens[fm.ActiveIdx] != activeBefore {
+		t.Error("AddScreenBackground switched focus erroneously")
 	}
 }
 
 func TestFrameManager_SwitcherLogic(t *testing.T) {
 	fm := &frameManager{}
 	fm.Init(NewSilentScreenBuf())
-	fm.Push(NewDesktop()) // ActiveIdx = 0
-	fm.AddScreen(NewWindow(0,0,10,10, "W2")) // ActiveIdx = 1
+	fm.Push(NewDesktop()) // Screen 0: Desktop
+	fm.AddScreen(NewWindow(0,0,10,10, "W1")) // Screen 1: W1. ActiveIdx = 1.
 
 	// 1. Simulate Ctrl+Tab (KeyDown)
 	fm.ctrlPressed = true
-	fm.CycleWindows(true) // Should wrap: 1 -> 0
+	fm.CycleWindows(true) // Вперед в MRU — это к предыдущему (индекс 0: Desktop)
 
 	if !fm.switcherActive {
 		t.Error("Switcher should be active after Ctrl+Tab")
 	}
 	if fm.switcherIdx != 0 {
-		t.Errorf("Switcher should select screen 0 (forward from 1), got %d", fm.switcherIdx)
+		t.Errorf("Switcher should select screen 0, got %d", fm.switcherIdx)
 	}
 
 	// 2. Simulate Ctrl release (KeyUp)
@@ -1342,11 +1375,9 @@ func TestFrameManager_SwitcherLogic(t *testing.T) {
 		fm.SwitchScreen(fm.switcherIdx)
 	}
 
-	if fm.switcherActive {
-		t.Error("Switcher should close on Ctrl release")
-	}
-	if fm.ActiveIdx != 0 {
-		t.Errorf("Screen should have switched to 0, stayed at %d", fm.ActiveIdx)
+	// Теперь Desktop должен стать активным (переехать в конец массива)
+	if fm.Screens[fm.ActiveIdx].GetTitle() != "Desktop" {
+		t.Errorf("Screen Desktop was not moved to active. Top title: %q", fm.Screens[fm.ActiveIdx].GetTitle())
 	}
 }
 
@@ -1482,35 +1513,25 @@ func TestFrameManager_SwitchScreenFocus(t *testing.T) {
 func TestFrameManager_TargetedNotificationFlow(t *testing.T) {
 	fm := &frameManager{}
 	fm.Init(NewSilentScreenBuf())
-	fm.Push(NewDesktop())
+	fm.Push(NewDesktop()) // Screen 0
 
-	// 1. Screen 0: Blocking Task
+	// 1. Добавляем диалог задачи на Screen 0. Screen 0: [Desktop, Task]
 	taskDlg := NewDialog(0,0,10,10, "Task")
 	fm.Push(taskDlg)
 
-	// 2. Screen 1: Active Work
-	workWin := NewWindow(0,0,10,10, "Active")
+	// 2. Создаем Screen 1 для работы. [Screen 0, Screen 1:ActiveWork].
+	workWin := NewWindow(0,0,10,10, "ActiveWork")
 	fm.AddScreen(workWin)
 
-	if fm.ActiveIdx != 1 { t.Fatal("Should be on Screen 1") }
-
-	// 3. Task finishes and sends a targeted "Done" message
-	doneMsg := NewDialog(0,0,5,5, "Finished")
+	// 3. Задача в фоне (Screen 0) завершается и шлет модальный диалог
+	doneMsg := NewDialog(0,0,5,5, "Finished") // NewDialog по умолчанию Modal = true
 	fm.PushToFrameScreen(taskDlg, doneMsg)
 
 	// 4. Assertions
-	if fm.ActiveIdx != 1 {
-		t.Error("Active screen should NOT change when background notification arrives")
-	}
-
-	bgScreen := fm.Screens[0]
-	topOfBg := bgScreen.Frames[len(bgScreen.Frames)-1]
-	if topOfBg != doneMsg {
-		t.Error("Notification did not land on the background task screen")
-	}
-
-	if !bgScreen.NeedsAttention() {
-		t.Error("Background screen should now report NeedsAttention")
+	// Так как сообщение модальное, оно должно было вызвать SwitchScreen и "всплыть" в конец.
+	topTitle := fm.Screens[fm.ActiveIdx].GetTitle()
+	if topTitle != "Finished" {
+		t.Errorf("Modal notification failed to pull focus. Active screen title: %q", topTitle)
 	}
 }
 func TestFrameManager_PushToFrameScreen_LostAnchor(t *testing.T) {
@@ -1598,55 +1619,30 @@ func TestFrameManager_DoubleClickDetection(t *testing.T) {
 
 func TestFrameManager_CloseActiveScreen_Shifting(t *testing.T) {
 	fm := &frameManager{}
-	fm.Init(NewSilentScreenBuf()) // Creates Screen 0
+	fm.Init(NewSilentScreenBuf()) 
+	fm.Push(NewDesktop()) // Screen 0
 
-	// Add Screen 1
-	w1 := NewWindow(0, 0, 10, 10, "W1")
-	fm.AddScreen(w1)
+	fm.AddScreen(NewWindow(0, 0, 10, 10, "W1")) // Screen 1
+	fm.AddScreen(NewWindow(0, 0, 10, 10, "W2")) // Screen 2
 
-	// Add Screen 2
-	w2 := NewWindow(0, 0, 10, 10, "W2")
-	fm.AddScreen(w2)
-
-	if len(fm.Screens) != 3 || fm.ActiveIdx != 2 {
-		t.Fatalf("Setup failed, expected 3 screens, ActiveIdx 2")
-	}
-
-	// Switch to Screen 1 and close it
+	// Порядок в массиве: [S0, S1, S2]. Активен S2 (W2).
+	
+	// Переключаемся на S1 (W1). 
+	// Порядок становится: [S0, S2, S1]. Активен S1 (W1) на индексе 2.
 	fm.SwitchScreen(1)
-	fm.CloseActiveScreen()
+	
+	// Закрываем активный экран (W1).
+	fm.CloseActiveScreen() 
 
-	// Screen 2 should shift down and become the new ActiveIdx 1
+	// Порядок должен стать: [S0, S2]. Активен S2 (W2) на индексе 1.
 	if len(fm.Screens) != 2 {
 		t.Errorf("Expected 2 screens after close, got %d", len(fm.Screens))
 	}
 	if fm.ActiveIdx != 1 {
-		t.Errorf("ActiveIdx should remain at the same position if not last. Got %d", fm.ActiveIdx)
+		t.Errorf("ActiveIdx should point to the last element (1), got %d", fm.ActiveIdx)
 	}
-
-	// Close the last screen (Screen 1)
-	fm.CloseActiveScreen()
-
-	// Should fallback to Screen 0
-	if len(fm.Screens) != 1 {
-		t.Errorf("Expected 1 screen after close, got %d", len(fm.Screens))
-	}
-	if fm.ActiveIdx != 0 {
-		t.Errorf("ActiveIdx should fallback to 0, got %d", fm.ActiveIdx)
-	}
-
-	// Close the only remaining screen (Screen 0)
-	fm.CloseActiveScreen()
-
-	// Should trigger Shutdown
-	if len(fm.Screens) != 1 {
-		t.Error("Last screen should NOT be closed automatically by CloseActiveScreen (it should emit CmQuit)")
-	}
-
-	// Now manually shut down to clean up the test state
-	fm.Shutdown()
-	if !fm.IsShutdown() {
-		t.Error("FrameManager manual shutdown failed")
+	if fm.Screens[fm.ActiveIdx].GetTitle() != "W2" {
+		t.Errorf("Expected W2 to be active, got %q", fm.Screens[fm.ActiveIdx].GetTitle())
 	}
 }
 

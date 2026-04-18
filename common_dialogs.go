@@ -281,6 +281,11 @@ func SelectFileDialog(title string, initialPath string, vfs FSProvider) *Window 
 
 // InputBox creates a simple one-line text input dialog.
 func InputBox(title, prompt, defaultText string, onOk func(string)) *Window {
+	return InputBoxOn(nil, title, prompt, defaultText, onOk)
+}
+
+// InputBoxOn creates a simple one-line text input dialog tied to a specific anchor screen.
+func InputBoxOn(anchor Frame, title, prompt, defaultText string, onOk func(string)) *Window {
 	width := 40
 	height := 9 // Increased height to fit all elements with margins
 	dlg := NewCenteredDialog(width, height, title)
@@ -314,6 +319,10 @@ func InputBox(title, prompt, defaultText string, onOk func(string)) *Window {
 	vbox.Add(rowBtns, Margins{Top: 1}, AlignFill)
 	vbox.Apply()
 
-	FrameManager.Push(dlg)
+	if anchor != nil {
+		FrameManager.PushToFrameScreen(anchor, dlg)
+	} else {
+		FrameManager.Push(dlg)
+	}
 	return dlg
 }
