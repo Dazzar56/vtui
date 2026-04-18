@@ -12,7 +12,6 @@ type AutoCompleteMenu struct {
 	Edit      *Edit
 	lb        *ListBox
 	Matches   []string
-	navigated bool
 }
 
 func NewAutoCompleteMenu(edit *Edit) *AutoCompleteMenu {
@@ -33,6 +32,13 @@ func NewAutoCompleteMenu(edit *Edit) *AutoCompleteMenu {
 			ac.Edit.SetText(ac.Matches[idx])
 			ac.Edit.curPos = len(ac.Edit.text)
 			ac.Edit.clearFlag = false
+			ac.Edit.HistoryPos = -1
+			// Inject Enter to execute chosen command immediately
+			if FrameManager != nil {
+				FrameManager.InjectEvents([]*vtinput.InputEvent{
+					{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN},
+				})
+			}
 		}
 		ac.Close()
 	}
@@ -150,7 +156,6 @@ func (ac *AutoCompleteMenu) ProcessKey(e *vtinput.InputEvent) bool {
 
 	switch e.VirtualKeyCode {
 	case vtinput.VK_UP, vtinput.VK_DOWN, vtinput.VK_PRIOR, vtinput.VK_NEXT:
-		ac.navigated = true
 		return ac.lb.ProcessKey(e)
 	case vtinput.VK_ESCAPE:
 		ac.Close()
@@ -160,20 +165,23 @@ func (ac *AutoCompleteMenu) ProcessKey(e *vtinput.InputEvent) bool {
 			ac.Edit.SetText(ac.Matches[ac.lb.SelectPos])
 			ac.Edit.curPos = len(ac.Edit.text)
 			ac.Edit.clearFlag = false
+			ac.Edit.HistoryPos = -1
 		}
 		ac.Close()
 		return true
 	case vtinput.VK_RETURN:
-		if ac.navigated && ac.lb.SelectPos >= 0 && ac.lb.SelectPos < len(ac.Matches) {
+		if ac.lb.SelectPos >= 0 && ac.lb.SelectPos < len(ac.Matches) {
 			ac.Edit.SetText(ac.Matches[ac.lb.SelectPos])
 			ac.Edit.curPos = len(ac.Edit.text)
 			ac.Edit.clearFlag = false
-			ac.Close()
-			return true
+			ac.Edit.HistoryPos = -1
 		}
 		ac.Close()
 		if FrameManager != nil {
-			FrameManager.InjectEvents([]*vtinput.InputEvent{e})
+			// Only inject if not Shift+Enter (Shift+Enter just fills the line)
+			if (e.ControlKeyState & vtinput.ShiftPressed) == 0 {
+				FrameManager.InjectEvents([]*vtinput.InputEvent{e})
+			}
 		}
 		return true
 	case vtinput.VK_DELETE:
@@ -207,7 +215,6 @@ func (ac *AutoCompleteMenu) ProcessKey(e *vtinput.InputEvent) bool {
 			if newText == "" {
 				ac.Close()
 			} else {
-				ac.navigated = false
 				ac.UpdateMatches()
 				if !ac.HasMatches() {
 					ac.Close()
@@ -220,7 +227,6 @@ func (ac *AutoCompleteMenu) ProcessKey(e *vtinput.InputEvent) bool {
 
 func (ac *AutoCompleteMenu) ProcessMouse(e *vtinput.InputEvent) bool {
 	if ac.lb.ProcessMouse(e) {
-		ac.navigated = true
 		return true
 	}
 	// Consume all mouse events within the menu bounds to prevent

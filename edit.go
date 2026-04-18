@@ -606,6 +606,13 @@ func (e *Edit) OpenHistory() {
 		e.SetText(e.History[idx])
 		e.SetFocus(true)
 		e.clearFlag = false
+		e.HistoryPos = -1
+		// Auto-execute on mouse selection (matches Far behavior)
+		if FrameManager != nil {
+			FrameManager.InjectEvents([]*vtinput.InputEvent{
+				{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN},
+			})
+		}
 	}
 
 	menu.OnKeyDown = func(ev *vtinput.InputEvent) bool {
