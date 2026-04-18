@@ -108,8 +108,10 @@ func (cg *CheckGroup) ProcessKey(e *vtinput.InputEvent) bool {
 
 	if e.Char != 0 {
 		hkChar := unicode.ToLower(e.Char)
+		xlatChar := unicode.ToLower(GlobalXlator.Translate(e.Char))
 		for i, itm := range cg.Items {
-			if ExtractHotkey(itm) == hkChar {
+			hk := ExtractHotkey(itm)
+			if hk != 0 && (hk == hkChar || hk == xlatChar) {
 				cg.focusIdx = i
 				cg.States[i] = !cg.States[i]
 				return true

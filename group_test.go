@@ -96,6 +96,17 @@ func TestGroup_Nested(t *testing.T) {
 	if !outerBtn.IsFocused() || gb.IsFocused() {
 		t.Fatal("Tab 3: Focus state is incorrect.")
 	}
+	// 4. Test XLat hotkey: press 'т' (Russian 't' -> QWERTY 'n') to trigger Alt+N for innerBtn2
+	GlobalXlator.Track('т') // Устанавливаем русский контекст
+	dlg.rootGroup.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType,
+		KeyDown: true,
+		Char: 'т',
+		ControlKeyState: vtinput.LeftAltPressed,
+	})
+	if gb.focusIdx != 1 || !innerBtn2.IsFocused() {
+		t.Error("XLat hotkey (Alt+т -> Alt+N) failed to focus button")
+	}
 
 	// 4. Test hotkey (Alt+I for innerBtn1)
 	dlg.rootGroup.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'i', ControlKeyState: vtinput.LeftAltPressed})

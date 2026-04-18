@@ -129,9 +129,11 @@ func (m *VMenu) ProcessKey(e *vtinput.InputEvent) bool {
 
 	if e.Char != 0 {
 		charLower := unicode.ToLower(e.Char)
+		xlatLower := unicode.ToLower(GlobalXlator.Translate(e.Char))
 		for i, item := range m.Items {
 			if item.Separator { continue }
-			if ExtractHotkey(item.Text) == charLower {
+			hk := ExtractHotkey(item.Text)
+			if hk != 0 && (hk == charLower || hk == xlatLower) {
 				if FrameManager.DisabledCommands.IsDisabled(item.Command) {
 					return true
 				}

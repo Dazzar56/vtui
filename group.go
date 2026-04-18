@@ -169,6 +169,7 @@ func (g *Group) ProcessKey(e *vtinput.InputEvent) bool {
 	// Handle hotkeys (Alt+char or char if no focusable text-input element)
 	if e.Char != 0 {
 		charLower := unicode.ToLower(e.Char)
+		xlatLower := unicode.ToLower(GlobalXlator.Translate(e.Char))
 		alt := (e.ControlKeyState&(vtinput.LeftAltPressed|vtinput.RightAltPressed)) != 0
 		allowWithoutAlt := true
 		if g.focusIdx != -1 && g.items[g.focusIdx].WantsChars() {
@@ -176,7 +177,7 @@ func (g *Group) ProcessKey(e *vtinput.InputEvent) bool {
 		}
 
 		if alt || allowWithoutAlt {
-			if g.ActivateHotkey(charLower) {
+			if g.ActivateHotkey(charLower) || (xlatLower != charLower && g.ActivateHotkey(xlatLower)) {
 				return true
 			}
 		}

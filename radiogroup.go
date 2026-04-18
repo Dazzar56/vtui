@@ -113,8 +113,10 @@ func (rg *RadioGroup) ProcessKey(e *vtinput.InputEvent) bool {
 
 	if e.Char != 0 {
 		hkChar := unicode.ToLower(e.Char)
+		xlatChar := unicode.ToLower(GlobalXlator.Translate(e.Char))
 		for i, itm := range rg.Items {
-			if ExtractHotkey(itm) == hkChar {
+			hk := ExtractHotkey(itm)
+			if hk != 0 && (hk == hkChar || hk == xlatChar) {
 				rg.focusIdx = i
 				rg.Selected = i
 				if rg.OnChange != nil { rg.OnChange(rg.Selected) }

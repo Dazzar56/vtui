@@ -194,8 +194,10 @@ func (mb *MenuBar) ProcessKey(e *vtinput.InputEvent) bool {
 		// Handle hotkeys without Alt when active
 		if e.Char != 0 {
 			charLower := unicode.ToLower(e.Char)
+			xlatLower := unicode.ToLower(GlobalXlator.Translate(e.Char))
 			for i, item := range mb.Items {
-				if ExtractHotkey(item.Label) == charLower {
+				hk := ExtractHotkey(item.Label)
+				if hk != 0 && (hk == charLower || hk == xlatLower) {
 					mb.ActivateSubMenu(i)
 					return true
 				}
@@ -207,8 +209,10 @@ func (mb *MenuBar) ProcessKey(e *vtinput.InputEvent) bool {
 	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 	if alt && e.Char != 0 {
 		charLower := unicode.ToLower(e.Char)
+		xlatLower := unicode.ToLower(GlobalXlator.Translate(e.Char))
 		for i, item := range mb.Items {
-			if ExtractHotkey(item.Label) == charLower {
+			hk := ExtractHotkey(item.Label)
+			if hk != 0 && (hk == charLower || hk == xlatLower) {
 				mb.Active = true
 				mb.ActivateSubMenu(i)
 				return true

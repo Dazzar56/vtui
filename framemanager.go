@@ -1063,6 +1063,10 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 
 	topFrame := fm.frames[len(fm.frames)-1]
 	activeMenu := fm.GetActiveMenuBar()
+	// Track input for XLat transliteration
+	if ev.Type == vtinput.KeyEventType && ev.KeyDown && ev.Char != 0 {
+		GlobalXlator.Track(ev.Char)
+	}
 
 	// Update KeyBar modifiers automatically if present
 	if fm.KeyBar != nil {
