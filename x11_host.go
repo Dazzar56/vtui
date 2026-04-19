@@ -1,11 +1,11 @@
-//go:build linux || freebsd || openbsd || netbsd || dragonfly
+//go:build linux || freebsd || openbsd || netbsd || dragonfly || darwin
 
 package vtui
 
 import (
-	"fmt"
 	"image"
 	"sync"
+	"fmt"
 
 	"github.com/BurntSushi/xgb"
 	"github.com/BurntSushi/xgb/xproto"

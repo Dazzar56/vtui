@@ -1,4 +1,4 @@
-//go:build linux || freebsd || openbsd || netbsd || dragonfly
+//go:build linux || freebsd || openbsd || netbsd || dragonfly || darwin
 
 package vtui
 
@@ -66,6 +66,7 @@ func loadBestFont(size float64, dpi float64) (font.Face, int, int) {
 		"/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
 		"/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
 		"/usr/share/fonts/TTF/DejaVuSansMono.ttf",
+		"/System/Library/Fonts/Supplemental/Courier New.ttf", // macOS path
 	}
 
 	for _, path := range fontPaths {

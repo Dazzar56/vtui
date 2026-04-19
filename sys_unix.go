@@ -4,7 +4,6 @@ package vtui
 
 import (
 	"os"
-
 	"golang.org/x/sys/unix"
 )
 
