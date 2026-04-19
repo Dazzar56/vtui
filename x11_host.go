@@ -33,6 +33,7 @@ type X11Host struct {
 	keysPerCode  byte
 	minKeyCode   xproto.Keycode
 	atomDelete   xproto.Atom
+	dirtyLines   []bool
 }
 
 func NewX11Host(cols, rows, cellW, cellH int) (*X11Host, error) {
@@ -63,11 +64,12 @@ func NewX11Host(cols, rows, cellW, cellH int) (*X11Host, error) {
 		conn:      conn,
 		screen:    screen,
 		cellW:     cellW,
-		cellH:     cellH,
-		scale:     scale,
-		width:     uint16(cols * cellW),
-		height:    uint16(rows * cellH),
-		closeChan: make(chan struct{}),
+		cellH:      cellH,
+		scale:      scale,
+		width:      uint16(cols * cellW),
+		height:     uint16(rows * cellH),
+		closeChan:  make(chan struct{}),
+		dirtyLines: make([]bool, rows*cellH),
 	}
 
 	// Create Window
@@ -173,6 +175,13 @@ func (h *X11Host) RunEventLoop() {
 
 		switch e := ev.(type) {
 		case xproto.ExposeEvent:
+			// X11 says our window needs repainting (e.g. just appeared).
+			// We must mark all lines as dirty to force a full refresh.
+			h.mu.Lock()
+			for i := range h.dirtyLines {
+				h.dirtyLines[i] = true
+			}
+			h.mu.Unlock()
 			if e.Count == 0 {
 				h.flushImage()
 			}
@@ -182,6 +191,10 @@ func (h *X11Host) RunEventLoop() {
 				h.width = e.Width
 				h.height = e.Height
 				h.imgBuf = image.NewRGBA(image.Rect(0, 0, int(h.width), int(h.height)))
+				h.dirtyLines = make([]bool, int(e.Height))
+				for i := range h.dirtyLines {
+					h.dirtyLines[i] = true
+				}
 				h.mu.Unlock()
 
 				cols := int(e.Width) / h.cellW
@@ -317,21 +330,52 @@ func (h *X11Host) flushImage() {
 		h.bgraBuf = make([]byte, totalBytes)
 	}
 
-	// Fast RGBA -> BGRA conversion without allocations
-	for i := 0; i < len(h.imgBuf.Pix); i += 4 {
-		h.bgraBuf[i+0] = h.imgBuf.Pix[i+2] // B
-		h.bgraBuf[i+1] = h.imgBuf.Pix[i+1] // G
-		h.bgraBuf[i+2] = h.imgBuf.Pix[i+0] // R
-		h.bgraBuf[i+3] = 0xFF              // A
+	pix := h.imgBuf.Pix
+	bgra := h.bgraBuf
+	lineStride := w * 4
+
+	// 1. Process dirty lines: Convert only what changed
+	anyDirty := false
+	for y := 0; y < h2; y++ {
+		if h.dirtyLines[y] {
+			anyDirty = true
+			off := y * lineStride
+			for x := 0; x < lineStride; x += 4 {
+				p := off + x
+				bgra[p], bgra[p+1], bgra[p+2], bgra[p+3] = pix[p+2], pix[p+1], pix[p], 0xFF
+			}
+		}
 	}
 
-	// X11 has a Maximum Request Length (usually 64KB - 256KB).
-	// A full screen buffer often exceeds this.
-	// We send the image line by line to stay safe and simple.
-	lineStride := w * 4
-	for y := 0; y < h2; y++ {
-		lineData := h.bgraBuf[y*lineStride : (y+1)*lineStride]
+	if !anyDirty {
+		return
+	}
+
+	// 2. Find and send contiguous spans of dirty lines
+	maxReq := int(xproto.Setup(h.conn).MaximumRequestLength) * 4
+	rowsPerReqLimit := (maxReq - 24) / lineStride
+	if rowsPerReqLimit < 1 {
+		rowsPerReqLimit = 1
+	}
+
+	for y := 0; y < h2; {
+		if !h.dirtyLines[y] {
+			y++
+			continue
+		}
+
+		// Found start of dirty span
+		spanStart := y
+		spanEnd := y
+		for spanEnd < h2 && h.dirtyLines[spanEnd] && (spanEnd-spanStart) < rowsPerReqLimit {
+			h.dirtyLines[spanEnd] = false // Reset dirty flag as we process it
+			spanEnd++
+		}
+
+		rows := uint16(spanEnd - spanStart)
+		data := bgra[spanStart*lineStride : spanEnd*lineStride]
 		xproto.PutImage(h.conn, xproto.ImageFormatZPixmap, xproto.Drawable(h.wid), h.gc,
-			uint16(w), 1, 0, int16(y), 0, 24, lineData)
+			uint16(w), rows, 0, int16(spanStart), 0, 24, data)
+		y = spanEnd
 	}
 }

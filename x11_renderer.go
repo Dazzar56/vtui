@@ -79,6 +79,15 @@ func (r *X11Renderer) Render(buf, shadow []CharInfo, w, h int, forceRedraw bool)
 				continue
 			}
 
+			// Mark scanlines as dirty for the host.
+			// Bounds check is required as X11 resize events are asynchronous.
+			for iy := 0; iy < ch; iy++ {
+				lineIdx := y*ch + iy
+				if lineIdx >= 0 && lineIdx < len(r.host.dirtyLines) {
+					r.host.dirtyLines[lineIdx] = true
+				}
+			}
+
 			cell := buf[idx]
 			px := x * cw
 			py := y * ch
@@ -103,11 +112,14 @@ func (r *X11Renderer) Render(buf, shadow []CharInfo, w, h int, forceRedraw bool)
 			if rw < 1 { rw = 1 }
 			drawW := cw * rw
 
-			// 3. Draw Background
-			bgColor := color.RGBA{R: uint8(bgRGB >> 16), G: uint8(bgRGB >> 8), B: uint8(bgRGB), A: 255}
+			// 3. Draw Background (Direct memory fill)
+			br, bg, bb := uint8(bgRGB>>16), uint8(bgRGB>>8), uint8(bgRGB)
+			bgColor := color.RGBA{R: br, G: bg, B: bb, A: 255}
 			for iy := 0; iy < ch; iy++ {
+				rowStart := ((py+iy)*img.Stride + px*4)
 				for ix := 0; ix < drawW; ix++ {
-					img.Set(px+ix, py+iy, bgColor)
+					off := rowStart + ix*4
+					img.Pix[off], img.Pix[off+1], img.Pix[off+2], img.Pix[off+3] = br, bg, bb, 255
 				}
 			}
 
@@ -126,10 +138,12 @@ func (r *X11Renderer) Render(buf, shadow []CharInfo, w, h int, forceRedraw bool)
 					thickness = 4
 				}
 				for iy := ch - thickness; iy < ch; iy++ {
+					rowStart := (py+iy)*img.Stride + px*4
 					for ix := 0; ix < cw; ix++ {
-						old := img.RGBAAt(px+ix, py+iy)
-						inv := color.RGBA{255 - old.R, 255 - old.G, 255 - old.B, 255}
-						img.SetRGBA(px+ix, py+iy, inv)
+						off := rowStart + ix*4
+						img.Pix[off] = 255 - img.Pix[off]
+						img.Pix[off+1] = 255 - img.Pix[off+1]
+						img.Pix[off+2] = 255 - img.Pix[off+2]
 					}
 				}
 			}
@@ -182,17 +196,22 @@ func (r *X11Renderer) drawCustomChar(img *image.RGBA, char rune, px, py, cw, ch 
 	my := py + ch/2
 	thick := r.host.scale
 
+	cr, cg, cb, _ := col.RGBA()
+	r8, g8, b8 := uint8(cr>>8), uint8(cg>>8), uint8(cb>>8)
+
 	drawHLine := func(x1, x2, y int) {
 		for x := x1; x <= x2; x++ {
 			for t := 0; t < thick; t++ {
-				img.Set(x, y+t, col)
+				off := (y+t)*img.Stride + x*4
+				img.Pix[off], img.Pix[off+1], img.Pix[off+2], img.Pix[off+3] = r8, g8, b8, 255
 			}
 		}
 	}
 	drawVLine := func(x, y1, y2 int) {
 		for y := y1; y <= y2; y++ {
 			for t := 0; t < thick; t++ {
-				img.Set(x+t, y, col)
+				off := y*img.Stride + (x+t)*4
+				img.Pix[off], img.Pix[off+1], img.Pix[off+2], img.Pix[off+3] = r8, g8, b8, 255
 			}
 		}
 	}
@@ -255,8 +274,10 @@ func (r *X11Renderer) drawCustomChar(img *image.RGBA, char rune, px, py, cw, ch 
 
 	case '█':
 		for y := py; y < py+ch; y++ {
-			for x := px; x < px+cw; x++ {
-				img.Set(x, y, col)
+			rowStart := y*img.Stride + px*4
+			for x := 0; x < cw; x++ {
+				off := rowStart + x*4
+				img.Pix[off], img.Pix[off+1], img.Pix[off+2], img.Pix[off+3] = r8, g8, b8, 255
 			}
 		}
 		return true
