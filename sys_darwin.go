@@ -4,12 +4,11 @@ package vtui
 
 import (
 	"os"
-	"os/exec"
+	"syscall"
 )
 
 func RedirectStderr(f *os.File) error {
-	// Standard Unix-like redirect via Dup2 works on Darwin
-	return os.NewSyscallError("dup2", nil) // Placeholder or implement via syscall
+	return syscall.Dup2(int(f.Fd()), 2)
 }
 
 func countOpenFDs() int {

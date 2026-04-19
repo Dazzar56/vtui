@@ -2,6 +2,10 @@
 
 package vtui
 
+//go:build !windows && !darwin
+
+package vtui
+
 import (
 	"os"
 	"golang.org/x/sys/unix"
