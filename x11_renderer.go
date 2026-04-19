@@ -5,6 +5,7 @@ package vtui
 import (
 	"image"
 	"image/color"
+	"time"
 
 	"github.com/mattn/go-runewidth"
 	"golang.org/x/image/font"
@@ -28,6 +29,10 @@ type X11Renderer struct {
 	cursorX    int
 	cursorY    int
 	cursorVis  bool
+
+	// Состояние для управления миганием и очистки "шлейфа"
+	oldCursorX int
+	oldCursorY int
 }
 
 func NewX11Renderer(host *X11Host, face font.Face) *X11Renderer {
@@ -52,17 +57,25 @@ func (r *X11Renderer) Render(buf, shadow []CharInfo, w, h int, forceRedraw bool)
 	r.host.mu.Lock()
 	defer r.host.mu.Unlock()
 
+	// Мигание на основе системного времени (период 1 сек: 500мс горит, 500мс нет)
+	blinkState := (time.Now().UnixNano() / int64(500*time.Millisecond)) % 2 == 0
+
 	r.w, r.h = w, h
 	img := r.host.imgBuf
 	cw, ch := r.host.cellW, r.host.cellH
 
-
 	for y := 0; y < h; y++ {
 		for x := 0; x < w; x++ {
 			idx := y*w + x
-			isCursorCell := (x == r.cursorX && y == r.cursorY && r.cursorVis)
 
-			if !forceRedraw && buf[idx] == shadow[idx] && !isCursorCell {
+			// Ячейка "грязная" если:
+			// 1. Изменился символ/цвет (стандартно)
+			// 2. Это новая позиция курсора (нужно инвертировать)
+			// 3. Это старая позиция курсора (нужно вернуть как было)
+			isCursorCell := (x == r.cursorX && y == r.cursorY && r.cursorVis && blinkState)
+			wasCursorCell := (x == r.oldCursorX && y == r.oldCursorY)
+
+			if !forceRedraw && buf[idx] == shadow[idx] && !isCursorCell && !wasCursorCell {
 				continue
 			}
 
@@ -106,9 +119,13 @@ func (r *X11Renderer) Render(buf, shadow []CharInfo, w, h int, forceRedraw bool)
 				}
 			}
 
-			// 5. Draw Cursor (Inverted Block)
+			// 5. Draw Cursor (Inverted Underline)
 			if isCursorCell {
-				for iy := 0; iy < ch; iy++ {
+				thickness := 2
+				if r.host.scale > 1 {
+					thickness = 4
+				}
+				for iy := ch - thickness; iy < ch; iy++ {
 					for ix := 0; ix < cw; ix++ {
 						old := img.RGBAAt(px+ix, py+iy)
 						inv := color.RGBA{255 - old.R, 255 - old.G, 255 - old.B, 255}
@@ -118,6 +135,8 @@ func (r *X11Renderer) Render(buf, shadow []CharInfo, w, h int, forceRedraw bool)
 			}
 		}
 	}
+	r.oldCursorX = r.cursorX
+	r.oldCursorY = r.cursorY
 }
 
 func (r *X11Renderer) drawCachedGlyph(img *image.RGBA, char rune, px, py, rw int, fg, bg uint32, fgCol, bgCol color.RGBA) {

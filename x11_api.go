@@ -17,7 +17,7 @@ import (
 
 // RunInX11Window is an alternative entry point for vtui.
 func RunInX11Window(cols, rows int, setupApp func()) error {
-	fontSize := 14.0
+	fontSize := 20.0
 	// Temporary host to detect DPI
 	tempConn, _ := xgb.NewConn()
 	dpi := 96.0

@@ -52,8 +52,12 @@ func NewX11Host(cols, rows, cellW, cellH int) (*X11Host, error) {
 	}
 
 	scale := 1
-	if dpi > 140 { scale = 2 }
-	if dpi > 230 { scale = 3 }
+	if dpi > 120 {
+		scale = 2
+	}
+	if dpi > 210 {
+		scale = 3
+	}
 
 	host := &X11Host{
 		conn:      conn,

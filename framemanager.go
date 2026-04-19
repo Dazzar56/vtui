@@ -789,6 +789,14 @@ func (fm *frameManager) Run(reader *vtinput.Reader) {
 	sigChan := make(chan os.Signal, 1)
 	watchResizeSignal(sigChan)
 
+	// Heartbeat for animations and cursor blinking
+	go func() {
+		for fm.running {
+			time.Sleep(250 * time.Millisecond)
+			fm.Redraw()
+		}
+	}()
+
 	// Terminal size polling (handles Windows and fallback for missed SIGWINCH)
 	sizeChan := make(chan struct{}, 1)
 	go func() {
