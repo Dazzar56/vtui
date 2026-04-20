@@ -331,6 +331,13 @@ func (h *X11Host) RunEventLoop() {
 
 			mods := h.translateModifiers(state, vk, isDown)
 
+			typeName := "PRESS"
+			if !isDown {
+				typeName = "RELEASE"
+			}
+			DebugLog("X11_KEY: %s code=%d state=0x%04x keysym=0x%04x vk=%s char=%q",
+				typeName, detail, state, keysym, vtinput.VKString(vk), char)
+
 			scancode := uint16(0)
 			if vk == vtinput.VK_RSHIFT {
 				scancode = vtinput.ScanCodeRightShift
