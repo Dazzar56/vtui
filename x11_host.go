@@ -101,6 +101,26 @@ func NewX11Host(cols, rows, cellW, cellH int) (*X11Host, error) {
 	xproto.ChangeProperty(conn, xproto.PropModeReplace, host.wid, xproto.AtomWmName,
 		xproto.AtomString, 8, uint32(len(title)), []byte(title))
 
+	// Set WM_CLASS for better WM compatibility (instance, class)
+	wmClassAtom, _ := xproto.InternAtom(conn, false, 8, "WM_CLASS").Reply()
+	if wmClassAtom != nil {
+		xproto.ChangeProperty(conn, xproto.PropModeReplace, host.wid, wmClassAtom.Atom,
+			xproto.AtomString, 8, 6, []byte("f4\x00f4\x00"))
+	}
+
+	// Request maximized state via EWMH before mapping the window
+	wmStateAtom, _ := xproto.InternAtom(conn, false, 13, "_NET_WM_STATE").Reply()
+	wmMaxVertAtom, _ := xproto.InternAtom(conn, false, 28, "_NET_WM_STATE_MAXIMIZED_VERT").Reply()
+	wmMaxHorzAtom, _ := xproto.InternAtom(conn, false, 28, "_NET_WM_STATE_MAXIMIZED_HORZ").Reply()
+
+	if wmStateAtom != nil && wmMaxVertAtom != nil && wmMaxHorzAtom != nil {
+		data := make([]byte, 8)
+		xgb.Put32(data, uint32(wmMaxVertAtom.Atom))
+		xgb.Put32(data[4:], uint32(wmMaxHorzAtom.Atom))
+		xproto.ChangeProperty(conn, xproto.PropModeReplace, host.wid, wmStateAtom.Atom,
+			xproto.AtomAtom, 32, 2, data)
+	}
+
 	// Create GC
 	host.gc, err = xproto.NewGcontextId(conn)
 	if err == nil {
@@ -112,7 +132,6 @@ func NewX11Host(cols, rows, cellW, cellH int) (*X11Host, error) {
 	// Create backing image buffer
 	host.imgBuf = image.NewRGBA(image.Rect(0, 0, int(host.width), int(host.height)))
 
-	xproto.MapWindow(conn, host.wid)
 
 	// Fetch keyboard mapping
 	host.minKeyCode = setup.MinKeycode
@@ -124,7 +143,6 @@ func NewX11Host(cols, rows, cellW, cellH int) (*X11Host, error) {
 		host.keysPerCode = kmReply.KeysymsPerKeycode
 	}
 
-	xproto.MapWindow(conn, host.wid)
 
 	// Intern WM_DELETE_WINDOW atom
 	protocolsAtom, _ := xproto.InternAtom(conn, false, 12, "WM_PROTOCOLS").Reply()
