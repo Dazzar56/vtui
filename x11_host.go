@@ -141,6 +141,21 @@ func NewX11Host(cols, rows, cellW, cellH int) (*X11Host, error) {
 func (h *X11Host) translateModifiers(state uint16, vk uint16, isDown bool) vtinput.ControlKeyState {
 	var mods vtinput.ControlKeyState
 
+	// Sync internal state with X11 state bitmask to prevent "stuck" modifiers
+	// (happens if Release event is swallowed by system shortcuts)
+	if state&xproto.ModMaskControl == 0 {
+		h.lCtrl = false
+		h.rCtrl = false
+	}
+	if state&xproto.ModMask1 == 0 {
+		h.lAlt = false
+		h.rAlt = false
+	}
+	if state&xproto.ModMaskShift == 0 {
+		h.lShift = false
+		h.rShift = false
+	}
+
 	if h.lCtrl { mods |= vtinput.LeftCtrlPressed }
 	if h.rCtrl { mods |= vtinput.RightCtrlPressed | vtinput.EnhancedKey }
 	if h.lAlt { mods |= vtinput.LeftAltPressed }
@@ -178,39 +193,38 @@ func (h *X11Host) getKeysym(detail xproto.Keycode, state uint16) xproto.Keysym {
 	if h.keyMap == nil {
 		return 0
 	}
-	idx := int(detail-h.minKeyCode) * int(h.keysPerCode)
-	if idx < 0 || idx >= len(h.keyMap) {
+	baseIdx := int(detail-h.minKeyCode) * int(h.keysPerCode)
+	if baseIdx < 0 || baseIdx >= len(h.keyMap) {
 		return 0
 	}
 
-	symBase := h.keyMap[idx]
 	shift := state&xproto.ModMaskShift != 0
-	numLock := state&xproto.ModMask2 != 0
+	//numLock := state&xproto.ModMask2 != 0
 
-	isKeypad := false
-	for i := 0; i < int(h.keysPerCode); i++ {
-		s := h.keyMap[idx+i]
-		if s >= 0xFF80 && s <= 0xFFBD {
-			isKeypad = true
-			break
-		}
+	// Extract XKB Group (Layout)
+	group := (state >> 13) & 0x03
+	// Heuristic: Mod5 (0x80) often indicates secondary layout if XKB group bits are not set
+	if group == 0 && state&xproto.ModMask5 != 0 && h.keysPerCode > 2 {
+		group = 1
 	}
 
-	col := 0
-	if isKeypad {
-		if shift != numLock {
-			col = 1
-		}
-	} else {
-		if shift {
-			col = 1
-		}
+	col := int(group) * 2
+	if shift {
+		col += 1
 	}
 
-	if col < int(h.keysPerCode) && h.keyMap[idx+col] != 0 {
-		return h.keyMap[idx+col]
+	// Safety: if group column exceeds available mapping, fallback to first group
+	if col >= int(h.keysPerCode) {
+		col = col % 2
 	}
-	return symBase
+
+	sym := h.keyMap[baseIdx+col]
+	if sym == 0 && col > 0 {
+		// Fallback to base keysym if specific column is empty
+		sym = h.keyMap[baseIdx]
+	}
+
+	return sym
 }
 
 func (h *X11Host) Close() {
@@ -294,6 +308,9 @@ func (h *X11Host) RunEventLoop() {
 			char := rune(0)
 			if keysym < 0x80 && keysym >= 0x20 {
 				char = rune(keysym)
+			} else if keysym >= 0x01000000 && keysym <= 0x01ffffff {
+				// Keysym is a direct Unicode point
+				char = rune(keysym & 0xffffff)
 			} else if keysym >= 0xffb0 && keysym <= 0xffb9 {
 				// Numpad digits 0-9
 				char = rune('0' + (keysym - 0xffb0))
