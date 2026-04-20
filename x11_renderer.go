@@ -146,9 +146,13 @@ func (r *X11Renderer) Render(buf, shadow []CharInfo, w, h int, forceRedraw bool)
 					copy(img.Pix[baseOff+n:baseOff+maxBytes], img.Pix[baseOff:baseOff+n])
 				}
 				for iy := 1; iy < ch; iy++ {
-					if py+iy >= int(r.host.height) { break }
+					if py+iy >= int(r.host.height) {
+						break
+					}
 					lineOff := (py+iy)*img.Stride + px*4
-					copy(img.Pix[lineOff:lineOff+maxBytes], img.Pix[baseOff:baseOff+maxBytes])
+					if lineOff+maxBytes <= len(img.Pix) {
+						copy(img.Pix[lineOff:lineOff+maxBytes], img.Pix[baseOff:baseOff+maxBytes])
+					}
 				}
 			}
 
@@ -181,14 +185,26 @@ func (r *X11Renderer) Render(buf, shadow []CharInfo, w, h int, forceRedraw bool)
 				// 4. Курсор
 				if currX == r.cursorX && y == r.cursorY && r.cursorVis && blinkState {
 					thickness := 2
-					if r.host.scale > 1 { thickness = 4 }
+					if r.host.scale > 1 {
+						thickness = 4
+					}
 					for iy := ch - thickness; iy < ch; iy++ {
-						rowStart := (py+iy)*img.Stride + cpx*4
+						pixelY := py + iy
+						if pixelY < 0 || pixelY >= img.Rect.Max.Y {
+							continue
+						}
+						rowStart := pixelY * img.Stride
 						for ix := 0; ix < cw; ix++ {
-							off := rowStart + ix*4
-							img.Pix[off] = 255 - img.Pix[off]
-							img.Pix[off+1] = 255 - img.Pix[off+1]
-							img.Pix[off+2] = 255 - img.Pix[off+2]
+							pixelX := cpx + ix
+							if pixelX < 0 || pixelX >= img.Rect.Max.X {
+								continue
+							}
+							off := rowStart + pixelX*4
+							if off+2 < len(img.Pix) {
+								img.Pix[off] = 255 - img.Pix[off]
+								img.Pix[off+1] = 255 - img.Pix[off+1]
+								img.Pix[off+2] = 255 - img.Pix[off+2]
+							}
 						}
 					}
 				}
@@ -240,10 +256,15 @@ func (r *X11Renderer) drawCachedGlyph(img *image.RGBA, char rune, px, py, rw int
 		r.glyphCache[key] = cached
 	}
 	for iy := 0; iy < ch; iy++ {
+		if py+iy >= int(r.host.height) {
+			break
+		}
 		dstOff := (py+iy)*img.Stride + px*4
 		srcOff := iy * cached.Stride
-		// Прямое копирование строки пикселей из кэша глифа в основной буфер кадра
-		copy(img.Pix[dstOff:dstOff+drawW*4], cached.Pix[srcOff:srcOff+drawW*4])
+		if dstOff+drawW*4 <= len(img.Pix) {
+			// Прямое копирование строки пикселей из кэша глифа в основной буфер кадра
+			copy(img.Pix[dstOff:dstOff+drawW*4], cached.Pix[srcOff:srcOff+drawW*4])
+		}
 	}
 }
 
@@ -292,17 +313,33 @@ func (r *X11Renderer) drawCustomChar(img *image.RGBA, char rune, px, py, cw, ch 
 
 	drawHLine := func(x1, x2, y int) {
 		for x := x1; x <= x2; x++ {
+			if x < 0 || x >= int(r.host.width) {
+				continue
+			}
 			for t := 0; t < thick; t++ {
+				if y+t < 0 || y+t >= int(r.host.height) {
+					continue
+				}
 				off := (y+t)*img.Stride + x*4
-				img.Pix[off], img.Pix[off+1], img.Pix[off+2], img.Pix[off+3] = r8, g8, b8, 255
+				if off+3 < len(img.Pix) {
+					img.Pix[off], img.Pix[off+1], img.Pix[off+2], img.Pix[off+3] = r8, g8, b8, 255
+				}
 			}
 		}
 	}
 	drawVLine := func(x, y1, y2 int) {
 		for y := y1; y <= y2; y++ {
+			if y < 0 || y >= int(r.host.height) {
+				continue
+			}
 			for t := 0; t < thick; t++ {
+				if x+t < 0 || x+t >= int(r.host.width) {
+					continue
+				}
 				off := y*img.Stride + (x+t)*4
-				img.Pix[off], img.Pix[off+1], img.Pix[off+2], img.Pix[off+3] = r8, g8, b8, 255
+				if off+3 < len(img.Pix) {
+					img.Pix[off], img.Pix[off+1], img.Pix[off+2], img.Pix[off+3] = r8, g8, b8, 255
+				}
 			}
 		}
 	}
