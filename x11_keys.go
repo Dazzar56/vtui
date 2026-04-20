@@ -30,15 +30,18 @@ var x11KeysymToVK = map[uint32]uint16{
 	0xffc7: vtinput.VK_F10,
 	0xffc8: vtinput.VK_F11,
 	0xffc9: vtinput.VK_F12,
-	0xffeb: vtinput.VK_LWIN,    // Left Super/Win
-	0xffec: vtinput.VK_RWIN,    // Right Super/Win
-	0xff67: vtinput.VK_APPS,    // Menu key
+	0xffeb: vtinput.VK_LWIN,     // Left Super/Win
+	0xffec: vtinput.VK_RWIN,     // Right Super/Win
+	0xff67: vtinput.VK_APPS,     // Menu key
 	0xffe1: vtinput.VK_LSHIFT,   // Left Shift
 	0xffe2: vtinput.VK_RSHIFT,   // Right Shift
 	0xffe3: vtinput.VK_LCONTROL, // Left Ctrl
 	0xffe4: vtinput.VK_RCONTROL, // Right Ctrl
+	0xffe5: vtinput.VK_CAPITAL,  // Caps Lock
 	0xffe9: vtinput.VK_LMENU,    // Left Alt
 	0xffea: vtinput.VK_RMENU,    // Right Alt
+	0xff7f: vtinput.VK_NUMLOCK,  // Num Lock
+	0xff14: vtinput.VK_SCROLL,   // Scroll Lock
 	0x0020: vtinput.VK_SPACE,
 
 	// Numpad (Keysyms range 0xff80 - 0xffaf)

@@ -164,6 +164,9 @@ func (h *X11Host) translateModifiers(state uint16, vk uint16, isDown bool) vtinp
 		mods |= vtinput.LeftAltPressed
 	}
 
+	if state&xproto.ModMaskLock != 0 { // CapsLock
+		mods |= vtinput.CapsLockOn
+	}
 	if state&xproto.ModMask2 != 0 { // Usually NumLock
 		mods |= vtinput.NumLockOn
 	}
@@ -171,7 +174,7 @@ func (h *X11Host) translateModifiers(state uint16, vk uint16, isDown bool) vtinp
 	return mods
 }
 
-func (h *X11Host) getKeysym(detail xproto.Keycode) xproto.Keysym {
+func (h *X11Host) getKeysym(detail xproto.Keycode, state uint16) xproto.Keysym {
 	if h.keyMap == nil {
 		return 0
 	}
@@ -179,7 +182,35 @@ func (h *X11Host) getKeysym(detail xproto.Keycode) xproto.Keysym {
 	if idx < 0 || idx >= len(h.keyMap) {
 		return 0
 	}
-	return h.keyMap[idx]
+
+	symBase := h.keyMap[idx]
+	shift := state&xproto.ModMaskShift != 0
+	numLock := state&xproto.ModMask2 != 0
+
+	isKeypad := false
+	for i := 0; i < int(h.keysPerCode); i++ {
+		s := h.keyMap[idx+i]
+		if s >= 0xFF80 && s <= 0xFFBD {
+			isKeypad = true
+			break
+		}
+	}
+
+	col := 0
+	if isKeypad {
+		if shift != numLock {
+			col = 1
+		}
+	} else {
+		if shift {
+			col = 1
+		}
+	}
+
+	if col < int(h.keysPerCode) && h.keyMap[idx+col] != 0 {
+		return h.keyMap[idx+col]
+	}
+	return symBase
 }
 
 func (h *X11Host) Close() {
@@ -252,8 +283,14 @@ func (h *X11Host) RunEventLoop() {
 				detail, state, isDown = kr.Detail, kr.State, false
 			}
 
-			keysym := h.getKeysym(detail)
+			keysym := h.getKeysym(detail, state)
+			baseKeysym := h.getKeysym(detail, 0)
+			
 			vk := keysymToVK(uint32(keysym))
+			if vk == 0 {
+				vk = keysymToVK(uint32(baseKeysym))
+			}
+
 			char := rune(0)
 			if keysym < 0x80 && keysym >= 0x20 {
 				char = rune(keysym)
