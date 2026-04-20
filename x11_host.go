@@ -32,8 +32,11 @@ type X11Host struct {
 	keyMap       []xproto.Keysym
 	keysPerCode  byte
 	minKeyCode   xproto.Keycode
-	atomDelete   xproto.Atom
-	dirtyLines   []bool
+	atomDelete     xproto.Atom
+	dirtyLines     []bool
+	lCtrl, rCtrl   bool
+	lAlt, rAlt     bool
+	lShift, rShift bool
 }
 
 func NewX11Host(cols, rows, cellW, cellH int) (*X11Host, error) {
@@ -135,20 +138,36 @@ func NewX11Host(cols, rows, cellW, cellH int) (*X11Host, error) {
 	return host, nil
 }
 
-func (h *X11Host) translateModifiers(state uint16) vtinput.ControlKeyState {
+func (h *X11Host) translateModifiers(state uint16, vk uint16, isDown bool) vtinput.ControlKeyState {
 	var mods vtinput.ControlKeyState
-	if state&xproto.ModMaskShift != 0 {
+
+	if h.lCtrl { mods |= vtinput.LeftCtrlPressed }
+	if h.rCtrl { mods |= vtinput.RightCtrlPressed | vtinput.EnhancedKey }
+	if h.lAlt { mods |= vtinput.LeftAltPressed }
+	if h.rAlt { mods |= vtinput.RightAltPressed | vtinput.EnhancedKey }
+	if h.lShift || h.rShift { mods |= vtinput.ShiftPressed }
+
+	// Fallbacks for desync (e.g. window lost focus during key release).
+	// Only apply fallback if we are NOT actively releasing a key of this category.
+	isReleasingShift := !isDown && (vk == vtinput.VK_LSHIFT || vk == vtinput.VK_RSHIFT)
+	if state&xproto.ModMaskShift != 0 && !h.lShift && !h.rShift && !isReleasingShift {
 		mods |= vtinput.ShiftPressed
 	}
-	if state&xproto.ModMaskControl != 0 {
+
+	isReleasingCtrl := !isDown && (vk == vtinput.VK_LCONTROL || vk == vtinput.VK_RCONTROL)
+	if state&xproto.ModMaskControl != 0 && !h.lCtrl && !h.rCtrl && !isReleasingCtrl {
 		mods |= vtinput.LeftCtrlPressed
 	}
-	if state&xproto.ModMask1 != 0 { // Usually Alt
+
+	isReleasingAlt := !isDown && (vk == vtinput.VK_LMENU || vk == vtinput.VK_RMENU)
+	if state&xproto.ModMask1 != 0 && !h.lAlt && !h.rAlt && !isReleasingAlt { // Usually Alt
 		mods |= vtinput.LeftAltPressed
 	}
+
 	if state&xproto.ModMask2 != 0 { // Usually NumLock
 		mods |= vtinput.NumLockOn
 	}
+
 	return mods
 }
 
@@ -253,12 +272,42 @@ func (h *X11Host) RunEventLoop() {
 				}
 			}
 
+			if isDown {
+				switch vk {
+				case vtinput.VK_LCONTROL: h.lCtrl = true
+				case vtinput.VK_RCONTROL: h.rCtrl = true
+				case vtinput.VK_LMENU:    h.lAlt = true
+				case vtinput.VK_RMENU:    h.rAlt = true
+				case vtinput.VK_LSHIFT:   h.lShift = true
+				case vtinput.VK_RSHIFT:   h.rShift = true
+				}
+			} else {
+				switch vk {
+				case vtinput.VK_LCONTROL: h.lCtrl = false
+				case vtinput.VK_RCONTROL: h.rCtrl = false
+				case vtinput.VK_LMENU:    h.lAlt = false
+				case vtinput.VK_RMENU:    h.rAlt = false
+				case vtinput.VK_LSHIFT:   h.lShift = false
+				case vtinput.VK_RSHIFT:   h.rShift = false
+				}
+			}
+
+			mods := h.translateModifiers(state, vk, isDown)
+
+			scancode := uint16(0)
+			if vk == vtinput.VK_RSHIFT {
+				scancode = vtinput.ScanCodeRightShift
+			} else if vk == vtinput.VK_LSHIFT {
+				scancode = vtinput.ScanCodeLeftShift
+			}
+
 			h.reader.NativeEventChan <- &vtinput.InputEvent{
 				Type:            vtinput.KeyEventType,
 				KeyDown:         isDown,
 				VirtualKeyCode:  vk,
+				VirtualScanCode: scancode,
 				Char:            char,
-				ControlKeyState: h.translateModifiers(state),
+				ControlKeyState: mods,
 				InputSource:     "x11",
 			}
 
@@ -282,7 +331,7 @@ func (h *X11Host) RunEventLoop() {
 				MouseX:          uint16(int(bx) / h.cellW),
 				MouseY:          uint16(int(by) / h.cellH),
 				KeyDown:         isDown,
-				ControlKeyState: h.translateModifiers(state),
+				ControlKeyState: h.translateModifiers(state, 0, false),
 				InputSource:     "x11",
 			}
 
@@ -317,7 +366,7 @@ func (h *X11Host) RunEventLoop() {
 				MouseX:          uint16(int(e.EventX) / h.cellW),
 				MouseY:          uint16(int(e.EventY) / h.cellH),
 				MouseEventFlags: vtinput.MouseMoved,
-				ControlKeyState: h.translateModifiers(e.State),
+				ControlKeyState: h.translateModifiers(e.State, 0, false),
 				InputSource:     "x11",
 			}
 
