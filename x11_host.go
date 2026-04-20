@@ -305,24 +305,16 @@ func (h *X11Host) RunEventLoop() {
 				vk = keysymToVK(uint32(baseKeysym))
 			}
 
-			char := rune(0)
-			if keysym < 0x80 && keysym >= 0x20 {
-				char = rune(keysym)
-			} else if keysym >= 0x01000000 && keysym <= 0x01ffffff {
-				// Keysym is a direct Unicode point
-				char = rune(keysym & 0xffffff)
-			} else if keysym >= 0xffb0 && keysym <= 0xffb9 {
-				// Numpad digits 0-9
-				char = rune('0' + (keysym - 0xffb0))
-			} else {
-				// Special characters from Numpad
+			char := keysymToRune(uint32(keysym))
+
+			// Heuristic: if we got a control keysym (like Return) but it's used with Alt,
+			// some apps might expect the ASCII char equivalent in the event.
+			if char == 0 {
 				switch keysym {
-				case 0xffaa: char = '*'
-				case 0xffab: char = '+'
-				case 0xffad: char = '-'
-				case 0xffae: char = '.'
-				case 0xffaf: char = '/'
-				case 0xff8d: char = '\r'
+				case 0xff0d, 0xff8d: char = '\r'
+				case 0xff09, 0xff89: char = '\t'
+				case 0xff08: char = '\b'
+				case 0xff1b: char = 27
 				}
 			}
 

@@ -78,6 +78,28 @@ var x11KeysymToVK = map[uint32]uint16{
 	0xff9f: vtinput.VK_DELETE,
 }
 
+// x11KeysymToRune содержит сопоставление кейсимов и символов Unicode.
+// Карта инициализируется здесь и наполняется автоматически в x11_keysym_map_generated.go
+var x11KeysymToRune = make(map[uint32]rune)
+func keysymToRune(keysym uint32) rune {
+	// 1. Прямое соответствие Unicode (0x0100XXXX)
+	if keysym >= 0x01000000 && keysym <= 0x01ffffff {
+		return rune(keysym & 0xffffff)
+	}
+
+	// 2. Латиница и ASCII (0x0020 - 0x007e)
+	if keysym >= 0x0020 && keysym <= 0x007e {
+		return rune(keysym)
+	}
+
+	// 3. Таблица из хедеров (генерируемая)
+	if r, ok := x11KeysymToRune[keysym]; ok {
+		return r
+	}
+
+	return 0
+}
+
 func keysymToVK(keysym uint32) uint16 {
 	// 1. Прямой маппинг спецклавиш
 	if vk, ok := x11KeysymToVK[keysym]; ok {
