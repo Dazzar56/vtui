@@ -70,20 +70,29 @@ func Resume() error {
 	termMu.Lock()
 	defer termMu.Unlock()
 	if !isPrepared {
-		// Mockable in tests
+		out := getTermOut()
+
+		// 1. Enter AltScreen FIRST. Many terminals (like Kitty) reset
+		// their keyboard protocol state when switching screen buffers.
+		if !inAltScreen {
+			out.WriteString(seqAltScreenOn)
+			inAltScreen = true
+		}
+		out.Sync()
+
+		// 2. Enable advanced input protocols AFTER entering AltScreen.
 		r, err := vtinput.Enable()
 		if err != nil {
+			// Rollback AltScreen if input setup failed
+			out.WriteString(seqAltScreenOff)
+			inAltScreen = false
+			out.Sync()
 			return err
 		}
 		inputRestore = r
 
-		out := getTermOut()
 		if ManageCursorStyle {
 			out.WriteString(seqBlinkingUnderline)
-		}
-		if !inAltScreen {
-			out.WriteString(seqAltScreenOn)
-			inAltScreen = true
 		}
 		out.Sync()
 		isPrepared = true
