@@ -52,6 +52,13 @@ func RunInX11Window(cols, rows int, setupApp func()) error {
 	}
 	host.reader = reader
 
+	// Override global terminal size source to use X11 window metrics
+	GetTerminalSize = func() (int, int, error) {
+		host.mu.Lock()
+		defer host.mu.Unlock()
+		return host.cols, host.rows, nil
+	}
+
 	go host.RunEventLoop()
 	setupApp()
 	FrameManager.Run(reader)

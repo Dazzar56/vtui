@@ -29,6 +29,7 @@ type X11Host struct {
 	imgBuf       *image.RGBA
 	bgraBuf      []byte
 	reader       *vtinput.Reader
+	cols, rows   int
 	closeChan    chan struct{}
 	keyMap       []xproto.Keysym
 	keysPerCode  byte
@@ -70,6 +71,8 @@ func NewX11Host(cols, rows, cellW, cellH int) (*X11Host, error) {
 		cellW:     cellW,
 		cellH:      cellH,
 		scale:      scale,
+		cols:      cols,
+		rows:      rows,
 		width:      uint16(cols * cellW),
 		height:     uint16(rows * cellH),
 		closeChan:  make(chan struct{}),
@@ -255,9 +258,16 @@ func (h *X11Host) RunEventLoop() {
 			}
 		case xproto.ConfigureNotifyEvent:
 			if e.Width != h.width || e.Height != h.height {
+				newCols := int(e.Width) / h.cellW
+				newRows := int(e.Height) / h.cellH
+				if newCols < 1 { newCols = 1 }
+				if newRows < 1 { newRows = 1 }
+
 				h.mu.Lock()
 				h.width = e.Width
 				h.height = e.Height
+				h.cols = newCols
+				h.rows = newRows
 				h.imgBuf = image.NewRGBA(image.Rect(0, 0, int(h.width), int(h.height)))
 				h.dirtyLines = make([]bool, int(e.Height))
 				for i := range h.dirtyLines {
@@ -265,23 +275,11 @@ func (h *X11Host) RunEventLoop() {
 				}
 				h.mu.Unlock()
 
-				cols := int(e.Width) / h.cellW
-				rows := int(e.Height) / h.cellH
-
 				if h.reader != nil && h.reader.NativeEventChan != nil {
 					h.reader.NativeEventChan <- &vtinput.InputEvent{
 						Type:        vtinput.ResizeEventType,
 						InputSource: "x11",
 					}
-				}
-				if FrameManager != nil && FrameManager.scr != nil {
-					FrameManager.scr.AllocBuf(cols, rows)
-					for _, s := range FrameManager.Screens {
-						for _, f := range s.Frames {
-							f.ResizeConsole(cols, rows)
-						}
-					}
-					FrameManager.Redraw()
 				}
 			}
 

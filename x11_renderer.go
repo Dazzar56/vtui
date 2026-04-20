@@ -116,10 +116,15 @@ func (r *X11Renderer) Render(buf, shadow []CharInfo, w, h int, forceRedraw bool)
 			br, bg, bb := uint8(bgRGB>>16), uint8(bgRGB>>8), uint8(bgRGB)
 			bgColor := color.RGBA{R: br, G: bg, B: bb, A: 255}
 			for iy := 0; iy < ch; iy++ {
+				// Safety: skip if we're drawing outside the current physical buffer (possible during rapid resize)
+				if py+iy >= int(r.host.height) { break }
 				rowStart := ((py+iy)*img.Stride + px*4)
 				for ix := 0; ix < drawW; ix++ {
+					if px+ix >= int(r.host.width) { break }
 					off := rowStart + ix*4
-					img.Pix[off], img.Pix[off+1], img.Pix[off+2], img.Pix[off+3] = br, bg, bb, 255
+					if off+3 < len(img.Pix) {
+						img.Pix[off], img.Pix[off+1], img.Pix[off+2], img.Pix[off+3] = br, bg, bb, 255
+					}
 				}
 			}
 
