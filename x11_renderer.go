@@ -166,9 +166,15 @@ func (r *X11Renderer) drawCachedGlyph(img *image.RGBA, char rune, px, py, rw int
 	drawW := cw * rw
 	if !ok {
 		cached = image.NewRGBA(image.Rect(0, 0, drawW, ch))
+
 		for iy := 0; iy < ch; iy++ {
 			for ix := 0; ix < drawW; ix++ {
-				cached.Set(ix, iy, bgCol)
+				// Оптимизированное заполнение фона при создании нового глифа в кэше
+				off := iy*cached.Stride + ix*4
+				cached.Pix[off] = bgCol.R
+				cached.Pix[off+1] = bgCol.G
+				cached.Pix[off+2] = bgCol.B
+				cached.Pix[off+3] = 255
 			}
 		}
 
@@ -184,9 +190,10 @@ func (r *X11Renderer) drawCachedGlyph(img *image.RGBA, char rune, px, py, rw int
 	}
 
 	for iy := 0; iy < ch; iy++ {
-		for ix := 0; ix < drawW; ix++ {
-			img.Set(px+ix, py+iy, cached.At(ix, iy))
-		}
+		dstOff := (py+iy)*img.Stride + px*4
+		srcOff := iy * cached.Stride
+		// Прямое копирование строки пикселей из кэша глифа в основной буфер кадра
+		copy(img.Pix[dstOff:dstOff+drawW*4], cached.Pix[srcOff:srcOff+drawW*4])
 	}
 }
 
