@@ -6,6 +6,7 @@ import (
 	"image"
 	"sync"
 	"fmt"
+	"unicode"
 
 	"github.com/BurntSushi/xgb"
 	"github.com/BurntSushi/xgb/xproto"
@@ -339,6 +340,17 @@ func (h *X11Host) RunEventLoop() {
 			}
 
 			mods := h.translateModifiers(state, vk, isDown)
+
+			// Universal CapsLock + Shift logic for alphabetical characters
+			if unicode.IsLetter(char) {
+				shift := mods.Contains(vtinput.ShiftPressed)
+				caps := mods.Contains(vtinput.CapsLockOn)
+				if shift != caps {
+					char = unicode.ToUpper(char)
+				} else {
+					char = unicode.ToLower(char)
+				}
+			}
 
 			typeName := "PRESS"
 			if !isDown {
