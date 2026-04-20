@@ -17,6 +17,7 @@ import (
 type glyphKey struct {
 	r  rune
 	fg uint32
+	bg uint32
 	w  int
 }
 
@@ -113,9 +114,11 @@ func (r *X11Renderer) Render(buf, shadow []CharInfo, w, h int, forceRedraw bool)
 
 			// 3. Draw Background (Direct memory fill)
 			br, bg, bb := uint8(bgRGB>>16), uint8(bgRGB>>8), uint8(bgRGB)
+			bgColor := color.RGBA{R: br, G: bg, B: bb, A: 255}
 			for iy := 0; iy < ch; iy++ {
+				// Safety: skip if we're drawing outside the current physical buffer (possible during rapid resize)
 				if py+iy >= int(r.host.height) { break }
-				rowStart := ((py + iy) * img.Stride) + (px * 4)
+				rowStart := ((py+iy)*img.Stride + px*4)
 				for ix := 0; ix < drawW; ix++ {
 					if px+ix >= int(r.host.width) { break }
 					off := rowStart + ix*4
@@ -125,10 +128,9 @@ func (r *X11Renderer) Render(buf, shadow []CharInfo, w, h int, forceRedraw bool)
 				}
 			}
 
-			// 4. Draw Character on top of the background
+			// 4. Draw Character
 			if char != 0 && char != ' ' {
 				fgColor := color.RGBA{R: uint8(fgRGB >> 16), G: uint8(fgRGB >> 8), B: uint8(fgRGB), A: 255}
-				bgColor := color.RGBA{R: br, G: bg, B: bb, A: 255}
 				if !r.drawCustomChar(img, char, px, py, cw, ch, fgColor) {
 					r.drawCachedGlyph(img, char, px, py, rw, fgRGB, bgRGB, fgColor, bgColor)
 				}
@@ -156,68 +158,34 @@ func (r *X11Renderer) Render(buf, shadow []CharInfo, w, h int, forceRedraw bool)
 	r.oldCursorY = r.cursorY
 }
 
-func (r *X11Renderer) drawCachedGlyph(img *image.RGBA, char rune, px, py, rw int, fg, bg uint32, fgCol, bgCol color.Color) {
-	key := glyphKey{char, fg, rw}
+func (r *X11Renderer) drawCachedGlyph(img *image.RGBA, char rune, px, py, rw int, fg, bg uint32, fgCol, bgCol color.RGBA) {
+	key := glyphKey{char, fg, bg, rw}
 	cached, ok := r.glyphCache[key]
 
 	cw, ch := r.host.cellW, r.host.cellH
 	drawW := cw * rw
 	if !ok {
-		// Cache miss: render the glyph on its background to enable subpixel antialiasing.
-		glyphImg := image.NewRGBA(image.Rect(0, 0, drawW, ch))
-
-		// 1. Fill with the current background color.
-		br, bg, bb, _ := bgCol.RGBA()
-		br8, bg8, bb8 := uint8(br>>8), uint8(bg>>8), uint8(bb>>8)
-		for i := 0; i < len(glyphImg.Pix); i += 4 {
-			glyphImg.Pix[i] = br8
-			glyphImg.Pix[i+1] = bg8
-			glyphImg.Pix[i+2] = bb8
-			glyphImg.Pix[i+3] = 255
+		cached = image.NewRGBA(image.Rect(0, 0, drawW, ch))
+		for iy := 0; iy < ch; iy++ {
+			for ix := 0; ix < drawW; ix++ {
+				cached.Set(ix, iy, bgCol)
+			}
 		}
 
-		// 2. Draw the character on top of the solid background.
 		metrics := r.face.Metrics()
 		d := &font.Drawer{
-			Dst:  glyphImg,
+			Dst:  cached,
 			Src:  image.NewUniform(fgCol),
 			Face: r.face,
 			Dot:  fixed.Point26_6{X: fixed.I(0), Y: metrics.Ascent},
 		}
 		d.DrawString(string(char))
-
-		// 3. "Cut out" the character by making the background transparent.
-		for i := 0; i < len(glyphImg.Pix); i += 4 {
-			if glyphImg.Pix[i] == br8 && glyphImg.Pix[i+1] == bg8 && glyphImg.Pix[i+2] == bb8 {
-				glyphImg.Pix[i+3] = 0 // Set Alpha to 0 (transparent)
-			}
-		}
-
-		cached = glyphImg
 		r.glyphCache[key] = cached
 	}
 
-	// Composite the cached transparent glyph over the main buffer.
 	for iy := 0; iy < ch; iy++ {
-		if py+iy >= int(r.host.height) { continue }
 		for ix := 0; ix < drawW; ix++ {
-			if px+ix >= int(r.host.width) { break }
-
-			glyphOff := (iy*cached.Stride + ix*4)
-			if glyphOff+3 >= len(cached.Pix) { continue }
-			alpha := cached.Pix[glyphOff+3]
-
-			if alpha == 0 {
-				continue // Skip transparent pixels
-			}
-
-			imgOff := ((py+iy)*img.Stride + (px+ix)*4)
-			if imgOff+3 >= len(img.Pix) { continue }
-
-			// Direct copy since alpha is 255 for non-background pixels
-			img.Pix[imgOff]   = cached.Pix[glyphOff]
-			img.Pix[imgOff+1] = cached.Pix[glyphOff+1]
-			img.Pix[imgOff+2] = cached.Pix[glyphOff+2]
+			img.Set(px+ix, py+iy, cached.At(ix, iy))
 		}
 	}
 }
