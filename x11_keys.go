@@ -43,6 +43,28 @@ var x11KeysymToVK = map[uint32]uint16{
 	0xff7f: vtinput.VK_NUMLOCK,  // Num Lock
 	0xff14: vtinput.VK_SCROLL,   // Scroll Lock
 	0x0020: vtinput.VK_SPACE,
+	0x002b: vtinput.VK_OEM_PLUS,   // +
+	0x003d: vtinput.VK_OEM_PLUS,   // =
+	0x002d: vtinput.VK_OEM_MINUS,  // -
+	0x005f: vtinput.VK_OEM_MINUS,  // _
+	0x005b: vtinput.VK_OEM_4,      // [
+	0x007b: vtinput.VK_OEM_4,      // {
+	0x005d: vtinput.VK_OEM_6,      // ]
+	0x007d: vtinput.VK_OEM_6,      // }
+	0x003b: vtinput.VK_OEM_1,      // ;
+	0x003a: vtinput.VK_OEM_1,      // :
+	0x0027: vtinput.VK_OEM_7,      // '
+	0x0022: vtinput.VK_OEM_7,      // "
+	0x002c: vtinput.VK_OEM_COMMA,  // ,
+	0x003c: vtinput.VK_OEM_COMMA,  // <
+	0x002e: vtinput.VK_OEM_PERIOD, // .
+	0x003e: vtinput.VK_OEM_PERIOD, // >
+	0x002f: vtinput.VK_OEM_2,      // /
+	0x003f: vtinput.VK_OEM_2,      // ?
+	0x005c: vtinput.VK_OEM_5,      // \
+	0x007c: vtinput.VK_OEM_5,      // |
+	0x0060: vtinput.VK_OEM_3,      // `
+	0x007e: vtinput.VK_OEM_3,      // ~
 
 	// Numpad (Keysyms range 0xff80 - 0xffaf)
 	0xff8d: vtinput.VK_RETURN,   // KP_Enter
