@@ -480,16 +480,19 @@ func (h *X11Host) flushImage() int {
 	pix := h.imgBuf.Pix
 	lineStride := w * 4
 
-	// Проверяем, есть ли вообще изменения
-	anyDirty := false
+	// Находим первую и последнюю измененные строки (Bounding Box по Y)
+	minY := -1
+	maxY := -1
 	for y := 0; y < h2; y++ {
 		if h.dirtyLines[y] {
-			anyDirty = true
-			break
+			if minY == -1 {
+				minY = y
+			}
+			maxY = y
 		}
 	}
 
-	if !anyDirty {
+	if minY == -1 {
 		return 0
 	}
 
@@ -500,27 +503,26 @@ func (h *X11Host) flushImage() int {
 		rowsPerReqLimit = 1
 	}
 
-	for y := 0; y < h2; {
-		if !h.dirtyLines[y] {
-			y++
-			continue
+	// Оптимизация: передаем весь измененный блок целиком, игнорируя чистые строки внутри.
+	// Системные вызовы X11 (PutImage) занимают гораздо больше времени, чем пересылка лишних данных.
+	for y := minY; y <= maxY; {
+		chunkEnd := y + rowsPerReqLimit
+		if chunkEnd > maxY+1 {
+			chunkEnd = maxY + 1
 		}
 
-		spanStart := y
-		spanEnd := y
-		// Жадное объединение грязных строк в один запрос PutImage
-		for spanEnd < h2 && (h.dirtyLines[spanEnd] || (spanEnd+1 < h2 && h.dirtyLines[spanEnd+1])) && (spanEnd-spanStart) < rowsPerReqLimit {
-			h.dirtyLines[spanEnd] = false
-			spanEnd++
+		rows := uint16(chunkEnd - y)
+		data := pix[y*lineStride : chunkEnd*lineStride]
+		xproto.PutImage(h.conn, xproto.ImageFormatZPixmap, xproto.Drawable(h.wid), h.gc,
+			uint16(w), rows, 0, int16(y), 0, 24, data)
+		putCalls++
+
+		// Очищаем флаги
+		for cl := y; cl < chunkEnd; cl++ {
+			h.dirtyLines[cl] = false
 		}
-		if spanEnd > spanStart {
-			rows := uint16(spanEnd - spanStart)
-			data := pix[spanStart*lineStride : spanEnd*lineStride]
-			xproto.PutImage(h.conn, xproto.ImageFormatZPixmap, xproto.Drawable(h.wid), h.gc,
-				uint16(w), rows, 0, int16(spanStart), 0, 24, data)
-			putCalls++
-		}
-		y = spanEnd
+
+		y = chunkEnd
 	}
 	return putCalls
 }

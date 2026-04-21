@@ -20,33 +20,23 @@ func TestX11Host_DirtySpanLogic(t *testing.T) {
 	h.dirtyLines[51] = true
 
 	// Проверяем, как flushImage (в теории) должен их обходить.
-	// Здесь мы имитируем цикл из flushImage.
-	type span struct{ start, rows int }
-	var spans []span
-
-	for y := 0; y < 100; {
-		if !h.dirtyLines[y] {
-			y++
-			continue
+	// Ожидается Bounding Box оптимизация (от первой грязной до последней)
+	minY := -1
+	maxY := -1
+	for y := 0; y < 100; y++ {
+		if h.dirtyLines[y] {
+			if minY == -1 {
+				minY = y
+			}
+			maxY = y
 		}
-		start := y
-		end := y
-		for end < 100 && h.dirtyLines[end] {
-			end++
-		}
-		spans = append(spans, span{start, end - start})
-		y = end
 	}
 
-	if len(spans) != 2 {
-		t.Fatalf("Expected 2 dirty spans, got %d", len(spans))
+	if minY != 10 {
+		t.Errorf("Expected minY 10, got %d", minY)
 	}
-
-	if spans[0].start != 10 || spans[0].rows != 3 {
-		t.Errorf("Span 1 mismatch: %+v", spans[0])
-	}
-	if spans[1].start != 50 || spans[1].rows != 2 {
-		t.Errorf("Span 2 mismatch: %+v", spans[1])
+	if maxY != 51 {
+		t.Errorf("Expected maxY 51, got %d", maxY)
 	}
 }
 
