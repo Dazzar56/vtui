@@ -197,6 +197,7 @@ func (we *WrapEngine) GetFragments(logLineIdx int) []LineFragment {
 	bytePos := 0
 	dataLen := len(lineData)
 
+	cumulativeVisualWidth := 0
 	for bytePos < dataLen {
 		visualWidth := 0
 		fragStartByte := bytePos
@@ -208,7 +209,7 @@ func (we *WrapEngine) GetFragments(logLineIdx int) []LineFragment {
 			r, size := utf8.DecodeRune(lineData[scanPos:])
 			w := 1
 			if r == '\t' {
-				w = we.tabSize - (visualWidth % we.tabSize)
+				w = we.tabSize - ((cumulativeVisualWidth + visualWidth) % we.tabSize)
 			} else if r >= 0x7F {
 				w = runewidth.RuneWidth(r)
 			}
@@ -245,8 +246,9 @@ func (we *WrapEngine) GetFragments(logLineIdx int) []LineFragment {
 			ByteOffsetEnd:   startOffset + scanPos,
 			VisualWidth:     visualWidth,
 		})
-		bytePos = scanPos
-	}
+			cumulativeVisualWidth += visualWidth
+			bytePos = scanPos
+		}
 
 	if len(fragments) == 0 {
 		fragments = append(fragments, LineFragment{LogicalLineIdx: logLineIdx, ByteOffsetStart: startOffset, ByteOffsetEnd: startOffset})

@@ -196,6 +196,29 @@ func TestWrapEngine_SetPointersSync(t *testing.T) {
 	}
 }
 
+func TestWrapEngine_WrappedTabAlignment(t *testing.T) {
+	// Logical: "123\t" (Tab should occupy 1 cell to reach col 4)
+	// Width: 2.
+	// Frag 1: "12" (Width 2)
+	// Frag 2: "3\t" -> '3' is at visual col 2. Tab starts at col 3.
+	// Tab width should be 4 - (3%4) = 1.
+	pt := piecetable.New([]byte("123\t"))
+	li := piecetable.NewLineIndex()
+	li.Rebuild(pt)
+	we := NewWrapEngine(pt, li)
+	we.SetTabSize(4)
+	we.SetWidth(2)
+
+	frags := we.GetFragments(0)
+	if len(frags) < 2 { t.Fatal("Should wrap") }
+
+	lastFrag := frags[len(frags)-1]
+	// '3' (1) + tab (1) = 2
+	if lastFrag.VisualWidth != 2 {
+		t.Errorf("Tab on wrapped line misaligned. Width: %d, expected 2", lastFrag.VisualWidth)
+	}
+}
+
 func TestWrapEngine_Performance10MB(t *testing.T) {
 	// Создаем 10 МБ текста
 	chunk := "The quick brown fox jumps over the lazy dog. " // 45 bytes
