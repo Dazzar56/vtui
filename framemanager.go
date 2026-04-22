@@ -739,6 +739,7 @@ func (fm *frameManager) Stop() {
 
 // Run starts the main application event loop.
 func (fm *frameManager) Run(reader *vtinput.Reader) {
+	DebugLog("FM: Run() ENTERED with Reader[%p]", reader)
 	fm.Reader = reader
 	fm.running = true
 	// Restore cursor visibility on exit
