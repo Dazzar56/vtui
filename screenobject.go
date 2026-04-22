@@ -92,8 +92,6 @@ func (so *ScreenObject) SetPosition(x1, y1, x2, y2 int) {
 	if so.X1 == x1 && so.Y1 == y1 && so.X2 == x2 && so.Y2 == y2 {
 		return
 	}
-	// Visibility status becomes invalid on move
-	so.visible = false
 	so.X1, so.Y1, so.X2, so.Y2 = x1, y1, x2, y2
 }
 
