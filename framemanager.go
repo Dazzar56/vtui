@@ -1176,7 +1176,8 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 					return
 				}
 			}
-			if activeMenu != nil && activeMenu.IsVisible() && activeMenu.HitTest(mx, my) {
+			canActivateMenu := !topFrame.IsModal() || topFrame.GetMenuBar() == activeMenu
+			if activeMenu != nil && canActivateMenu && activeMenu.HitTest(mx, my) {
 				if activeMenu.ProcessMouse(ev) {
 					return
 				}

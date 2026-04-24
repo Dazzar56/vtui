@@ -243,6 +243,11 @@ func (mb *MenuBar) ProcessMouse(e *vtinput.InputEvent) bool {
 					return true
 				}
 			}
+			mb.Active = true
+			if len(mb.Items) > 0 {
+				mb.ActivateSubMenu(0)
+			}
+			return true
 		}
 	}
 	return false
