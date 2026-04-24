@@ -1152,3 +1152,29 @@ func TestMenuBar_AltHotkey_Deep(t *testing.T) {
 		t.Errorf("Expected Edit (1) to be selected, got %d", mb.SelectPos)
 	}
 }
+
+func TestMenuBar_MouseActivation_GenericClick(t *testing.T) {
+	mb := NewMenuBar(nil)
+	mb.Items = []MenuBarItem{
+		{Label: "File", SubItems: []MenuItem{{Text: "Open"}}},
+		{Label: "Edit", SubItems: []MenuItem{{Text: "Copy"}}},
+	}
+	mb.SetPosition(0, 0, 79, 0)
+	mb.Active = false
+
+	// Кликаем не в буквы, а в пустую область бара (например, X=70)
+	mb.ProcessMouse(&vtinput.InputEvent{
+		Type:        vtinput.MouseEventType,
+		KeyDown:     true,
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+		MouseX:      70,
+		MouseY:      0,
+	})
+
+	if !mb.Active {
+		t.Error("MenuBar should activate even when clicking empty space on the bar")
+	}
+	if mb.activeSubMenu == nil {
+		t.Error("Activation via generic click should open the first submenu")
+	}
+}

@@ -1435,6 +1435,34 @@ func TestFrameManager_ModalDialogBlocksF9(t *testing.T) {
 		t.Error("MenuBar should NOT be activated via F9 when a modal dialog is open")
 	}
 }
+func TestFrameManager_ModalBlocksMenuMouse(t *testing.T) {
+	fm := &frameManager{}
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	fm.Init(scr)
+	fm.Push(NewDesktop())
+
+	mb := NewMenuBar([]string{"Options"})
+	mb.SetPosition(0, 0, 79, 0)
+	fm.MenuBar = mb
+
+	// Создаем модальный диалог
+	dlg := NewDialog(10, 10, 30, 15, "Modal")
+	fm.Push(dlg)
+
+	// Кликаем в область меню (0, 0)
+	fm.dispatchEvent(&vtinput.InputEvent{
+		Type:        vtinput.MouseEventType,
+		KeyDown:     true,
+		MouseX:      5,
+		MouseY:      0,
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+	}, false)
+
+	if mb.Active {
+		t.Error("Mouse click on MenuBar should be blocked by modal dialog")
+	}
+}
 func TestFrameManager_PushToFrameScreen_Active(t *testing.T) {
 	fm := &frameManager{}
 	fm.Init(NewSilentScreenBuf())
