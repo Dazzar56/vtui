@@ -639,10 +639,11 @@ func TestFrameManager_ModalPriorityOverMenu(t *testing.T) {
 
 	fm.InjectEvents([]*vtinput.InputEvent{
 		{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN},
-		{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F10}, // Quit loop
 	})
 
-	fm.Run(vtinput.NewReader(os.Stdin))
+	pr, pw := io.Pipe()
+	fm.PostTask(func() { pw.Close() })
+	fm.Run(vtinput.NewReader(pr))
 
 	if !okClicked {
 		t.Error("Modal dialog should have priority over active MenuBar for Enter key")
@@ -672,10 +673,11 @@ func TestFrameManager_MenuAccessibleDuringNonModal(t *testing.T) {
 	// Simulate pressing F9 to activate menu while window is open
 	fm.InjectEvents([]*vtinput.InputEvent{
 		{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F9},
-		{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F10}, // Quit loop
 	})
 
-	fm.Run(vtinput.NewReader(os.Stdin))
+	pr, pw := io.Pipe()
+	fm.PostTask(func() { pw.Close() })
+	fm.Run(vtinput.NewReader(pr))
 
 	if !mb.Active {
 		t.Error("MenuBar should be activatable when the top frame is non-modal (e.g. Progress window)")
@@ -1007,10 +1009,11 @@ func TestFrameManager_F9WorksForMenuOwningModal(t *testing.T) {
 	// Inject F9
 	fm.InjectEvents([]*vtinput.InputEvent{
 		{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F9},
-		{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F10},
 	})
 
-	fm.Run(vtinput.NewReader(os.Stdin))
+	pr, pw := io.Pipe()
+	fm.PostTask(func() { pw.Close() })
+	fm.Run(vtinput.NewReader(pr))
 
 	if !myMenu.Active {
 		t.Error("F9 should activate the menu because the modal frame owns it")
@@ -1250,10 +1253,11 @@ func TestFrameManager_F12ScreensMenu(t *testing.T) {
 	// Inject F12
 	fm.InjectEvents([]*vtinput.InputEvent{
 		{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F12},
-		{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F10},
 	})
 
-	fm.Run(vtinput.NewReader(os.Stdin))
+	pr, pw := io.Pipe()
+	fm.PostTask(func() { pw.Close() })
+	fm.Run(vtinput.NewReader(pr))
 
 	if fm.GetTopFrameType() != TypeMenu {
 		t.Fatalf("F12 did not open a menu. Top type: %d", fm.GetTopFrameType())
