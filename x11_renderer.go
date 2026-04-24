@@ -40,6 +40,7 @@ type X11Renderer struct {
 	cursorX    int
 	cursorY    int
 	cursorVis  bool
+	cursorShape CursorShape
 
 	// Состояние для управления миганием и очистки "шлейфа"
 	oldCursorX int
@@ -60,13 +61,14 @@ func (r *X11Renderer) SetPalette(pal *[256]uint32) {
 	// X11 renderer uses TrueColor naturally, no palette switching needed for the host window.
 }
 
-func (r *X11Renderer) SetCursor(x, y int, visible bool) {
-	if r.cursorX != x || r.cursorY != y || r.cursorVis != visible {
+func (r *X11Renderer) SetCursor(x, y int, visible bool, shape CursorShape) {
+	if r.cursorX != x || r.cursorY != y || r.cursorVis != visible || r.cursorShape != shape {
 		r.oldCursorX = r.cursorX
 		r.oldCursorY = r.cursorY
 		r.cursorX = x
 		r.cursorY = y
 		r.cursorVis = visible
+		r.cursorShape = shape
 	}
 }
 
@@ -194,11 +196,17 @@ func (r *X11Renderer) Render(buf, shadow []CharInfo, w, h int, forceRedraw bool)
 
 				// 4. Курсор
 				if currX == r.cursorX && y == r.cursorY && r.cursorVis && blinkState {
-					thickness := 2
-					if r.host.scale > 1 {
-						thickness = 4
+					var startY int
+					if r.cursorShape == CursorShapeBlock {
+						startY = 0
+					} else {
+						thickness := 2
+						if r.host.scale > 1 {
+							thickness = 4
+						}
+						startY = ch - thickness
 					}
-					for iy := ch - thickness; iy < ch; iy++ {
+					for iy := startY; iy < ch; iy++ {
 						pixelY := py + iy
 						if pixelY < 0 || pixelY >= img.Rect.Max.Y {
 							continue

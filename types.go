@@ -111,9 +111,17 @@ type HighlighterProvider interface {
 	Create(filename string, content string) Highlighter
 }
 // SurfaceRenderer определяет, как логический буфер CharInfo переносится на экран.
+type CursorShape int
+
+const (
+	CursorShapeUnderline CursorShape = iota
+	CursorShapeBlock
+)
+
+// SurfaceRenderer определяет, как логический буфер CharInfo переносится на экран.
 type SurfaceRenderer interface {
 	Render(buf, shadow []CharInfo, width, height int, forceRedraw bool)
-	SetCursor(x, y int, visible bool)
+	SetCursor(x, y int, visible bool, shape CursorShape)
 	SetPalette(palette *[256]uint32)
 	Flush() // Combined atomic output
 }

@@ -19,6 +19,7 @@ type ScreenBuf struct {
 
 	cursorX, cursorY int
 	cursorVisible    bool
+	cursorShape      CursorShape
 	cursorSize       uint32
 	cursorDirty      bool
 
@@ -299,6 +300,14 @@ func (s *ScreenBuf) SetCursorVisible(visible bool) {
 		s.cursorDirty = true
 	}
 }
+func (s *ScreenBuf) SetCursorShape(shape CursorShape) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.cursorShape != shape {
+		s.cursorShape = shape
+		s.cursorDirty = true
+	}
+}
 
 func (s *ScreenBuf) Width() int {
 	s.mu.Lock()
@@ -346,7 +355,7 @@ func (s *ScreenBuf) Flush() {
 	}
 
 	s.Renderer.SetPalette(activePal)
-	s.Renderer.SetCursor(s.cursorX, s.cursorY, s.cursorVisible)
+	s.Renderer.SetCursor(s.cursorX, s.cursorY, s.cursorVisible, s.cursorShape)
 	s.Renderer.Render(s.buf, s.shadow, s.width, s.height, s.dirty)
 	s.Renderer.Flush()
 
@@ -363,9 +372,11 @@ type AnsiRenderer struct {
 
 	cursorX, cursorY int
 	cursorVis        bool
+	cursorShape      CursorShape
 
 	lastSentCursorX, lastSentCursorY int
 	lastSentCursorVis                bool
+	lastSentCursorShape              CursorShape
 	termCursorInvalid                bool
 	firstInit                        bool
 }
@@ -443,23 +454,32 @@ func (r *AnsiRenderer) Render(buf, shadow []CharInfo, w, h int, force bool) {
 	}
 }
 
-func (r *AnsiRenderer) SetCursor(x, y int, vis bool) {
+func (r *AnsiRenderer) SetCursor(x, y int, vis bool, shape CursorShape) {
 	r.cursorX = x
 	r.cursorY = y
 	r.cursorVis = vis
+	r.cursorShape = shape
 }
 
 func (r *AnsiRenderer) Flush() {
-	if !r.firstInit || r.termCursorInvalid || r.cursorX != r.lastSentCursorX || r.cursorY != r.lastSentCursorY || r.cursorVis != r.lastSentCursorVis {
+	if !r.firstInit || r.termCursorInvalid || r.cursorX != r.lastSentCursorX || r.cursorY != r.lastSentCursorY || r.cursorVis != r.lastSentCursorVis || r.cursorShape != r.lastSentCursorShape {
 		r.frameOut.WriteString(fmt.Sprintf("\x1b[%d;%dH", r.cursorY+1, r.cursorX+1))
 		if r.cursorVis {
 			r.frameOut.WriteString("\x1b[?25h")
+			if ManageCursorStyle {
+				if r.cursorShape == CursorShapeBlock {
+					r.frameOut.WriteString("\x1b[1 q") // Blinking Block
+				} else {
+					r.frameOut.WriteString("\x1b[3 q") // Blinking Underline
+				}
+			}
 		} else {
 			r.frameOut.WriteString("\x1b[?25l")
 		}
 		r.lastSentCursorX = r.cursorX
 		r.lastSentCursorY = r.cursorY
 		r.lastSentCursorVis = r.cursorVis
+		r.lastSentCursorShape = r.cursorShape
 		r.termCursorInvalid = false
 		r.firstInit = true
 	}

@@ -21,14 +21,22 @@ func TestClipboard_Truncation(t *testing.T) {
 	os.Stdout = w
 
 	// 2. Execute
+	// We must read from the pipe in a separate goroutine to prevent deadlocking
+	// when the 2MB string exceeds the OS pipe buffer (typically 64KB).
+	var outputBuf bytes.Buffer
+	readDone := make(chan struct{})
+	go func() {
+		io.Copy(&outputBuf, r)
+		close(readDone)
+	}()
+
 	SetClipboard(largeString)
 
-	// Restore stdout and read from the pipe
+	// Restore stdout and signal end of data by closing the writer
 	w.Close()
+	<-readDone
 	os.Stdout = oldStdout
-	var buf bytes.Buffer
-	io.Copy(&buf, r)
-	output := buf.String()
+	output := outputBuf.String()
 
 	// 3. Assertions
 	// Check internal buffer
