@@ -1171,6 +1171,16 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 				fm.capturedFrame = nil // Release capture
 			}
 		} else {
+			// 3.1.2. Hit test for workspace counter [N] at top right
+			if len(fm.Screens) > 1 && my == 0 {
+				indicatorLen := len(fmt.Sprintf("[%d]", len(fm.Screens)))
+				if mx >= fm.scr.width-indicatorLen && mx < fm.scr.width {
+					if ev.ButtonState == vtinput.FromLeft1stButtonPressed && ev.KeyDown {
+						fm.showScreensMenu()
+						return
+					}
+				}
+			}
 			// 3.1.5. Global UI components hit-testing (MenuBar, KeyBar)
 			if fm.KeyBar != nil && fm.KeyBar.IsVisible() && fm.KeyBar.HitTest(mx, my) {
 				if fm.KeyBar.ProcessMouse(ev) {
