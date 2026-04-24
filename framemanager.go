@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 	"strings"
+	"path/filepath"
 
 	"github.com/unxed/vtinput"
 	"golang.org/x/term"
@@ -1258,6 +1259,20 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 			if fm.CycleWindows(!shift) {
 				return
 			}
+		}
+		// Screen Dump (Ctrl+Shift+P)
+		if ev.VirtualKeyCode == 'P' && fm.ctrlPressed && (ev.ControlKeyState&vtinput.ShiftPressed) != 0 {
+			home, _ := os.UserHomeDir()
+			if home != "" {
+				dumpPath := filepath.Join(home, "f4.screen.log")
+				f, err := os.Create(dumpPath)
+				if err == nil {
+					fm.scr.Dump(f)
+					f.Close()
+					DebugLog("FM: Screen dump saved to %s", dumpPath)
+				}
+			}
+			return
 		}
 
 		// Ctrl+N - Fork Active Frame into new Screen

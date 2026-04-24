@@ -330,6 +330,57 @@ func (s *ScreenBuf) GetCell(x, y int) CharInfo {
 	}
 	return s.buf[y*s.width+x]
 }
+// Dump записывает содержимое буфера в поток в формате, оптимизированном для нейросетей.
+// Сначала идет текстовое превью, затем детальные данные атрибутов с RLE-сжатием.
+func (s *ScreenBuf) Dump(w io.Writer) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	fmt.Fprintf(w, "F4_SCREEN_DUMP_V1 %dx%d\n", s.width, s.height)
+	fmt.Fprintln(w, "--- TEXT PREVIEW ---")
+	for y := 0; y < s.height; y++ {
+		line := make([]rune, 0, s.width)
+		for x := 0; x < s.width; x++ {
+			char := s.buf[y*s.width+x].Char
+			if char == WideCharFiller {
+				continue
+			}
+			if char == 0 {
+				line = append(line, ' ')
+			} else {
+				line = append(line, rune(char))
+			}
+		}
+		fmt.Fprintln(w, string(line))
+	}
+
+	fmt.Fprintln(w, "--- CELL METADATA (RLE) ---")
+	fmt.Fprintln(w, "Format: [AttrHex]xRepeatCount ...")
+	for y := 0; y < s.height; y++ {
+		fmt.Fprintf(w, "R%d: ", y)
+		count := 0
+		var lastAttr uint64 = 0
+		first := true
+
+		for x := 0; x < s.width; x++ {
+			attr := s.buf[y*s.width+x].Attributes
+			if first {
+				lastAttr = attr
+				count = 1
+				first = false
+				continue
+			}
+			if attr == lastAttr {
+				count++
+			} else {
+				fmt.Fprintf(w, "[%016X]x%d ", lastAttr, count)
+				lastAttr = attr
+				count = 1
+			}
+		}
+		fmt.Fprintf(w, "[%016X]x%d\n", lastAttr, count)
+	}
+}
 
 
 
