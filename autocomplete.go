@@ -140,10 +140,12 @@ func (ac *AutoCompleteMenu) Show(scr *ScreenBuf) {
 		ac.Edit.leftPos = ac.Edit.curPos
 	}
 
-	headText := string(ac.Edit.text[ac.Edit.leftPos:ac.Edit.curPos])
-	vOffset := runewidth.StringWidth(headText)
-	scr.SetCursorPos(ac.Edit.X1+vOffset, ac.Edit.Y1)
-	scr.SetCursorVisible(true)
+	if ac.IsFocused() {
+		headText := string(ac.Edit.text[ac.Edit.leftPos:ac.Edit.curPos])
+		vOffset := runewidth.StringWidth(headText)
+		scr.SetCursorPos(ac.Edit.X1+vOffset, ac.Edit.Y1)
+		scr.SetCursorVisible(true)
+	}
 }
 
 func (ac *AutoCompleteMenu) ProcessKey(e *vtinput.InputEvent) bool {

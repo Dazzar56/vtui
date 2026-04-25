@@ -144,6 +144,37 @@ func TestFrameManager_NoDoubleDispatch(t *testing.T) {
 	// (This test is more for documenting the problem; the real fm.Run is too monolithic to test without changes)
 }
 
+func TestFrameManager_CleanupFocusRestore(t *testing.T) {
+	fm := &frameManager{}
+	fm.Init(NewSilentScreenBuf())
+
+	f1Focused := false
+	f1 := &mockFrame{}
+	f1.onProcessKey = func(e *vtinput.InputEvent) bool {
+		if e.Type == vtinput.FocusEventType {
+			f1Focused = e.SetFocus
+		}
+		return true
+	}
+	fm.Push(f1) // Focus goes to f1
+	if !f1Focused {
+		t.Error("f1 should be focused on push")
+	}
+
+	f2 := &mockFrame{}
+	fm.Push(f2) // Focus goes to f2, f1 loses focus
+	if f1Focused {
+		t.Error("f1 should lose focus when f2 is pushed")
+	}
+
+	// Now f2 finishes
+	f2.SetExitCode(0)
+	fm.cleanupDoneFrames() // Should remove f2 and restore focus to f1
+
+	if !f1Focused {
+		t.Error("f1 should regain focus after f2 is cleaned up")
+	}
+}
 func TestFrameManager_GetTopFrameType(t *testing.T) {
 	fm := &frameManager{}
 	fm.Init(NewSilentScreenBuf())

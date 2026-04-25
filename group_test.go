@@ -115,6 +115,33 @@ func TestGroup_Nested(t *testing.T) {
 	}
 }
 
+func TestGroup_FocusMemory(t *testing.T) {
+	g := NewGroup(0, 0, 20, 10)
+	b1 := NewButton(0, 0, "B1")
+	b2 := NewButton(0, 1, "B2")
+	g.AddItem(b1)
+	g.AddItem(b2)
+
+	// Focus b2
+	g.changeFocus(1)
+	g.changeFocus(1)
+
+	if !b2.IsFocused() {
+		t.Fatal("b2 should be focused")
+	}
+
+	// Lose focus
+	g.SetFocus(false)
+	if b2.IsFocused() {
+		t.Error("b2 should lose focus when group loses focus")
+	}
+
+	// Regain focus
+	g.SetFocus(true)
+	if !b2.IsFocused() {
+		t.Error("b2 should regain focus because group remembered it")
+	}
+}
 func TestGroup_NoFocusableItems(t *testing.T) {
 	g := NewGroup(0, 0, 10, 10)
 	g.AddItem(NewText(1, 1, "Static Text", 0))

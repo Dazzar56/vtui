@@ -53,6 +53,10 @@ func NewBaseWindow(x1, y1, x2, y2 int, title string) *BaseWindow {
 	return bw
 }
 
+func (bw *BaseWindow) SetFocus(f bool) {
+	bw.ScreenObject.SetFocus(f)
+	bw.rootGroup.SetFocus(f)
+}
 func (bw *BaseWindow) AddItem(item UIElement) {
 	bw.rootGroup.AddItem(item)
 	// Update minimum size based on items added, relative to the window origin

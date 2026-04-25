@@ -293,7 +293,6 @@ func (g *Group) SetFocus(f bool) {
 		if g.focusIdx != -1 && g.focusIdx < len(g.items) {
 			g.items[g.focusIdx].SetFocus(false)
 		}
-		g.focusIdx = -1
 	}
 }
 // ActivateHotkey finds and activates an element by its hotkey recursively.

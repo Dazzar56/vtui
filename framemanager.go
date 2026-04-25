@@ -223,6 +223,9 @@ func (fm *frameManager) CloseActiveScreen() {
 	fm.ActiveIdx = newIdx
 	fm.frames = fm.Screens[newIdx].Frames
 	fm.capturedFrame = fm.Screens[newIdx].CapturedFrame
+	if len(fm.frames) > 0 {
+		fm.frames[len(fm.frames)-1].ProcessKey(&vtinput.InputEvent{Type: vtinput.FocusEventType, SetFocus: true})
+	}
 	fm.Redraw()
 }
 
@@ -533,6 +536,8 @@ func (fm *frameManager) CycleWindows(forward bool) bool {
 func (fm *frameManager) renderSwitcher(scr *ScreenBuf) {
 	if !fm.switcherActive || len(fm.Screens) < 2 { return }
 
+	scr.SetCursorVisible(false) // Force hide cursor while switcher is active
+
 	menuW := 60
 	menuH := len(fm.Screens) + 2
 	x := (scr.width - menuW) / 2
@@ -633,6 +638,11 @@ func (fm *frameManager) showScreensMenu() {
 func (fm *frameManager) cleanupDoneFrames() {
 	fm.SyncCurrentScreen()
 
+	var oldTop Frame
+	if len(fm.frames) > 0 {
+		oldTop = fm.frames[len(fm.frames)-1]
+	}
+
 	for sIdx := len(fm.Screens) - 1; sIdx >= 0; sIdx-- {
 		s := fm.Screens[sIdx]
 		wasModified := false
@@ -669,6 +679,14 @@ func (fm *frameManager) cleanupDoneFrames() {
 		}
 		fm.frames = fm.Screens[fm.ActiveIdx].Frames
 		fm.capturedFrame = fm.Screens[fm.ActiveIdx].CapturedFrame
+
+		var newTop Frame
+		if len(fm.frames) > 0 {
+			newTop = fm.frames[len(fm.frames)-1]
+		}
+		if newTop != nil && newTop != oldTop {
+			newTop.ProcessKey(&vtinput.InputEvent{Type: vtinput.FocusEventType, SetFocus: true})
+		}
 	} else {
 		fm.Shutdown()
 	}
