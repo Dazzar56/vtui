@@ -112,8 +112,7 @@ type frameManager struct {
 
 	// Switcher State
 	ctrlPressed      bool
-	switcherActive   bool
-	switcherIdx      int
+	switcherMenu     *VMenu
 	running          bool
 
 	lastMouseClickTime time.Time
@@ -518,59 +517,27 @@ func (fm *frameManager) CycleWindows(forward bool) bool {
 		return false
 	}
 
-	if !fm.switcherActive {
-		fm.switcherActive = true
-		fm.switcherIdx = fm.ActiveIdx
+	if fm.switcherMenu == nil {
+		if fm.GetTopFrameType() == TypeMenu && strings.TrimSpace(fm.GetTopFrame().GetTitle()) == "Screens" {
+			fm.switcherMenu = fm.GetTopFrame().(*VMenu)
+		} else {
+			fm.showScreensMenu()
+			fm.switcherMenu = fm.frames[len(fm.frames)-1].(*VMenu)
+			fm.switcherMenu.SetSelectPos(fm.ActiveIdx)
+		}
 	}
 
-	// Active screen is always at len-1. 'Forward' goes to MRU-previous (len-2).
+	menu := fm.switcherMenu
 	if forward {
-		fm.switcherIdx = (fm.switcherIdx - 1 + len(fm.Screens)) % len(fm.Screens)
+		newPos := menu.SelectPos - 1
+		if newPos < 0 { newPos = len(menu.Items) - 1 }
+		menu.SetSelectPos(newPos)
 	} else {
-		fm.switcherIdx = (fm.switcherIdx + 1) % len(fm.Screens)
+		newPos := (menu.SelectPos + 1) % len(menu.Items)
+		menu.SetSelectPos(newPos)
 	}
 	fm.Redraw()
 	return true
-}
-
-func (fm *frameManager) renderSwitcher(scr *ScreenBuf) {
-	if !fm.switcherActive || len(fm.Screens) < 2 { return }
-
-	scr.SetCursorVisible(false) // Force hide cursor while switcher is active
-
-	menuW := 60
-	menuH := len(fm.Screens) + 2
-	x := (scr.width - menuW) / 2
-	y := (scr.height - menuH) / 2
-
-	attr := Palette[ColMenuText]
-	selAttr := Palette[ColMenuSelectedText]
-	boxAttr := Palette[ColMenuBox]
-	attnAttr := SetRGBBoth(0, 0xFFFFFF, 0xFF0000)
-
-	scr.FillRect(x, y, x+menuW-1, y+menuH-1, ' ', attr)
-	sym := getBoxSymbols(DoubleBox)
-	scr.Write(x, y, StringToCharInfo(string(sym[bsTL])+strings.Repeat(string(sym[bsH]), menuW-2)+string(sym[bsTR]), boxAttr))
-	scr.Write(x, y+menuH-1, StringToCharInfo(string(sym[bsBL])+strings.Repeat(string(sym[bsH]), menuW-2)+string(sym[bsBR]), boxAttr))
-	for i := 1; i < menuH-1; i++ {
-		scr.Write(x, y+i, StringToCharInfo(string(sym[bsV]), boxAttr))
-		scr.Write(x+menuW-1, y+i, StringToCharInfo(string(sym[bsV]), boxAttr))
-	}
-
-	maxTitleLen := menuW - 19
-	for i := range fm.Screens {
-		itemAttr := attr
-		if i == fm.switcherIdx { itemAttr = selAttr }
-
-		pre, tit, suf, needsAttn := fm.getScreenInfo(i, maxTitleLen)
-		if i == fm.switcherIdx { pre = "> " }
-
-		rowText := pre + tit + suf
-		scr.Write(x+1, y+1+i, StringToCharInfo(rowText+strings.Repeat(" ", menuW-2-len([]rune(rowText))), itemAttr))
-		if needsAttn {
-			scr.Write(x+1, y+1+i, StringToCharInfo("!", attnAttr))
-		}
-	}
 }
 
 func (fm *frameManager) getScreenInfo(idx int, maxTitleLen int) (prefix, title, suffix string, needsAttn bool) {
@@ -1025,8 +992,6 @@ func (fm *frameManager) renderPhase() {
 			}
 		}
 
-		fm.renderSwitcher(fm.scr)
-
 		// Render Standard Global UI
 		activeMenu := fm.GetActiveMenuBar()
 		if activeMenu != nil && activeMenu.Active {
@@ -1131,9 +1096,16 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 		fm.ctrlPressed = (ev.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
 
 		// Commit Switcher selection on Ctrl release
-		if !fm.ctrlPressed && fm.switcherActive {
-			fm.switcherActive = false
-			fm.SwitchScreen(fm.switcherIdx)
+		if !fm.ctrlPressed && fm.switcherMenu != nil {
+			if !fm.switcherMenu.IsDone() {
+				idx := fm.switcherMenu.SelectPos
+				if idx >= 0 && idx < len(fm.switcherMenu.Items) {
+					userData := fm.switcherMenu.Items[idx].UserData.(int)
+					fm.switcherMenu.Close()
+					fm.SwitchScreen(userData)
+				}
+			}
+			fm.switcherMenu = nil
 		}
 	}
 
@@ -1281,7 +1253,7 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 	if !handled && ev.Type == vtinput.KeyEventType && ev.KeyDown {
 
 		// Window Cycling (Ctrl+Tab / Ctrl+Shift+Tab)
-		if ev.VirtualKeyCode == vtinput.VK_TAB && (fm.ctrlPressed || fm.switcherActive) {
+		if ev.VirtualKeyCode == vtinput.VK_TAB && (fm.ctrlPressed || fm.switcherMenu != nil) {
 			shift := (ev.ControlKeyState & vtinput.ShiftPressed) != 0
 			// Only consume the event if cycling is actually possible
 			if fm.CycleWindows(!shift) {

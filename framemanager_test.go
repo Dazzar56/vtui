@@ -1067,9 +1067,16 @@ func TestFrameManager_CycleScreens(t *testing.T) {
 
 	// 2. Commit switch
 	fm.ctrlPressed = false
-	if !fm.ctrlPressed && fm.switcherActive {
-		fm.switcherActive = false
-		fm.SwitchScreen(fm.switcherIdx)
+	if !fm.ctrlPressed && fm.switcherMenu != nil {
+		if !fm.switcherMenu.IsDone() {
+			idx := fm.switcherMenu.SelectPos
+			if idx >= 0 && idx < len(fm.switcherMenu.Items) {
+				userData := fm.switcherMenu.Items[idx].UserData.(int)
+				fm.switcherMenu.Close()
+				fm.SwitchScreen(userData)
+			}
+		}
+		fm.switcherMenu = nil
 	}
 
 	// W1 переехал в конец. Порядок: [W2, W1]. ActiveIdx = 1.
@@ -1081,9 +1088,16 @@ func TestFrameManager_CycleScreens(t *testing.T) {
 	fm.ctrlPressed = true
 	fm.CycleWindows(true)
 	fm.ctrlPressed = false
-	if !fm.ctrlPressed && fm.switcherActive {
-		fm.switcherActive = false
-		fm.SwitchScreen(fm.switcherIdx)
+	if !fm.ctrlPressed && fm.switcherMenu != nil {
+		if !fm.switcherMenu.IsDone() {
+			idx := fm.switcherMenu.SelectPos
+			if idx >= 0 && idx < len(fm.switcherMenu.Items) {
+				userData := fm.switcherMenu.Items[idx].UserData.(int)
+				fm.switcherMenu.Close()
+				fm.SwitchScreen(userData)
+			}
+		}
+		fm.switcherMenu = nil
 	}
 
 	if fm.Screens[fm.ActiveIdx].Frames[1] != w2 {
@@ -1100,18 +1114,18 @@ func TestFrameManager_CycleBackwards(t *testing.T) {
 	// 1. Shift+Ctrl+Tab (forward=false)
 	fm.ctrlPressed = true
 	fm.CycleWindows(false) // 2 -> 0 (because forward is MRU back, backward is array forward)
-	if fm.switcherIdx != 0 {
-		t.Errorf("Backward cycle failed: expected 0, got %d", fm.switcherIdx)
+	if fm.switcherMenu == nil || fm.switcherMenu.SelectPos != 0 {
+		t.Errorf("Backward cycle failed: expected 0, got %v", fm.switcherMenu)
 	}
 
 	fm.CycleWindows(false) // 0 -> 1
-	if fm.switcherIdx != 1 {
-		t.Errorf("Backward cycle failed: expected 1, got %d", fm.switcherIdx)
+	if fm.switcherMenu == nil || fm.switcherMenu.SelectPos != 1 {
+		t.Errorf("Backward cycle failed: expected 1, got %v", fm.switcherMenu)
 	}
 
 	fm.CycleWindows(false) // 1 -> 2 (wrap)
-	if fm.switcherIdx != 2 {
-		t.Errorf("Backward cycle wrap failed: expected 2, got %d", fm.switcherIdx)
+	if fm.switcherMenu == nil || fm.switcherMenu.SelectPos != 2 {
+		t.Errorf("Backward cycle wrap failed: expected 2, got %v", fm.switcherMenu)
 	}
 }
 
@@ -1396,18 +1410,24 @@ func TestFrameManager_SwitcherLogic(t *testing.T) {
 	fm.ctrlPressed = true
 	fm.CycleWindows(true) // Вперед в MRU — это к предыдущему (индекс 0: Desktop)
 
-	if !fm.switcherActive {
+	if fm.switcherMenu == nil {
 		t.Error("Switcher should be active after Ctrl+Tab")
-	}
-	if fm.switcherIdx != 0 {
-		t.Errorf("Switcher should select screen 0, got %d", fm.switcherIdx)
+	} else if fm.switcherMenu.SelectPos != 0 {
+		t.Errorf("Switcher should select screen 0, got %d", fm.switcherMenu.SelectPos)
 	}
 
 	// 2. Simulate Ctrl release (KeyUp)
 	fm.ctrlPressed = false
-	if !fm.ctrlPressed && fm.switcherActive {
-		fm.switcherActive = false
-		fm.SwitchScreen(fm.switcherIdx)
+	if !fm.ctrlPressed && fm.switcherMenu != nil {
+		if !fm.switcherMenu.IsDone() {
+			idx := fm.switcherMenu.SelectPos
+			if idx >= 0 && idx < len(fm.switcherMenu.Items) {
+				userData := fm.switcherMenu.Items[idx].UserData.(int)
+				fm.switcherMenu.Close()
+				fm.SwitchScreen(userData)
+			}
+		}
+		fm.switcherMenu = nil
 	}
 
 	// Теперь Desktop должен стать активным (переехать в конец массива)
