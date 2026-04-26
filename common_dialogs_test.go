@@ -2,6 +2,7 @@ package vtui
 
 import (
 	"os"
+	"strings"
 	"path/filepath"
 	"testing"
 	"context"
@@ -315,6 +316,45 @@ func TestShowMessage_WideButtons_Layout(t *testing.T) {
 	if width > 72 {
 		t.Errorf("Dialog width %d exceeds maxDialogWidth (72)", width)
 	}
+}
+
+func TestShowMessage_HeightTruncation(t *testing.T) {
+	SetDefaultPalette()
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	FrameManager.Init(scr)
+
+	// Create a message with 50 lines (exceeds screen height 25)
+	var text string
+	for i := 0; i < 50; i++ {
+		text += "Line\n"
+	}
+
+	dlg := createMessageDialog(" Overflow Test ", text, []string{"&Ok"})
+
+	// Expected height is exactly screen height - 2 (23)
+	height := dlg.Y2 - dlg.Y1 + 1
+	if height != 23 {
+		t.Errorf("Dialog height truncation failed: expected 23, got %d", height)
+	}
+
+	// Ensure the truncation marker is present
+	foundTruncationMarker := false
+	for _, itm := range dlg.GetChildren() {
+		if txt, ok := itm.(*Text); ok {
+			if strings.Contains(txt.GetText(), "(truncated)") {
+				foundTruncationMarker = true
+				break
+			}
+		}
+	}
+
+	if !foundTruncationMarker {
+		t.Error("Truncation marker '... (truncated)' was not found in the dialog text")
+	}
+
+	// Should pass layout validation
+	AssertLayout(t, dlg)
 }
 func TestShowMessage_Structure(t *testing.T) {
 	SetDefaultPalette()

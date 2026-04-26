@@ -157,7 +157,54 @@ func createMessageDialog(title string, text string, buttons []string) *Window {
 		}
 	}
 
+	maxScreenHeight := 25
+	if FrameManager != nil && FrameManager.scr != nil && FrameManager.scr.height > 0 {
+		maxScreenHeight = FrameManager.scr.height
+	}
+
+	if dlgHeight > maxScreenHeight-2 {
+		dlgHeight = maxScreenHeight - 2
+		allowedLines := dlgHeight - 4
+		if len(buttons) > 0 {
+			if stackButtons {
+				allowedLines -= (len(buttons) * 2)
+			} else {
+				allowedLines -= 2
+			}
+		}
+		if allowedLines < 1 {
+			allowedLines = 1
+		}
+		if len(lines) > allowedLines {
+			lines = lines[:allowedLines]
+			if len(lines) > 0 {
+				lines[len(lines)-1] = "... (truncated)"
+			}
+		}
+	}
+
 	dlg := NewCenteredDialog(dlgWidth, dlgHeight, title)
+
+	if dlgHeight > maxScreenHeight-2 {
+		dlgHeight = maxScreenHeight - 2
+		allowedLines := dlgHeight - 4
+		if len(buttons) > 0 {
+			if stackButtons {
+				allowedLines -= (len(buttons) * 2)
+			} else {
+				allowedLines -= 2
+			}
+		}
+		if allowedLines < 1 {
+			allowedLines = 1
+		}
+		if len(lines) > allowedLines {
+			lines = lines[:allowedLines]
+			if len(lines) > 0 {
+				lines[len(lines)-1] = "... (truncated)"
+			}
+		}
+	}
 
 	// 4. Use Layout Engine for positioning
 	vbox := NewVBoxLayout(dlg.X1+2, dlg.Y1+2, dlgWidth-4, dlgHeight-4)
