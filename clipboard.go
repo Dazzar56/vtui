@@ -37,6 +37,10 @@ func SetClipboard(text string) {
 	// ANSI OSC 52: \x1b]52;c;<base64>\x07
 	os.Stdout.WriteString("\x1b]52;c;" + b64 + "\x07")
 }
+// SetOSClipboard bypasses terminal extensions and writes directly to the OS clipboard.
+func SetOSClipboard(text string) bool {
+	return setOSClipboard(text)
+}
 
 // GetClipboard retrieves text from the system clipboard.
 func GetClipboard() string {
@@ -51,6 +55,13 @@ func GetClipboard() string {
 		return text
 	}
 	DebugLog("CLIPBOARD: Returning internal buffer, len: %d", len(internalClipboard))
+	return internalClipboard
+}
+// GetOSClipboard bypasses terminal extensions and reads directly from the OS clipboard.
+func GetOSClipboard() string {
+	if text, ok := getOSClipboard(); ok {
+		return text
+	}
 	return internalClipboard
 }
 
