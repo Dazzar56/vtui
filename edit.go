@@ -258,6 +258,9 @@ func (e *Edit) InsertString(text string) {
 }
 
 func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
+	if event.Type == vtinput.KeyEventType && event.KeyDown {
+		DebugLog("EDIT_DEBUG: ProcessKey entry. Char:%d, VK:0x%X, Mods:0x%X", event.Char, event.VirtualKeyCode, event.ControlKeyState)
+	}
 	if event.Type == vtinput.PasteEventType {
 		if event.PasteStart {
 			e.pasting = true
@@ -518,6 +521,7 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 
 	// Text input
 	if event.Char != 0 && (unicode.IsGraphic(event.Char) || event.Char == ' ') {
+		DebugLog("EDIT_TRACE: Candidate for text input: '%c' (%d), VK: 0x%X, Mods: 0x%X", event.Char, event.Char, event.VirtualKeyCode, event.ControlKeyState)
 		// When checking modifiers, ignore Lock keys (Num, Caps, Scroll),
 		// because they should not block text input.
 		mods := event.ControlKeyState & ^vtinput.ControlKeyState(vtinput.NumLockOn|vtinput.CapsLockOn|vtinput.ScrollLockOn|vtinput.EnhancedKey)
@@ -575,10 +579,12 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 		e.curPos = newCurPos
 		e.ClearSelection()
 
+		DebugLog("EDIT_DEBUG: Character ACCEPTED. New text len: %d", len(e.text))
 		if e.OnTextChange != nil { e.OnTextChange(string(e.text)) }
 		return true
 	}
 
+	DebugLog("EDIT_DEBUG: Key REJECTED or not handled as text.")
 	return false;
 }
 

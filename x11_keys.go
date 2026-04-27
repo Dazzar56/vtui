@@ -1,6 +1,8 @@
 package vtui
 
 import "github.com/unxed/vtinput"
+import "sync"
+import "fmt"
 
 // x11KeysymToVK мапит стандартные X11 Keysyms в Windows Virtual Key Codes.
 var x11KeysymToVK = map[uint32]uint16{
@@ -103,7 +105,19 @@ var x11KeysymToVK = map[uint32]uint16{
 // x11KeysymToRune содержит сопоставление кейсимов и символов Unicode.
 // Карта инициализируется здесь и наполняется автоматически в x11_keysym_map_generated.go
 var x11KeysymToRune = make(map[uint32]rune)
+var keysymMapReported sync.Once
+
 func keysymToRune(keysym uint32) rune {
+	res := rune(0)
+	defer func() {
+		if keysym > 0x7f {
+			charRepr := fmt.Sprintf("'%c'", res)
+			if res == 0 {
+				charRepr = "NULL"
+			}
+			DebugLog("X11_KEYS_TRACE: keysymToRune(0x%X) -> %s (%d)", keysym, charRepr, res)
+		}
+	}()
 	// 1. Прямое соответствие Unicode (0x0100XXXX)
 	if keysym >= 0x01000000 && keysym <= 0x01ffffff {
 		return rune(keysym & 0xffffff)
@@ -111,12 +125,14 @@ func keysymToRune(keysym uint32) rune {
 
 	// 2. Латиница и ASCII (0x0020 - 0x007e)
 	if keysym >= 0x0020 && keysym <= 0x007e {
-		return rune(keysym)
+		res = rune(keysym)
+		return res
 	}
 
 	// 3. Таблица из хедеров (генерируемая)
 	if r, ok := x11KeysymToRune[keysym]; ok {
-		return r
+		res = r
+		return res
 	}
 
 	return 0

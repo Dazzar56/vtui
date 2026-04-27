@@ -1033,6 +1033,7 @@ func (fm *frameManager) renderPhase() {
 }
 
 func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) {
+	DebugLog("FM_DISPATCH: Received event: %s", ev.String())
 	RecordEvent(ev.String())
 	if ev.Type == vtinput.Far2lEventType {
 		DebugLog("FM_DISPATCH: Processing Far2l event: cmd=%q", ev.Far2lCommand)
@@ -1088,6 +1089,7 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 
 	// User-defined filter has first say
 	if !is_injected && fm.EventFilter != nil && fm.EventFilter(ev) {
+		DebugLog("FM_DISPATCH: Event CONSUMED by EventFilter (Macro?).")
 		return
 	}
 
@@ -1148,6 +1150,7 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 
 	if ev.Type == vtinput.KeyEventType || ev.Type == vtinput.PasteEventType || ev.Type == vtinput.FocusEventType {
 		handled = topFrame.ProcessKey(ev)
+		DebugLog("FM_DISPATCH: TopFrame.ProcessKey handled=%v", handled)
 	} else if ev.Type == vtinput.MouseEventType {
 		mx, my := int(ev.MouseX), int(ev.MouseY)
 		if ev.ButtonState != 0 || ev.WheelDirection != 0 {

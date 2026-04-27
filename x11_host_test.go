@@ -43,7 +43,8 @@ func TestX11Host_DirtySpanLogic(t *testing.T) {
 func TestX11Host_ModifierTranslation(t *testing.T) {
 	h := &X11Host{}
 	// ModMaskControl = 4, ModMask2 (NumLock) = 16
-	mods := h.translateModifiers(4 | 16, 0, false)
+	h.lCtrl = true
+	mods := h.translateModifiers(16)
 
 	const LeftCtrlPressed = 0x0008
 	const NumLockOn = 0x0020

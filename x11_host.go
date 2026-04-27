@@ -5,6 +5,7 @@ package vtui
 import (
 	"fmt"
 	"image"
+	"strings"
 	"sync"
 	"syscall"
 	"unsafe"
@@ -80,6 +81,7 @@ type X11Host struct {
 	lCtrl, rCtrl bool
 	lAlt, rAlt   bool
 	lShift, rShift bool
+	isAltGrPressed bool
 }
 
 func NewX11Host(cols, rows, cellW, cellH int) (*X11Host, error) {
@@ -190,24 +192,82 @@ xproto.AtomAtom, 32, 1, data)
 	return host, nil
 }
 
-func (h *X11Host) translateModifiers(state uint16, vk uint16, isDown bool) vtinput.ControlKeyState {
+func (h *X11Host) translateModifiers(state uint16) vtinput.ControlKeyState {
 	var mods vtinput.ControlKeyState
-	if state&xproto.ModMaskControl != 0 { mods |= vtinput.LeftCtrlPressed }
-	if state&xproto.ModMask1 != 0 { mods |= vtinput.LeftAltPressed }
-	if state&xproto.ModMaskShift != 0 { mods |= vtinput.ShiftPressed }
-	if state&xproto.ModMaskLock != 0 { mods |= vtinput.CapsLockOn }
-	if state&xproto.ModMask2 != 0 { mods |= vtinput.NumLockOn }
+	if h.lShift || h.rShift {
+		mods |= vtinput.ShiftPressed
+	}
+	if h.lCtrl {
+		mods |= vtinput.LeftCtrlPressed
+	}
+	if h.rCtrl {
+		mods |= vtinput.RightCtrlPressed
+	}
+	if h.lAlt {
+		mods |= vtinput.LeftAltPressed
+	}
+	if h.rAlt {
+		mods |= vtinput.RightAltPressed
+	}
+	if state&xproto.ModMaskLock != 0 {
+		mods |= vtinput.CapsLockOn
+	}
+	if state&xproto.ModMask2 != 0 {
+		mods |= vtinput.NumLockOn
+	}
 	return mods
 }
 
 func (h *X11Host) getKeysym(detail xproto.Keycode, state uint16) xproto.Keysym {
 	if h.keyMap == nil { return 0 }
 	baseIdx := int(detail-h.minKeyCode) * int(h.keysPerCode)
-	shift := state&xproto.ModMaskShift != 0
+	
+	// Bitwise breakdown of X11 state for diagnostic
+	shift := (state & xproto.ModMaskShift) != 0
+	lock := (state & xproto.ModMaskLock) != 0
+	ctrl := (state & xproto.ModMaskControl) != 0
+	mod1 := (state & xproto.ModMask1) != 0
+	mod2 := (state & xproto.ModMask2) != 0
+	mod3 := (state & xproto.ModMask3) != 0
+	mod4 := (state & xproto.ModMask4) != 0
+	mod5 := (state & xproto.ModMask5) != 0
 	group := (state >> 13) & 0x03
+
+	var allSyms []string
+	for i := 0; i < int(h.keysPerCode); i++ {
+		allSyms = append(allSyms, fmt.Sprintf("%d:0x%X", i, h.keyMap[baseIdx+i]))
+	}
+
+	DebugLog("X11_BITS: detail=%d state=0x%04X [S:%v L:%v C:%v M1:%v M2:%v M3:%v M4:%v M5:%v] G:%d",
+		detail, state, shift, lock, ctrl, mod1, mod2, mod3, mod4, mod5, group)
+	DebugLog("X11_ROW: %s", strings.Join(allSyms, " "))
+
 	col := int(group)*2
+	
+	// FIX: Disambiguate Mod5. 
+	// If physical AltGr is held, we want Level 3 symbols (cols 4-5).
+	// Otherwise, if Mod5 is on and Group is 0, we are in the alternate layout (cols 2-3).
+	if mod5 && int(h.keysPerCode) > 4 && h.isAltGrPressed {
+		col = 4 
+	} else if group == 0 && mod5 && int(h.keysPerCode) > 2 {
+		col += 2
+	}
+
 	if shift { col += 1 }
-	if col >= int(h.keysPerCode) { col = col % 2 }
+
+	if col >= int(h.keysPerCode) {
+		oldCol := col
+		if h.keysPerCode > 2 {
+			col = col % int(h.keysPerCode)
+		} else {
+			col = col % 2
+		}
+		DebugLog("X11_GETKEYSYM: Column overflow. detail=%d, keysPerCode=%d, requested=%d, adjusted=%d", detail, h.keysPerCode, oldCol, col)
+	}
+	
+	DebugLog("X11_GETKEYSYM: final_col=%d keysym=0x%X syms=[%s]", 
+		col, h.keyMap[baseIdx+col], strings.Join(allSyms, ", "))
+
 	sym := h.keyMap[baseIdx+col]
 	if sym == 0 && col > 0 { sym = h.keyMap[baseIdx] }
 	return sym
@@ -223,6 +283,10 @@ func (h *X11Host) RunEventLoop() {
 	for {
 		ev, err := h.conn.WaitForEvent()
 		if ev == nil && err == nil { return }
+		if ev != nil {
+			// Log raw event type to see if KeyPresses are even arriving
+			DebugLog("X11_HOST_TRACE: Received raw X11 event type: %T", ev)
+		}
 		switch e := ev.(type) {
 		case xproto.ExposeEvent:
 			h.mu.Lock()
@@ -251,13 +315,73 @@ func (h *X11Host) RunEventLoop() {
 			} else if kr, ok := e.(xproto.KeyReleaseEvent); ok {
 				detail, state, isDown = kr.Detail, kr.State, false
 			}
+
+			// Heuristic to fix stuck modifiers after layout switch (e.g., Alt+Shift).
+			// If we get a KeyPress for a non-modifier key, and the X11 state mask
+			// contradicts our physically tracked state, we likely missed a KeyRelease.
+			isModifierKey := false
+			switch detail {
+			case 37, 105, 64, 108, 50, 62: // l/r ctrl, alt, shift
+				isModifierKey = true
+			}
+			if isDown && !isModifierKey {
+				// If our tracker thinks a modifier is down, but X11 state says it's not, reset tracker.
+				// This fixes "stuck" modifiers after layout switches (Alt+Shift) or window focus loss.
+				if h.lAlt && (state&xproto.ModMask1) == 0 {
+					h.lAlt = false
+				}
+				if h.rAlt && (state&xproto.ModMask5) == 0 {
+					h.rAlt = false
+					h.isAltGrPressed = false
+				}
+				if (h.lShift || h.rShift) && (state&xproto.ModMaskShift) == 0 {
+					h.lShift, h.rShift = false, false
+				}
+				if (h.lCtrl || h.rCtrl) && (state&xproto.ModMaskControl) == 0 {
+					h.lCtrl, h.rCtrl = false, false
+				}
+			}
+
+			// Track physical state of modifiers to disambiguate bits and solve state-lag
+			switch detail {
+			case 50:
+				h.lShift = isDown
+			case 62:
+				h.rShift = isDown
+			case 37:
+				h.lCtrl = isDown
+			case 105:
+				h.rCtrl = isDown
+			case 64:
+				h.lAlt = isDown
+			case 108:
+				h.rAlt = isDown
+				h.isAltGrPressed = isDown
+			}
+
 			keysym := h.getKeysym(detail, state)
 			vk := keysymToVK(uint32(keysym))
 			char := keysymToRune(uint32(keysym))
+
+			charLog := fmt.Sprintf("'%c'", char)
+			if char < 32 || char == 127 {
+				charLog = fmt.Sprintf("0x%02X", char)
+			}
+			DebugLog("X11_TRACE: KeyPress detail=%d state=0x%X (bits: %016b) keysym=0x%X vk=0x%X char=%s",
+				detail, state, state, uint32(keysym), vk, charLog)
+
 			if h.reader != nil {
+				mods := h.translateModifiers(state)
+				// If AltGr was used to produce a character (e.g. typographic quotes),
+				// we strip the Alt modifier from the event. This prevents f4 from
+				// triggering "Fast Find" (Alt+Letter) and lets it process the char as text.
+				if char != 0 && h.isAltGrPressed {
+					mods &= ^vtinput.RightAltPressed
+				}
+
 				h.reader.NativeEventChan <- &vtinput.InputEvent{
 					Type: vtinput.KeyEventType, KeyDown: isDown, VirtualKeyCode: vk,
-					Char: char, ControlKeyState: h.translateModifiers(state, vk, isDown),
+					Char: char, ControlKeyState: mods,
 				}
 			}
 		case xproto.ButtonPressEvent, xproto.ButtonReleaseEvent:
@@ -274,7 +398,7 @@ func (h *X11Host) RunEventLoop() {
 			event := &vtinput.InputEvent{
 				Type:            vtinput.MouseEventType, MouseX: uint16(int(bx) / h.cellW),
 				MouseY:          uint16(int(by) / h.cellH), KeyDown: isDown,
-				ControlKeyState: h.translateModifiers(state, 0, false),
+				ControlKeyState: h.translateModifiers(state),
 			}
 			switch detail {
 			case 1: event.ButtonState = vtinput.FromLeft1stButtonPressed
