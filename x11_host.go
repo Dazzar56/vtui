@@ -373,8 +373,7 @@ func (h *X11Host) RunEventLoop() {
 			if h.reader != nil {
 				mods := h.translateModifiers(state)
 				// If AltGr was used to produce a character (e.g. typographic quotes),
-				// we strip the Alt modifier from the event. This prevents f4 from
-				// triggering "Fast Find" (Alt+Letter) and lets it process the char as text.
+				// we strip the Alt modifier from the event.
 				if char != 0 && h.isAltGrPressed {
 					mods &= ^vtinput.RightAltPressed
 				}

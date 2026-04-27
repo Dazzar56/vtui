@@ -10,7 +10,7 @@ import (
 	"github.com/unxed/vtinput"
 )
 
-// testVFS implements VFSMinimal for testing without coupling to f4's VFS.
+// testVFS implements VFSMinimal for testing
 type testVFS struct { currentPath string }
 func (v *testVFS) GetPath() string { return v.currentPath }
 func (v *testVFS) SetPath(p string) error { v.currentPath = p; return nil }
