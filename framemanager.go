@@ -1048,7 +1048,7 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 			return
 		}
 
-		// Interaction requests (from remote terminal to f4) are handled by the active frame
+		// Interaction requests (from remote terminal to app) are handled by the active frame
 		// (usually PanelsFrame) which manages the terminal view.
 	}
 
@@ -1264,7 +1264,7 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 		if ev.VirtualKeyCode == 'P' && fm.ctrlPressed && (ev.ControlKeyState&vtinput.ShiftPressed) != 0 {
 			home, _ := os.UserHomeDir()
 			if home != "" {
-				dumpPath := filepath.Join(home, "f4.screen.log")
+				dumpPath := filepath.Join(home, "vtui.screen.log")
 				f, err := os.Create(dumpPath)
 				if err == nil {
 					fm.scr.Dump(f)

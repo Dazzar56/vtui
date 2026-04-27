@@ -12,14 +12,14 @@ import (
 )
 
 const (
-	urlKeysymdef = "https://cgit.freedesktop.org/xorg/proto/x11proto/plain/keysymdef.h"
+	urlKeysymdef = "https://gitlab.freedesktop.org/xorg/proto/xorgproto/-/raw/master/include/X11/keysymdef.h?ref_type=heads&inline=false"
 	outputName   = "x11_keysym_map_generated.go"
 )
 
 func main() {
 	// Auto-detect project structure
 	outPath := ""
-	for _, p := range []string{"f4/libs/vtui/", "libs/vtui/", "./", "../"} {
+	for _, p := range []string{"libs/vtui/", "./", "../"} {
 		if _, err := os.Stat(p + "x11_keys.go"); err == nil {
 			outPath = p + outputName
 			break

@@ -47,7 +47,7 @@ func Far2lInteract(stk *vtinput.Far2lStack, wait bool) *vtinput.Far2lStack {
 
 // SetFar2lClipboard attempts to set the clipboard using far2l extensions.
 // clientID far2l terminal requires 32-256 chars for security handshake.
-const clientID = "f4-stateful-terminal-client-persistent-id-32chars"
+const clientID = "vtui-stateful-terminal-client-persistent-id-32chars"
 
 func SetFar2lClipboard(text string) bool {
 	DebugLog("VTUI_FAR2L: SetFar2lClipboard attempt, Enabled=%v, text_len=%d", Far2lEnabled, len(text))

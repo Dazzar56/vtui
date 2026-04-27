@@ -12,7 +12,7 @@ import (
 	"golang.org/x/term"
 )
 
-// localVFS is a minimal stub to satisfy vtui dialogs without relying on f4's VFS.
+// localVFS is a minimal stub to satisfy vtui dialogs without relying on external VFS.
 type localVFS struct{ path string }
 
 func (v *localVFS) GetPath() string { return v.path }

@@ -336,7 +336,7 @@ func (s *ScreenBuf) Dump(w io.Writer) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	fmt.Fprintf(w, "F4_SCREEN_DUMP_V1 %dx%d\n", s.width, s.height)
+	fmt.Fprintf(w, "VTUI_SCREEN_DUMP_V1 %dx%d\n", s.width, s.height)
 	fmt.Fprintln(w, "--- TEXT PREVIEW ---")
 	for y := 0; y < s.height; y++ {
 		line := make([]rune, 0, s.width)
