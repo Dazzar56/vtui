@@ -236,6 +236,12 @@ func (fm *frameManager) CloseActiveScreen() {
 		fm.EmitCommand(CmQuit, nil)
 		return
 	}
+
+	screenToClose := fm.Screens[fm.ActiveIdx]
+	for i := len(screenToClose.Frames) - 1; i >= 0; i-- {
+		screenToClose.Frames[i].Close()
+	}
+
 	fm.Screens = append(fm.Screens[:fm.ActiveIdx], fm.Screens[fm.ActiveIdx+1:]...)
 	newIdx := fm.ActiveIdx
 	if newIdx >= len(fm.Screens) {

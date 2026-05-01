@@ -1764,6 +1764,29 @@ func TestFrameManager_CloseActiveScreen_Shifting(t *testing.T) {
 		t.Errorf("Expected W2 to be active, got %q", fm.Screens[fm.ActiveIdx].GetTitle())
 	}
 }
+func TestFrameManager_CloseActiveScreen_CancelsTasks(t *testing.T) {
+	fm := &frameManager{}
+	fm.Init(NewSilentScreenBuf())
+	fm.Push(NewDesktop()) // Screen 0
+
+	// Screen 1
+	fm.AddScreen(NewWindow(0, 0, 10, 10, "W1"))
+
+	// Push a dialog with OnResult
+	dlg := NewDialog(0, 0, 5, 5, "TaskDlg")
+	cancelled := false
+	dlg.OnResult = func(code int) {
+		cancelled = true
+	}
+	fm.Push(dlg)
+
+	// Close Active Screen (Screen 1)
+	fm.CloseActiveScreen()
+
+	if !cancelled {
+		t.Error("CloseActiveScreen did not call Close() (and OnResult) on the frames being dropped")
+	}
+}
 
 type progressFrame struct {
 	mockFrame
