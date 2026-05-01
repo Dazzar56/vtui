@@ -7,7 +7,7 @@ import (
 	"time"
 	"strings"
 	"path/filepath"
-
+	"github.com/mattn/go-runewidth"
 	"github.com/unxed/vtinput"
 	"golang.org/x/term"
 )
@@ -119,6 +119,25 @@ type frameManager struct {
 	lastMouseX, lastMouseY int
 	lastMouseButton uint32
 	Reader *vtinput.Reader
+	currentToast *Toast
+}
+
+type Toast struct {
+	Message string
+	Expires time.Time
+}
+
+// ShowToast displays a non-blocking popup message at the top of the screen that disappears after the duration.
+func ShowToast(msg string, dur time.Duration) {
+	if FrameManager == nil { return }
+	FrameManager.PostTask(func() {
+		FrameManager.currentToast = &Toast{Message: msg, Expires: time.Now().Add(dur)}
+		FrameManager.Redraw()
+		go func() {
+			time.Sleep(dur)
+			if FrameManager != nil { FrameManager.Redraw() }
+		}()
+	})
 }
 
 // FrameManager is the global instance of the frame manager.
@@ -1004,6 +1023,17 @@ func (fm *frameManager) renderPhase() {
 			fm.StatusLine.Show(fm.scr)
 		}
 
+		if fm.currentToast != nil {
+			if time.Now().After(fm.currentToast.Expires) {
+				fm.currentToast = nil
+			} else {
+				msg := " " + fm.currentToast.Message + " "
+				attr := SetRGBBoth(0, 0xFFFFFF, 0x444444) // White on Dark Gray
+				x := (fm.scr.width - runewidth.StringWidth(msg)) / 2
+				if x < 0 { x = 0 }
+				fm.scr.Write(x, 0, StringToCharInfo(msg, attr))
+			}
+		}
 		if fm.OnRender != nil {
 			fm.OnRender(fm.scr)
 		}

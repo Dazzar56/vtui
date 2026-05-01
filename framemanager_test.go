@@ -175,6 +175,42 @@ func TestFrameManager_CleanupFocusRestore(t *testing.T) {
 		t.Error("f1 should regain focus after f2 is cleaned up")
 	}
 }
+func TestFrameManager_Toast(t *testing.T) {
+	fm := &frameManager{}
+	fm.Init(NewSilentScreenBuf())
+	// Push a dummy frame, otherwise renderPhase returns early and won't clear the toast
+	fm.Push(&mockFrame{})
+
+	// ShowToast references global FrameManager, we must swap it for the test
+	oldFm := FrameManager
+	FrameManager = fm
+	defer func() { FrameManager = oldFm }()
+
+	msg := "Hello Toast"
+	ShowToast(msg, 100*time.Millisecond)
+
+	// Pump tasks
+	select {
+	case task := <-fm.TaskChan:
+		task()
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("Toast task not posted")
+	}
+
+	if fm.currentToast == nil || fm.currentToast.Message != msg {
+		t.Errorf("Toast not set correctly in FrameManager. Got: %v", fm.currentToast)
+	}
+
+	// Ждем истечения срока
+	time.Sleep(150 * time.Millisecond)
+
+	// Вызываем renderPhase (она очищает просроченные тосты)
+	fm.renderPhase()
+
+	if fm.currentToast != nil {
+		t.Error("Toast did not expire")
+	}
+}
 func TestFrameManager_GetTopFrameType(t *testing.T) {
 	fm := &frameManager{}
 	fm.Init(NewSilentScreenBuf())
