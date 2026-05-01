@@ -2,6 +2,8 @@ package vtui
 
 import (
 	"context"
+	"sort"
+	"strings"
 	"github.com/mattn/go-runewidth"
 )
 
@@ -43,6 +45,13 @@ func SelectDirDialog(title string, initialPath string, vfs FSProvider) *Window {
 			})
 			FrameManager.PostTask(func() {
 				if dlg.IsDone() { return }
+				lb.Items = currentItems
+				// Sort folders alphabetically (ignoring "..")
+				if len(currentItems) > 2 {
+					sort.Slice(currentItems[1:], func(i, j int) bool {
+						return strings.ToLower(currentItems[i+1]) < strings.ToLower(currentItems[j+1])
+					})
+				}
 				lb.Items = currentItems
 				lb.UpdateRows()
 				if targetToSelect != "" { lb.SelectName(targetToSelect) } else { lb.SetSelectPos(0) }
@@ -272,6 +281,14 @@ func SelectFileDialog(title string, initialPath string, vfs FSProvider, onOk fun
 			FrameManager.PostTask(func() {
 				if dlg.IsDone() { return }
 				items := []string{".."}
+				// Sort entries: Directories first, then files, both alphabetically
+				sort.Slice(allEntries, func(i, j int) bool {
+					if allEntries[i].IsDir != allEntries[j].IsDir {
+						return allEntries[i].IsDir
+					}
+					return strings.ToLower(allEntries[i].Name) < strings.ToLower(allEntries[j].Name)
+				})
+				items = []string{".."}
 				isDirMap = make(map[string]bool); isDirMap[".."] = true
 				for _, e := range allEntries { if e.IsDir { items = append(items, e.Name); isDirMap[e.Name] = true } }
 				for _, e := range allEntries { if !e.IsDir { items = append(items, e.Name); isDirMap[e.Name] = false } }
