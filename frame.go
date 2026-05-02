@@ -29,6 +29,9 @@ func NewBorderedFrame(x1, y1, x2, y2 int, boxType int, title string) *BorderedFr
 func (f *BorderedFrame) SetTitle(title string) {
 	f.title = title
 }
+func (f *BorderedFrame) GetTitle() string {
+	return f.title
+}
 // IsBorderClick returns true if the coordinates hit the frame border.
 func (f *BorderedFrame) IsBorderClick(x, y int) bool {
 	if f.boxType == NoBox {
