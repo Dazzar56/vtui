@@ -44,7 +44,7 @@ func ConfigDiskLogging(enabled bool) {
 func DebugLog(format string, a ...any) {
 	msg := fmt.Sprintf(format, a...)
 	timestamp := time.Now().Format("15:04:05.000")
-	fullMsg := fmt.Sprintf("[%s] %s", timestamp, msg)
+	fullMsg := fmt.Sprintf("[%s][P%d] %s", timestamp, os.Getpid(), msg)
 
 	recordLogMemory(fullMsg)
 
