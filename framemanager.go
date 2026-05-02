@@ -449,6 +449,15 @@ func (fm *frameManager) RemoveFrame(f Frame) {
 		}
 	}
 }
+
+// HardRefresh clears the terminal shadow buffer and forces a complete redraw.
+func (fm *frameManager) HardRefresh() {
+	if fm.scr != nil {
+		fm.scr.HardReset()
+	}
+	fm.Redraw()
+}
+
 // Redraw triggers an asynchronous redraw request.
 func (fm *frameManager) Redraw() {
 	select {
