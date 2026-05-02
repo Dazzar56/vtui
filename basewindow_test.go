@@ -151,6 +151,12 @@ func TestBaseWindow_HandleBroadcast_Propagation(t *testing.T) {
 	}
 }
 
+func TestBaseWindow_GetTitle(t *testing.T) {
+	bw := NewBaseWindow(0, 0, 10, 10, "Test Title")
+	if bw.GetTitle() != "Test Title" {
+		t.Errorf("Expected 'Test Title', got %q", bw.GetTitle())
+	}
+}
 func TestBaseWindow_Validation_CmDefault(t *testing.T) {
 	SetDefaultPalette()
 	fm := FrameManager

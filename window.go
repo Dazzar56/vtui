@@ -45,6 +45,5 @@ func (w *Window) GetType() FrameType {
 	return TypeUser
 }
 
-func (w *Window) GetTitle() string { return w.frame.title }
 func (w *Window) GetProgress() int { return w.progress }
 func (w *Window) SetProgress(p int) { w.progress = p }
