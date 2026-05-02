@@ -1,6 +1,7 @@
 package vtui
 
 import (
+	"github.com/mattn/go-runewidth"
 	"github.com/unxed/vtinput"
 )
 
@@ -131,7 +132,19 @@ func (cb *ComboBox) Open() {
 	if cb.IsDisabled() {
 		return
 	}
-	// Calculate menu position below combo box
+
+	// 1. Calculate required width based on items
+	maxWidth := cb.X2 - cb.X1 + 1
+	for _, itm := range cb.Menu.Items {
+		// We add 4 for: 1 leading space, 1 trailing space, 2 for borders
+		clean, _, _ := ParseAmpersandString(itm.Text)
+		w := runewidth.StringWidth(clean) + 4
+		if w > maxWidth {
+			maxWidth = w
+		}
+	}
+
+	// 2. Calculate height and vertical position
 	h := len(cb.Menu.Items) + 2
 	if h > 10 { h = 10 } // Limit height
 
@@ -141,8 +154,14 @@ func (cb *ComboBox) Open() {
 		if y+h > FrameManager.scr.height && cb.Y1 >= h {
 			y = cb.Y1 - h
 		}
+		// Horizontal safety: don't let it go off-screen to the right
+		if cb.X1+maxWidth > FrameManager.scr.width {
+			// In this case, we just cap it to screen edge
+			maxWidth = FrameManager.scr.width - cb.X1
+		}
 	}
-	cb.Menu.SetPosition(cb.X1, y, cb.X2, y+h-1)
+
+	cb.Menu.SetPosition(cb.X1, y, cb.X1+maxWidth-1, y+h-1)
 	cb.Menu.ClearDone()
 	cb.Menu.HideShadow = true
 	FrameManager.Push(cb.Menu)
