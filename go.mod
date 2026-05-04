@@ -4,6 +4,7 @@ go 1.25.0
 
 require (
 	github.com/BurntSushi/xgb v0.0.0-20210121224620-deaf085860bc
+	github.com/ebitengine/purego v0.10.0
 	github.com/mattn/go-runewidth v0.0.15
 	github.com/unxed/vtinput v0.0.0
 	golang.org/x/image v0.39.0

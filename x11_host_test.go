@@ -39,20 +39,3 @@ func TestX11Host_DirtySpanLogic(t *testing.T) {
 		t.Errorf("Expected maxY 51, got %d", maxY)
 	}
 }
-
-func TestX11Host_ModifierTranslation(t *testing.T) {
-	h := &X11Host{}
-	// ModMaskControl = 4, ModMask2 (NumLock) = 16
-	h.lCtrl = true
-	mods := h.translateModifiers(16)
-
-	const LeftCtrlPressed = 0x0008
-	const NumLockOn = 0x0020
-
-	if (mods & LeftCtrlPressed) == 0 {
-		t.Error("Failed to translate Control modifier")
-	}
-	if (mods & NumLockOn) == 0 {
-		t.Error("Failed to translate NumLock modifier (Mod2)")
-	}
-}

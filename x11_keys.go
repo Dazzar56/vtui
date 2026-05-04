@@ -1,8 +1,6 @@
 package vtui
 
 import "github.com/unxed/vtinput"
-import "sync"
-import "fmt"
 
 // x11KeysymToVK мапит стандартные X11 Keysyms в Windows Virtual Key Codes.
 var x11KeysymToVK = map[uint32]uint16{
@@ -45,10 +43,16 @@ var x11KeysymToVK = map[uint32]uint16{
 	0xff7f: vtinput.VK_NUMLOCK,  // Num Lock
 	0xff14: vtinput.VK_SCROLL,   // Scroll Lock
 	0x0020: vtinput.VK_SPACE,
-	0x002b: vtinput.VK_OEM_PLUS,   // +
-	0x003d: vtinput.VK_OEM_PLUS,   // =
+
+	// Numbers (for consistency, though mostly handled by code)
+	0x0030: vtinput.VK_0, 0x0031: vtinput.VK_1, 0x0032: vtinput.VK_2, 0x0033: vtinput.VK_3, 0x0034: vtinput.VK_4,
+	0x0035: vtinput.VK_5, 0x0036: vtinput.VK_6, 0x0037: vtinput.VK_7, 0x0038: vtinput.VK_8, 0x0039: vtinput.VK_9,
+
+	// OEM Punctuation & Symbols (US Layout mapping)
 	0x002d: vtinput.VK_OEM_MINUS,  // -
 	0x005f: vtinput.VK_OEM_MINUS,  // _
+	0x003d: vtinput.VK_OEM_PLUS,   // =
+	0x002b: vtinput.VK_OEM_PLUS,   // +
 	0x005b: vtinput.VK_OEM_4,      // [
 	0x007b: vtinput.VK_OEM_4,      // {
 	0x005d: vtinput.VK_OEM_6,      // ]
@@ -100,42 +104,6 @@ var x11KeysymToVK = map[uint32]uint16{
 	0xff9d: vtinput.VK_CLEAR, // Center 5
 	0xff9e: vtinput.VK_INSERT,
 	0xff9f: vtinput.VK_DELETE,
-}
-
-// x11KeysymToRune содержит сопоставление кейсимов и символов Unicode.
-// Карта инициализируется здесь и наполняется автоматически в x11_keysym_map_generated.go
-var x11KeysymToRune = make(map[uint32]rune)
-var keysymMapReported sync.Once
-
-func keysymToRune(keysym uint32) rune {
-	res := rune(0)
-	defer func() {
-		if keysym > 0x7f {
-			charRepr := fmt.Sprintf("'%c'", res)
-			if res == 0 {
-				charRepr = "NULL"
-			}
-			DebugLog("X11_KEYS_TRACE: keysymToRune(0x%X) -> %s (%d)", keysym, charRepr, res)
-		}
-	}()
-	// 1. Прямое соответствие Unicode (0x0100XXXX)
-	if keysym >= 0x01000000 && keysym <= 0x01ffffff {
-		return rune(keysym & 0xffffff)
-	}
-
-	// 2. Латиница и ASCII (0x0020 - 0x007e)
-	if keysym >= 0x0020 && keysym <= 0x007e {
-		res = rune(keysym)
-		return res
-	}
-
-	// 3. Таблица из хедеров (генерируемая)
-	if r, ok := x11KeysymToRune[keysym]; ok {
-		res = r
-		return res
-	}
-
-	return 0
 }
 
 func keysymToVK(keysym uint32) uint16 {
