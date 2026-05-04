@@ -10,9 +10,10 @@ import (
 )
 
 var (
-	logMu      sync.Mutex
-	logRotated bool
-	logFile    *os.File
+	logMu              sync.Mutex
+	logRotated         bool
+	logFile            *os.File
+	currentLogFilename string
 )
 
 func rotateLogs(basePath string) {
@@ -81,8 +82,16 @@ func DebugLog(format string, a ...any) {
 		logRotated = true
 	}
 
+	if logFile != nil && currentLogFilename != filename {
+		logFile.Close()
+		logFile = nil
+	}
+
 	if logFile == nil {
-		logFile, _ = os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		var err error
+		logFile, err = os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		currentLogFilename = filename
+		recordLogMemory(fmt.Sprintf("[SYS] Opened new log file %q (Err: %v, PID: %d)", filename, err, os.Getpid()))
 	}
 	if logFile != nil {
 		fmt.Fprintln(logFile, fullMsg)

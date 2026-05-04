@@ -274,30 +274,35 @@ func (fm *frameManager) Init(scr *ScreenBuf) {
 	fm.frames = make([]Frame, 0, 10)
 	fm.Screens = []*AppScreen{{Frames: fm.frames}}
 	fm.ActiveIdx = 0
-	fm.RedrawChan = make(chan struct{}, 1)
 
-	fm.taskChanIn = make(chan func())
-	fm.TaskChan = make(chan func())
+	if fm.RedrawChan == nil {
+		fm.RedrawChan = make(chan struct{}, 1)
+	}
 
-	go func() {
-		var queue []func()
-		for {
-			if len(queue) == 0 {
-				task, ok := <-fm.taskChanIn
-				if !ok { return }
-				queue = append(queue, task)
-			} else {
-				select {
-				case task, ok := <-fm.taskChanIn:
+	if fm.taskChanIn == nil {
+		fm.taskChanIn = make(chan func())
+		fm.TaskChan = make(chan func())
+
+		go func() {
+			var queue []func()
+			for {
+				if len(queue) == 0 {
+					task, ok := <-fm.taskChanIn
 					if !ok { return }
 					queue = append(queue, task)
-				case fm.TaskChan <- queue[0]:
-					queue[0] = nil
-					queue = queue[1:]
+				} else {
+					select {
+					case task, ok := <-fm.taskChanIn:
+						if !ok { return }
+						queue = append(queue, task)
+					case fm.TaskChan <- queue[0]:
+						queue[0] = nil
+						queue = queue[1:]
+					}
 				}
 			}
-		}
-	}()
+		}()
+	}
 
 	fm.injectedEvents = make([]*vtinput.InputEvent, 0)
 	SetDefaultPalette()
@@ -535,10 +540,8 @@ func (fm *frameManager) Shutdown() {
 	fm.Screens = nil
 	fm.frames = nil
 	fm.capturedFrame = nil
-	if fm.taskChanIn != nil {
-		close(fm.taskChanIn)
-		fm.taskChanIn = nil
-	}
+	// In tests we don't actually want to close the channel because
+	// other tests might still have pending background goroutines.
 }
 // IsShutdown returns true if the FrameManager has been shut down explicitly.
 func (fm *frameManager) IsShutdown() bool {
