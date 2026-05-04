@@ -97,6 +97,7 @@ type frameManager struct {
 	scr            *ScreenBuf
 	RedrawChan     chan struct{}
 	TaskChan       chan func()
+	taskChanIn     chan func()
 	EventChan      chan *vtinput.InputEvent
 	EventFilter    func(*vtinput.InputEvent) bool
 	injectedEvents []*vtinput.InputEvent
@@ -274,7 +275,30 @@ func (fm *frameManager) Init(scr *ScreenBuf) {
 	fm.Screens = []*AppScreen{{Frames: fm.frames}}
 	fm.ActiveIdx = 0
 	fm.RedrawChan = make(chan struct{}, 1)
-	fm.TaskChan = make(chan func(), 1024)
+
+	fm.taskChanIn = make(chan func())
+	fm.TaskChan = make(chan func())
+
+	go func() {
+		var queue []func()
+		for {
+			if len(queue) == 0 {
+				task, ok := <-fm.taskChanIn
+				if !ok { return }
+				queue = append(queue, task)
+			} else {
+				select {
+				case task, ok := <-fm.taskChanIn:
+					if !ok { return }
+					queue = append(queue, task)
+				case fm.TaskChan <- queue[0]:
+					queue[0] = nil
+					queue = queue[1:]
+				}
+			}
+		}
+	}()
+
 	fm.injectedEvents = make([]*vtinput.InputEvent, 0)
 	SetDefaultPalette()
 
@@ -467,14 +491,8 @@ func (fm *frameManager) Redraw() {
 }
 // PostTask schedules a function to be executed safely on the main UI thread.
 func (fm *frameManager) PostTask(task func()) {
-	if fm.TaskChan != nil {
-		select {
-		case fm.TaskChan <- task:
-			// Успешно добавлено
-		default:
-			// Очередь полна. Не блокируемся, чтобы не вызвать дедлок.
-			// В нормальной ситуации UI-поток скоро освободит место.
-		}
+	if fm.taskChanIn != nil {
+		fm.taskChanIn <- task
 	}
 }
 // EmitCommand broadcasts a command starting from the top-most frame
@@ -517,6 +535,10 @@ func (fm *frameManager) Shutdown() {
 	fm.Screens = nil
 	fm.frames = nil
 	fm.capturedFrame = nil
+	if fm.taskChanIn != nil {
+		close(fm.taskChanIn)
+		fm.taskChanIn = nil
+	}
 }
 // IsShutdown returns true if the FrameManager has been shut down explicitly.
 func (fm *frameManager) IsShutdown() bool {

@@ -386,22 +386,24 @@ func dispatchHelper(fm *frameManager, ev *vtinput.InputEvent) {
 
 func TestFrameManager_PostTask(t *testing.T) {
 	fm := &frameManager{}
-	// Инициализируем только каналы, без запуска цикла Run
-	fm.TaskChan = make(chan func(), 10)
-	
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(10, 10)
+	fm.Init(scr)
+	defer fm.Shutdown()
+
 	taskExecuted := false
 	fm.PostTask(func() {
 		taskExecuted = true
 	})
-	
+
 	// Извлекаем задачу из канала и выполняем её
 	select {
 	case task := <-fm.TaskChan:
 		task()
-	default:
+	case <-time.After(100 * time.Millisecond):
 		t.Fatal("Task was not posted to TaskChan")
 	}
-	
+
 	if !taskExecuted {
 		t.Error("Posted task was not executed")
 	}
@@ -1391,13 +1393,15 @@ func TestFrameManager_PostTaskNonBlocking(t *testing.T) {
 	// Проверяем, что PostTask не вешает вызывающий поток, если очередь полна.
 	// Это важно для предотвращения каскадных зависаний.
 	fm := &frameManager{}
-	fm.TaskChan = make(chan func(), 2) // Маленький буфер для теста
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(10, 10)
+	fm.Init(scr)
+	defer fm.Shutdown()
 
 	fm.PostTask(func() {})
 	fm.PostTask(func() {})
 
-	// Третий вызов не должен зависнуть, даже если мы его дропнем (в текущей отладочной версии)
-	// Или должен завершиться по таймауту/дропнуться в финальной версии.
+	// Третий вызов не должен зависнуть
 	done := make(chan bool)
 	go func() {
 		fm.PostTask(func() {})

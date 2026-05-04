@@ -13,7 +13,15 @@ func TestDebugLog_CustomFile(t *testing.T) {
 	defer os.Remove(customLog)
 
 	os.Setenv("VTUI_DEBUG", customLog)
-	defer os.Setenv("VTUI_DEBUG", "")
+	defer func() {
+		os.Setenv("VTUI_DEBUG", "")
+		logMu.Lock()
+		if logFile != nil {
+			logFile.Close()
+			logFile = nil
+		}
+		logMu.Unlock()
+	}()
 
 	DebugLog("Test message %d", 123)
 
@@ -39,6 +47,10 @@ func TestDebugLog_Rotation(t *testing.T) {
 	resetRotation := func() {
 		logMu.Lock()
 		logRotated = false
+		if logFile != nil {
+			logFile.Close()
+			logFile = nil
+		}
 		logMu.Unlock()
 	}
 

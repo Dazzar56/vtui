@@ -166,12 +166,6 @@ func initNative() error {
 	return nil
 }
 
-var (
-	shmId   int
-	shmAddr uintptr
-	shmData []byte
-)
-
 func init() {
 	// Константы для системных вызовов IPC (Linux)
 	const (

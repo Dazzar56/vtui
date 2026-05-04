@@ -12,9 +12,14 @@ import (
 var (
 	logMu      sync.Mutex
 	logRotated bool
+	logFile    *os.File
 )
 
 func rotateLogs(basePath string) {
+	if logFile != nil {
+		logFile.Close()
+		logFile = nil
+	}
 	ext := filepath.Ext(basePath)
 	prefix := strings.TrimSuffix(basePath, ext)
 
@@ -36,6 +41,10 @@ var diskLoggingEnabled = true
 func ConfigDiskLogging(enabled bool) {
 	logMu.Lock()
 	diskLoggingEnabled = enabled
+	if !enabled && logFile != nil {
+		logFile.Close()
+		logFile = nil
+	}
 	logMu.Unlock()
 }
 // DebugLog writes a timestamped message to debug.log file.
@@ -71,16 +80,14 @@ func DebugLog(format string, a ...any) {
 		}
 		logRotated = true
 	}
-	logMu.Unlock()
 
-	f, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return
+	if logFile == nil {
+		logFile, _ = os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	}
-	defer f.Close()
-
-	fmt.Fprintln(f, fullMsg)
-	f.Sync()
+	if logFile != nil {
+		fmt.Fprintln(logFile, fullMsg)
+	}
+	logMu.Unlock()
 }
 
 func GetCurrentLogs() []string {
