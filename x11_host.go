@@ -128,6 +128,7 @@ type xClientMessageEvent struct {
 var (
 	libX11 uintptr
 
+	xInitThreads        func() int
 	xOpenDisplay        func(string) uintptr
 	xSelectInput        func(uintptr, uintptr, int64)
 	xNextEvent          func(uintptr, *xEvent)
@@ -146,6 +147,7 @@ func initNative() error {
 		"libX11.so.6",      // Linux
 		"libX11.so",        // BSDs
 		"libX11.6.dylib",   // macOS (XQuartz)
+		"/usr/lib/x86_64-linux-gnu/libX11.so.6",
 		"/usr/local/lib/libX11.so",
 		"/opt/X11/lib/libX11.6.dylib",
 	}
@@ -155,6 +157,7 @@ func initNative() error {
 	for _, name := range xlibNames {
 		lib, err = purego.Dlopen(name, purego.RTLD_NOW|purego.RTLD_GLOBAL)
 		if err == nil {
+			DebugLog("X11: Loaded libX11 from %q", name)
 			break
 		}
 	}
@@ -163,6 +166,7 @@ func initNative() error {
 	}
 	libX11 = lib
 
+	purego.RegisterLibFunc(&xInitThreads, lib, "XInitThreads")
 	purego.RegisterLibFunc(&xOpenDisplay, lib, "XOpenDisplay")
 	purego.RegisterLibFunc(&xSelectInput, lib, "XSelectInput")
 	purego.RegisterLibFunc(&xNextEvent, lib, "XNextEvent")
@@ -175,7 +179,10 @@ func initNative() error {
 
 	// Ищем стандартную библиотеку C (для setlocale)
 	libcNames := []string{
+		"",                 // Поиск в символах текущего процесса (самый надежный способ в Linux)
 		"libc.so.6",        // Linux
+		"/lib/x86_64-linux-gnu/libc.so.6", // Ubuntu
+		"/lib/aarch64-linux-gnu/libc.so.6", // Ubuntu ARM
 		"libc.so.7",        // FreeBSD
 		"libc.so",          // Other BSDs
 		"libSystem.B.dylib", // macOS
@@ -183,16 +190,23 @@ func initNative() error {
 
 	var clib uintptr
 	for _, name := range libcNames {
-		clib, _ = purego.Dlopen(name, purego.RTLD_NOW|purego.RTLD_GLOBAL)
-		if clib != 0 {
+		handle, err := purego.Dlopen(name, purego.RTLD_NOW|purego.RTLD_GLOBAL)
+		if err == nil && handle != 0 {
+			clib = handle
+			logName := name
+			if logName == "" {
+				logName = "<current process memory>"
+			}
+			DebugLog("X11: Loaded libc from %q", logName)
 			break
 		}
 	}
 
-	if clib != 0 {
-		purego.RegisterLibFunc(&setlocale, clib, "setlocale")
+	if clib == 0 {
+		return fmt.Errorf("CRITICAL: could not find standard C library (libc) to initialize locales")
 	}
 
+	purego.RegisterLibFunc(&setlocale, clib, "setlocale")
 	return nil
 }
 
@@ -223,17 +237,29 @@ type X11Host struct {
 
 func NewX11Host(cols, rows, cellW, cellH int) (*X11Host, error) {
 	if err := initNative(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Native Library Error: %w", err)
 	}
 
-	if setlocale != nil {
-		setlocale(6, "") // LC_ALL
+	// 0. Включаем многопоточность X11. КРИТИЧНО для стабильности Go-горутин
+	if xInitThreads != nil {
+		xInitThreads()
 	}
+
+	// 1. Инициализируем локали. Без этого X11 не отдаст Unicode и не откроет IM.
+	// 6 — это константа LC_ALL в большинстве Linux систем.
+	if setlocale != nil {
+		if res := setlocale(6, ""); res == 0 {
+			return nil, fmt.Errorf("setlocale(LC_ALL, \"\") failed. Check your LANG environment variable")
+		}
+	}
+
+	// 2. Сброс модификаторов для устранения задержек при XWayland/KDE
 	xSetLocaleModifiers("")
 
+	// 3. Открываем дисплей
 	dpy := xOpenDisplay("")
 	if dpy == 0 {
-		return nil, fmt.Errorf("XOpenDisplay failed")
+		return nil, fmt.Errorf("XOpenDisplay failed. Is DISPLAY set and X-server running?")
 	}
 
 	conn, err := xgb.NewConn()
@@ -308,12 +334,28 @@ func NewX11Host(cols, rows, cellW, cellH int) (*X11Host, error) {
 	// Set up Xlib input
 	xSelectInput(dpy, uintptr(host.wid), KeyPressMask|KeyReleaseMask|ButtonPressMask|ButtonReleaseMask|PointerMotionMask|ExposureMask|StructureNotifyMask)
 
+	// 4. Открываем метод ввода (XIM)
 	im := xOpenIM(dpy, 0, 0, 0)
+	if im == 0 {
+		DebugLog("X11: Default XOpenIM failed, retrying with @im=none...")
+		xSetLocaleModifiers("@im=none")
+		im = xOpenIM(dpy, 0, 0, 0)
+	}
+	if im == 0 {
+		return nil, fmt.Errorf("XOpenIM failed: could not initialize X Input Method. Unicode input is impossible")
+	}
+
+	// 5. Создаем контекст ввода (XIC)
 	nInputStyle, nClientWindow := []byte("inputStyle\x00"), []byte("clientWindow\x00")
 
+	// Передача im=0 в XCreateIC приведет к немедленному Segfault в libX11.so
 	ic, _, _ := purego.SyscallN(xCreateICPtr, im,
 		uintptr(unsafe.Pointer(&nInputStyle[0])), uintptr(XIMPreeditNothing|XIMStatusNothing),
 		uintptr(unsafe.Pointer(&nClientWindow[0])), uintptr(host.wid), 0)
+
+	if ic == 0 {
+		return nil, fmt.Errorf("XCreateIC failed: could not create X Input Context")
+	}
 
 	host.ic = ic
 
@@ -413,13 +455,19 @@ func (h *X11Host) RunEventLoop() {
 			isDown := evType == KeyPress
 
 			buf := make([]byte, 64)
-			var keysym uint32
-			var status int
-			n, _, _ := purego.SyscallN(xutf8LookupStringPtr, h.ic, uintptr(unsafe.Pointer(&ev)),
-				uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)),
-				uintptr(unsafe.Pointer(&keysym)), uintptr(unsafe.Pointer(&status)))
+			var keysym uintptr // KeySym MUST BE 8 BYTES (unsigned long) on 64-bit to avoid stack corruption
+			var status int32   // Status is 4 bytes
+			var n uintptr
 
-			vk := keysymToVK(keysym)
+			// Используем нативный XIM для получения Unicode символа и KeySym.
+			// NewX11Host гарантирует, что h.ic != 0, иначе программа бы не запустилась.
+			if h.ic != 0 {
+				n, _, _ = purego.SyscallN(xutf8LookupStringPtr, h.ic, uintptr(unsafe.Pointer(&ev)),
+					uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)),
+					uintptr(unsafe.Pointer(&keysym)), uintptr(unsafe.Pointer(&status)))
+			}
+
+			vk := keysymToVK(uint32(keysym))
 			char := rune(0)
 			if n > 0 {
 				text := string(buf[:n])

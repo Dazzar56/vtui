@@ -95,6 +95,7 @@ func DebugLog(format string, a ...any) {
 	}
 	if logFile != nil {
 		fmt.Fprintln(logFile, fullMsg)
+		logFile.Sync()
 	}
 	logMu.Unlock()
 }
