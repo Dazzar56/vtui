@@ -3,17 +3,16 @@
 package vtui
 
 import (
-	"image"
-	"unsafe"
-	"sync"
 	"fmt"
+	"image"
+	"sync"
+	"unsafe"
 
 	"github.com/BurntSushi/xgb"
 	"github.com/BurntSushi/xgb/xproto"
 	"github.com/ebitengine/purego"
 	"github.com/unxed/vtinput"
 )
-
 
 // X11 Constants
 const (
@@ -125,6 +124,12 @@ type xClientMessageEvent struct {
 	Data        [40]byte
 }
 
+type ximStyles struct {
+	Count uint16
+	_     [6]byte // padding for 64-bit alignment
+	Style uintptr // pointer to array of uintptr
+}
+
 var (
 	libX11 uintptr
 
@@ -137,6 +142,7 @@ var (
 	xSetLocaleModifiers func(string) uintptr
 
 	xCreateICPtr         uintptr
+	xGetIMValuesPtr      uintptr
 	xutf8LookupStringPtr uintptr
 	setlocale            func(int, string) uintptr
 )
@@ -175,13 +181,14 @@ func initNative() error {
 	purego.RegisterLibFunc(&xSetLocaleModifiers, lib, "XSetLocaleModifiers")
 
 	xCreateICPtr, _ = purego.Dlsym(lib, "XCreateIC")
+	xGetIMValuesPtr, _ = purego.Dlsym(lib, "XGetIMValues")
 	xutf8LookupStringPtr, _ = purego.Dlsym(lib, "Xutf8LookupString")
 
 	// Ищем стандартную библиотеку C (для setlocale)
 	libcNames := []string{
 		"",                 // Поиск в символах текущего процесса (самый надежный способ в Linux)
 		"libc.so.6",        // Linux
-		"/lib/x86_64-linux-gnu/libc.so.6", // Ubuntu
+		"/lib/x86_64-linux-gnu/libc.so.6",  // Ubuntu
 		"/lib/aarch64-linux-gnu/libc.so.6", // Ubuntu ARM
 		"libc.so.7",        // FreeBSD
 		"libc.so",          // Other BSDs
@@ -243,6 +250,7 @@ func NewX11Host(cols, rows, cellW, cellH int) (*X11Host, error) {
 	// 0. Включаем многопоточность X11. КРИТИЧНО для стабильности Go-горутин
 	if xInitThreads != nil {
 		xInitThreads()
+		DebugLog("X11: XInitThreads called")
 	}
 
 	// 1. Инициализируем локали. Без этого X11 не отдаст Unicode и не откроет IM.
@@ -253,7 +261,7 @@ func NewX11Host(cols, rows, cellW, cellH int) (*X11Host, error) {
 		}
 	}
 
-	// 2. Сброс модификаторов для устранения задержек при XWayland/KDE
+	// 2. Сброс модификаторов на старте
 	xSetLocaleModifiers("")
 
 	// 3. Открываем дисплей
@@ -333,31 +341,76 @@ func NewX11Host(cols, rows, cellW, cellH int) (*X11Host, error) {
 
 	// Set up Xlib input
 	xSelectInput(dpy, uintptr(host.wid), KeyPressMask|KeyReleaseMask|ButtonPressMask|ButtonReleaseMask|PointerMotionMask|ExposureMask|StructureNotifyMask)
-
-	// 4. Открываем метод ввода (XIM)
+	
+	// 4. Настройка метода ввода (XIM)
+	// Важно: сначала пробуем пустые модификаторы (системные IBus/Fcitx)
+	xSetLocaleModifiers("")
 	im := xOpenIM(dpy, 0, 0, 0)
+
 	if im == 0 {
-		DebugLog("X11: Default XOpenIM failed, retrying with @im=none...")
+		// Хак для Wayland/XWayland: если системный IM не ответил, форсируем встроенный
+		DebugLog("X11: System XOpenIM returned NULL, trying @im=none...")
 		xSetLocaleModifiers("@im=none")
 		im = xOpenIM(dpy, 0, 0, 0)
 	}
+
 	if im == 0 {
-		return nil, fmt.Errorf("XOpenIM failed: could not initialize X Input Method. Unicode input is impossible")
+		return nil, fmt.Errorf("XOpenIM failed: X-server refuses to provide any Input Method")
+	}
+	DebugLog("X11: XIM handle opened: 0x%X", im)
+
+	// 5. Запрос поддерживаемых стилей ввода для диагностики
+	var stylesPtr uintptr
+	nStyles := []byte("queryInputStyle\x00")
+	if xGetIMValuesPtr != 0 {
+		purego.SyscallN(xGetIMValuesPtr, im, uintptr(unsafe.Pointer(&nStyles[0])), uintptr(unsafe.Pointer(&stylesPtr)), 0)
 	}
 
-	// 5. Создаем контекст ввода (XIC)
-	nInputStyle, nClientWindow := []byte("inputStyle\x00"), []byte("clientWindow\x00")
+	var bestStyle uintptr = XIMPreeditNothing | XIMStatusNothing // Дефолт: 0x410
+	if stylesPtr != 0 {
+		styles := (*ximStyles)(unsafe.Pointer(stylesPtr))
+		DebugLog("X11: Supported IM styles count: %d", styles.Count)
+		if styles.Count > 0 && styles.Style != 0 {
+			styleSlice := unsafe.Slice((*uintptr)(unsafe.Pointer(styles.Style)), int(styles.Count))
+			hasPreferred := false
+			for i, s := range styleSlice {
+				DebugLog("X11:   [%d] Style: 0x%X", i, s)
+				if s == (XIMPreeditNothing | XIMStatusNothing) {
+					hasPreferred = true
+				}
+			}
+			if !hasPreferred {
+				// Если 0x410 нет в списке, берем первый попавшийся PreeditNothing
+				for _, s := range styleSlice {
+					if s&XIMPreeditNothing != 0 {
+						bestStyle = s
+						break
+					}
+				}
+				DebugLog("X11: 0x410 not in list, falling back to discovered 0x%X", bestStyle)
+			}
+		}
+	}
 
-	// Передача im=0 в XCreateIC приведет к немедленному Segfault в libX11.so
+	// 6. Создание контекста ввода (XIC)
+	nInputStyle := []byte("inputStyle\x00")
+	nClientWindow := []byte("clientWindow\x00")
+	nFocusWindow := []byte("focusWindow\x00")
+
+	// На 64-битных системах все аргументы в вариативном вызове (Style, Window) ДОЛЖНЫ быть 8 байт.
+	// Обязательно передаем uintptr(0) в конце.
 	ic, _, _ := purego.SyscallN(xCreateICPtr, im,
-		uintptr(unsafe.Pointer(&nInputStyle[0])), uintptr(XIMPreeditNothing|XIMStatusNothing),
-		uintptr(unsafe.Pointer(&nClientWindow[0])), uintptr(host.wid), 0)
+		uintptr(unsafe.Pointer(&nInputStyle[0])), bestStyle,
+		uintptr(unsafe.Pointer(&nClientWindow[0])), uintptr(host.wid),
+		uintptr(unsafe.Pointer(&nFocusWindow[0])), uintptr(host.wid),
+		uintptr(0))
 
 	if ic == 0 {
-		return nil, fmt.Errorf("XCreateIC failed: could not create X Input Context")
+		return nil, fmt.Errorf("XCreateIC failed: style 0x%X rejected. Check system log for Segfaults", bestStyle)
 	}
 
 	host.ic = ic
+	DebugLog("X11: XIC created successfully: 0x%X (Style: 0x%X)", ic, bestStyle)
 
 	protocolsAtom, _ := xproto.InternAtom(conn, false, 12, "WM_PROTOCOLS").Reply()
 	deleteAtom, _ := xproto.InternAtom(conn, false, 16, "WM_DELETE_WINDOW").Reply()
