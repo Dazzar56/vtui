@@ -137,10 +137,16 @@ func showShowcaseDialog() {
 
 func main() {
 	guiMode := false
+	guiBackend := ""
 	for _, arg := range os.Args {
 		if arg == "--gui" {
 			guiMode = true
-			break
+		} else if arg == "--gui=x11" {
+			guiMode = true
+			guiBackend = "x11"
+		} else if arg == "--gui=wayland" {
+			guiMode = true
+			guiBackend = "wayland"
 		}
 	}
 
@@ -279,7 +285,7 @@ func main() {
 	}
 
 	if guiMode {
-		vtui.RunInX11Window(80, 30, setup)
+		vtui.RunInGUIWindow(80, 30, guiBackend, setup)
 	} else {
 		restore, err := vtui.PrepareTerminal()
 		if err != nil {
