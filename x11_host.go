@@ -147,6 +147,11 @@ var (
 	setlocale            func(int, string) uintptr
 )
 
+// initNative динамически загружает libX11.so и libc.so во время выполнения.
+// Мы используем purego, чтобы избежать зависимостей от CGO. Это позволяет
+// компилировать бинарный файл под любую ОС/архитектуру без тулчейна C,
+// сохраняя при этом возможность использовать логику метода ввода X11 (XIM)
+// из системной библиотеки (см. ГИБРИДНЫЙ МЕТОД ниже).
 func initNative() error {
 	// Список возможных имен для libX11 на разных ОС
 	xlibNames := []string{
@@ -242,6 +247,11 @@ type X11Host struct {
 	dirtyLines []bool
 }
 
+// ГИБРИДНЫЙ МЕТОД: Мы используем Xlib для "правды" о вводе, а XGB для рисования.
+// Группы (layout indices) в сырых событиях X11 часто предоставляют неверные данные,
+// на которые нельзя полагаться. Надежная поддержка множества (3 и более) раскладок
+// возможна только через обращение к нативным функциям иксов (XIM).
+// При этом XGB используется для графики, так как он не блокирует планировщик Go.
 func NewX11Host(cols, rows, cellW, cellH int) (*X11Host, error) {
 	if err := initNative(); err != nil {
 		return nil, fmt.Errorf("Native Library Error: %w", err)
@@ -254,6 +264,7 @@ func NewX11Host(cols, rows, cellW, cellH int) (*X11Host, error) {
 	}
 
 	// 1. Инициализируем локали. Без этого X11 не отдаст Unicode и не откроет IM.
+	// ВАЖНО: Без этого Xutf8LookupString не будет возвращать UTF-8 текст для не-латинских раскладок.
 	// 6 — это константа LC_ALL в большинстве Linux систем.
 	if setlocale != nil {
 		if res := setlocale(6, ""); res == 0 {
@@ -343,6 +354,7 @@ func NewX11Host(cols, rows, cellW, cellH int) (*X11Host, error) {
 	xSelectInput(dpy, uintptr(host.wid), KeyPressMask|KeyReleaseMask|ButtonPressMask|ButtonReleaseMask|PointerMotionMask|ExposureMask|StructureNotifyMask)
 	
 	// 4. Настройка метода ввода (XIM)
+	// Это единственный надежный способ обработки интернационального текстового ввода в X11.
 	// Важно: сначала пробуем пустые модификаторы (системные IBus/Fcitx)
 	xSetLocaleModifiers("")
 	im := xOpenIM(dpy, 0, 0, 0)
@@ -470,6 +482,10 @@ func (h *X11Host) RunEventLoop() {
 		var ev xEvent
 		xNextEvent(h.dpy, &ev)
 
+		// xFilterEvent КРИТИЧЕСКИ ВАЖЕН для методов ввода.
+		// Он перехватывает события, используемые для внутреннего взаимодействия XKB/XIM
+		// (например, переключение раскладки или последовательности Compose), чтобы
+		// они не засоряли логику приложения.
 		if xFilterEvent(&ev, 0) {
 			continue
 		}
@@ -512,6 +528,9 @@ func (h *X11Host) RunEventLoop() {
 			var status int32   // Status is 4 bytes
 			var n uintptr
 
+			// ИСТОЧНИК ИСТИНЫ: Xutf8LookupString.
+			// Эта функция обрабатывает все сложности раскладок, включая несколько групп
+			// и кастомные модификаторы, которые простые таблицы маппинга упускают.
 			// Используем нативный XIM для получения Unicode символа и KeySym.
 			// NewX11Host гарантирует, что h.ic != 0, иначе программа бы не запустилась.
 			if h.ic != 0 {
