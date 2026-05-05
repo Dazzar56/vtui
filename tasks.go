@@ -34,13 +34,14 @@ func RunAsync(worker func(ctx *TaskContext)) *TaskContext {
 				DebugLog("FATAL PANIC IN ASYNC TASK: %v", r)
 				crashPath := RecordCrash(r, nil)
 				Suspend()
-				CleanupStderrLog()
 				fmt.Fprintf(os.Stderr, "\n[%s] FATAL PANIC IN ASYNC TASK: %v\n", AppName, r)
 				if crashPath != "" {
 					fmt.Fprintf(os.Stderr, "[%s] Crash report saved to: %s\n", AppName, crashPath)
 				}
+				CleanupStderrLog()
 				os.Exit(2)
 			}
+			CleanupStderrLog()
 		}()
 		worker(taskCtx)
 	}()

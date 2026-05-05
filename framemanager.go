@@ -797,16 +797,17 @@ func (fm *frameManager) Run(reader *vtinput.Reader) {
 			DebugLog("FATAL PANIC IN RUN LOOP: %v", r)
 			crashPath := RecordCrash(r, nil)
 			Suspend()
-			CleanupStderrLog()
 			fmt.Fprintf(os.Stderr, "\n[%s] FATAL PANIC: %v\n", AppName, r)
 			if crashPath != "" {
 				fmt.Fprintf(os.Stderr, "[%s] Crash report saved to: %s\n", AppName, crashPath)
 			}
+			CleanupStderrLog()
 			os.Exit(2)
 		}
 		fm.running = false
 		fm.scr.SetCursorVisible(true)
 		fm.scr.Flush()
+		CleanupStderrLog()
 	}()
 
 	ch := make(chan *vtinput.InputEvent, 1024)
