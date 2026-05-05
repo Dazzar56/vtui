@@ -6,7 +6,6 @@ import (
 	"image"
 	"io"
 	"sync"
-	"time"
 
 	"github.com/neurlang/wayland/wl"
 	window "github.com/neurlang/wayland/windowtrace"
@@ -85,10 +84,6 @@ func runInWaylandWindow(cols, rows int, setupApp func()) error {
 
 	// FrameManager must run in a goroutine because Wayland's DisplayRun blocks the main thread
 	go func() {
-		// Wait a tiny bit for Wayland to map the window
-		time.Sleep(100 * time.Millisecond)
-		// Initial redraw to prevent black window on startup
-		FrameManager.Redraw()
 		FrameManager.Run(reader)
 		// On exit, close Wayland display
 		host.display.Exit()
@@ -121,6 +116,11 @@ func (h *WaylandHost) Resize(widget *window.Widget, width int32, height int32, p
 		h.mu.Unlock()
 	}
 	widget.SetAllocation(0, 0, pwidth, pheight)
+	// The first call to Resize confirms the window is mapped and ready.
+	// This is the correct place to trigger the initial draw.
+	if FrameManager != nil {
+		FrameManager.Redraw()
+	}
 }
 
 func (h *WaylandHost) Redraw(widget *window.Widget) {
