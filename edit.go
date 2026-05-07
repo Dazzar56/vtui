@@ -179,6 +179,7 @@ func (e *Edit) GetText() string {
 func (e *Edit) SetText(text string) {
 	e.text = []rune(text)
 	e.curPos = len(e.text)
+	e.leftPos = 0
 	e.selStart = -1
 	e.selAnchor = -1
 }
@@ -275,6 +276,7 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 					newText = make([]rune, len(e.pasteBuffer))
 					copy(newText, e.pasteBuffer)
 					newCurPos = len(e.pasteBuffer)
+					e.leftPos = 0
 				} else if e.selStart != -1 {
 					start, end := e.selStart, e.selEnd
 					if start > end {
@@ -285,6 +287,9 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 					newText = append(newText, e.pasteBuffer...)
 					newText = append(newText, e.text[end:]...)
 					newCurPos = start + len(e.pasteBuffer)
+					if e.leftPos > start {
+						e.leftPos = start
+					}
 				} else {
 					newText = make([]rune, 0, len(e.text)+len(e.pasteBuffer))
 					newText = append(newText, e.text[:e.curPos]...)
@@ -548,6 +553,7 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 		if e.clearFlag {
 			newText = []rune{testChar}
 			newCurPos = 1
+			e.leftPos = 0
 		} else if e.selStart != -1 {
 			start, end := e.selStart, e.selEnd
 			if start > end {
@@ -558,6 +564,9 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 			newText = append(newText, testChar)
 			newText = append(newText, e.text[end:]...)
 			newCurPos = start + 1
+			if e.leftPos > start {
+				e.leftPos = start
+			}
 		} else if e.overtype && e.curPos < len(e.text) {
 			newText = make([]rune, len(e.text))
 			copy(newText, e.text)
