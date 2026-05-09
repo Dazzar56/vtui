@@ -309,7 +309,7 @@ func TestDialog_CloseButton(t *testing.T) {
 	d.ProcessMouse(&vtinput.InputEvent{
 		Type:        vtinput.MouseEventType,
 		KeyDown:     true,
-		MouseX:      25,
+		MouseX:      27,
 		MouseY:      10,
 		ButtonState: vtinput.FromLeft1stButtonPressed,
 	})
@@ -318,6 +318,38 @@ func TestDialog_CloseButton(t *testing.T) {
 		t.Errorf("Close button click failed. Done: %v, ExitCode: %d", d.IsDone(), d.ExitCode)
 	}
 }
+
+func TestDialog_CloseButton_Shifted(t *testing.T) {
+	// Setup environment with multiple screens
+	oldFm := FrameManager
+	fm := &frameManager{}
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	fm.Init(scr)
+	// Create 2 screens
+	fm.Screens = []*AppScreen{{}, {}}
+	FrameManager = fm
+	defer func() { FrameManager = oldFm }()
+
+	// Create a full-width dialog (docked to right edge)
+	d := NewDialog(0, 0, 79, 10, "Shifted Close Test")
+	d.ShowClose = true
+
+	// With 2 screens and X2=79, getControlOffset must return 6.
+	// Button [x] should be at 79-6=73, 74, 75.
+	d.ProcessMouse(&vtinput.InputEvent{
+		Type:        vtinput.MouseEventType,
+		KeyDown:     true,
+		MouseX:      74, // Middle of [x] at offset 6
+		MouseY:      0,
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+	})
+
+	if !d.IsDone() {
+		t.Error("Shifted close button click failed to close the dialog at MouseX=74")
+	}
+}
+
 func TestDialog_GrowModeManualResize(t *testing.T) {
 	// 20x10 Dialog
 	d := NewDialog(0, 0, 19, 9, "Grow Test")
