@@ -4,10 +4,39 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 	"sync"
 )
+
+type ColorProfile int
+
+const (
+	ColorProfileTrueColor ColorProfile = iota
+	ColorProfile256
+	ColorProfile16
+)
+
+func DetectColorProfile() ColorProfile {
+	if runtime.GOOS == "windows" {
+		return ColorProfileTrueColor
+	}
+	colorTerm := os.Getenv("COLORTERM")
+	if colorTerm == "truecolor" || colorTerm == "24bit" {
+		return ColorProfileTrueColor
+	}
+	term := os.Getenv("TERM")
+	if strings.Contains(term, "256color") {
+		return ColorProfile256
+	}
+	if term == "linux" || term == "xterm-clear" || strings.HasPrefix(term, "cons") {
+		return ColorProfile16
+	}
+	// Fallback for general 'xterm' and others. Most modern terminals support 256 colors.
+	// FreeBSD console (vt) maps 256-color sequences to 16 colors perfectly.
+	return ColorProfile256
+}
 
 // ScreenBuf implements double buffering to minimize terminal write operations.
 type ScreenBuf struct {
@@ -29,7 +58,7 @@ type ScreenBuf struct {
 	OverlayMode      bool
 	ThemePalette     *[256]uint32
 	ActivePalette    *[256]uint32
-	Force256Colors   bool
+	ColorProfile     ColorProfile
 
 	HostPalette      [256]uint32
 	HostPaletteValid [256]bool
@@ -42,7 +71,8 @@ type ScreenBuf struct {
 // NewScreenBuf creates a new ScreenBuf instance.
 func NewScreenBuf() *ScreenBuf {
 	s := &ScreenBuf{
-		dirty: true,
+		dirty:        true,
+		ColorProfile: DetectColorProfile(),
 	}
 	s.Renderer = &AnsiRenderer{parent: s}
 	return s
@@ -52,8 +82,9 @@ func NewScreenBuf() *ScreenBuf {
 // Ideal for unit tests to prevent ANSI sequences from polluting the console.
 func NewSilentScreenBuf() *ScreenBuf {
 	return &ScreenBuf{
-		dirty:  true,
-		Writer: io.Discard,
+		dirty:        true,
+		Writer:       io.Discard,
+		ColorProfile: DetectColorProfile(),
 	}
 }
 
@@ -486,7 +517,7 @@ func (r *AnsiRenderer) Render(buf, shadow []CharInfo, w, h int, force bool) {
 			}
 
 			attr := buf[idx].Attributes
-			r.frameOut.WriteString(attributesToANSI(attr, r.lastAttr, activePal, r.parent.Force256Colors, r.parent.quantCache))
+			r.frameOut.WriteString(attributesToANSI(attr, r.lastAttr, activePal, r.parent.ColorProfile, r.parent.quantCache))
 			r.lastAttr = attr
 
 			char := buf[idx].Char

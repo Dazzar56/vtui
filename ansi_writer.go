@@ -6,7 +6,7 @@ import (
 )
 
 // attributesToANSI генерирует минимальную ANSI-последовательность для перехода между состояниями аттрибутов.
-func attributesToANSI(attr, lastAttr uint64, activePal *[256]uint32, force256 bool, quantCache map[uint32]uint8) string {
+func attributesToANSI(attr, lastAttr uint64, activePal *[256]uint32, profile ColorProfile, quantCache map[uint32]uint8) string {
 	if attr == lastAttr {
 		return ""
 	}
@@ -41,13 +41,13 @@ func attributesToANSI(attr, lastAttr uint64, activePal *[256]uint32, force256 bo
 	// 2. Foreground Color
 	fgMask := IsFgRGB | (0xFF << 16)
 	if resetTriggered || attr&fgMask != lastAttr&fgMask || (attr&IsFgRGB != 0 && GetRGBFore(attr) != GetRGBFore(lastAttr)) {
-		params = append(params, colorToANSI(false, attr, activePal, force256, quantCache))
+		params = append(params, colorToANSI(false, attr, activePal, profile, quantCache))
 	}
 
 	// 3. Background Color
 	bgMask := IsBgRGB | (0xFF << 40)
 	if resetTriggered || attr&bgMask != lastAttr&bgMask || (attr&IsBgRGB != 0 && GetRGBBack(attr) != GetRGBBack(lastAttr)) {
-		params = append(params, colorToANSI(true, attr, activePal, force256, quantCache))
+		params = append(params, colorToANSI(true, attr, activePal, profile, quantCache))
 	}
 
 	if len(params) == 0 {
@@ -57,7 +57,7 @@ func attributesToANSI(attr, lastAttr uint64, activePal *[256]uint32, force256 bo
 	return "\x1b[" + strings.Join(params, ";") + "m"
 }
 
-func colorToANSI(isBg bool, attr uint64, activePal *[256]uint32, force256 bool, quantCache map[uint32]uint8) string {
+func colorToANSI(isBg bool, attr uint64, activePal *[256]uint32, profile ColorProfile, quantCache map[uint32]uint8) string {
 	isRGBFlag := IsFgRGB
 	cmd := 38
 	var rgbVal uint32
@@ -77,12 +77,19 @@ func colorToANSI(isBg bool, attr uint64, activePal *[256]uint32, force256 bool, 
 			rgbVal = GetRGBFore(attr)
 		}
 
-		if force256 {
+		if profile != ColorProfileTrueColor {
 			if cachedIdx, ok := quantCache[rgbVal]; ok {
 				idxVal = cachedIdx
 			} else {
-				idxVal = findNearestColor(rgbVal, activePal)
+				maxColors := 256
+				if profile == ColorProfile16 {
+					maxColors = 16
+				}
+				idxVal = findNearestColor(rgbVal, activePal, maxColors)
 				quantCache[rgbVal] = idxVal
+			}
+			if profile == ColorProfile16 {
+				return idxTo16ColorANSI(isBg, idxVal)
 			}
 			return fmt.Sprintf("%d;5;%d", cmd, idxVal)
 		}
@@ -95,11 +102,32 @@ func colorToANSI(isBg bool, attr uint64, activePal *[256]uint32, force256 bool, 
 		} else {
 			idxVal = GetIndexFore(attr)
 		}
+
+		if profile == ColorProfile16 {
+			return idxTo16ColorANSI(isBg, idxVal)
+		}
 		return fmt.Sprintf("%d;5;%d", cmd, idxVal)
 	}
 }
 
-func findNearestColor(rgbVal uint32, pal *[256]uint32) uint8 {
+func idxTo16ColorANSI(isBg bool, idx uint8) string {
+	if idx > 15 {
+		idx = idx % 16 // safe fallback
+	}
+	if isBg {
+		if idx < 8 {
+			return fmt.Sprintf("%d", 40+idx)
+		}
+		return fmt.Sprintf("%d", 100+(idx-8))
+	} else {
+		if idx < 8 {
+			return fmt.Sprintf("%d", 30+idx)
+		}
+		return fmt.Sprintf("%d", 90+(idx-8))
+	}
+}
+
+func findNearestColor(rgbVal uint32, pal *[256]uint32, maxColors int) uint8 {
 	if pal == nil {
 		pal = &XTerm256Palette
 	}
@@ -107,7 +135,7 @@ func findNearestColor(rgbVal uint32, pal *[256]uint32) uint8 {
 	var bestIdx uint8 = 0
 	var bestDist int = 1000000
 
-	for i := 0; i < 256; i++ {
+	for i := 0; i < maxColors; i++ {
 		pr, pg, pb := rgb(pal[i])
 		dr := int(r) - int(pr)
 		dg := int(g) - int(pg)

@@ -7,17 +7,17 @@ import (
 func TestAttributesToANSI(t *testing.T) {
 	// 1. Simple Bold + Index Red
 	attr := ForegroundIntensity | SetIndexFore(0, 9)
-	got := attributesToANSI(attr, 0, nil, false, nil)
+	got := attributesToANSI(attr, 0, nil, ColorProfileTrueColor, nil)
 	// Expected: 1 (Bold), 38;5;9
 	want := "\x1b[1;38;5;9m"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 
-	// 2. TrueColor mapping (when force256 is false)
+	// 2. TrueColor mapping (when ColorProfile is TrueColor)
 	orange := uint32(0xFF8700)
 	attrTC := SetRGBFore(0, orange)
-	gotTC := attributesToANSI(attrTC, 0, nil, false, nil)
+	gotTC := attributesToANSI(attrTC, 0, nil, ColorProfileTrueColor, nil)
 	wantTC := "\x1b[38;2;255;135;0m"
 	if gotTC != wantTC {
 		t.Errorf("TrueColor fallback: got %q, want %q", gotTC, wantTC)
@@ -26,7 +26,7 @@ func TestAttributesToANSI(t *testing.T) {
 	// 3. Flag removal (Reset)
 	attr1 := CommonLvbUnderscore
 	attr2 := SetIndexFore(0, 4)
-	gotReset := attributesToANSI(attr2, attr1, nil, false, nil)
+	gotReset := attributesToANSI(attr2, attr1, nil, ColorProfileTrueColor, nil)
 	// attr1 has underscore, attr2 does NOT. Should trigger reset '0'.
 	if gotReset[:4] != "\x1b[0;" {
 		t.Errorf("Reset expected, got %q", gotReset)
@@ -38,7 +38,7 @@ func TestAttributesToANSI_ResetBug(t *testing.T) {
 	attr1 := ForegroundIntensity | SetIndexBoth(0, 0, 3)
 	attr2 := SetIndexBoth(0, 0, 3)
 
-	got := attributesToANSI(attr2, attr1, nil, false, nil)
+	got := attributesToANSI(attr2, attr1, nil, ColorProfileTrueColor, nil)
 
 	// Since we trigger a reset, the terminal forgets the Foreground color.
 	// We MUST emit the Foreground color (38;5;0) again even though it numerically matches lastAttr=0.
@@ -85,9 +85,9 @@ func TestScreenBuf_Quantization(t *testing.T) {
 	// RGB color that is close to red, but not exactly
 	rgbAttr := SetRGBFore(0, 0xEE0000)
 
-	// Quantization requested (Force256Colors = true)
+	// Quantization requested (ColorProfile256)
 	quantCache := make(map[uint32]uint8)
-	ansi := colorToANSI(false, rgbAttr, &pal, true, quantCache)
+	ansi := colorToANSI(false, rgbAttr, &pal, ColorProfile256, quantCache)
 
 	// Should quantize to index 10 (the closest match in our dummy palette)
 	want := "38;5;10"
@@ -100,12 +100,33 @@ func TestScreenBuf_Quantization(t *testing.T) {
 		t.Error("Quantization cache was not updated")
 	}
 }
+
+func TestScreenBuf_16ColorProfile(t *testing.T) {
+	// RGB color
+	rgbAttr := SetRGBFore(0, 0xFF0000)
+	quantCache := make(map[uint32]uint8)
+	ansi := colorToANSI(false, rgbAttr, nil, ColorProfile16, quantCache)
+
+	// In 16-color profile, Red is index 1 (or 9 for bright red).
+	// The 16-color fallback for index 9 should be "91" (90 + 1).
+	if !contains(ansi, "91") && !contains(ansi, "31") {
+		t.Errorf("16-color profile failed for foreground. Got %q", ansi)
+	}
+
+	// Background color (e.g. index 4 - Blue)
+	bgAttr := SetIndexBack(0, 4)
+	ansiBg := colorToANSI(true, bgAttr, nil, ColorProfile16, quantCache)
+	if !contains(ansiBg, "44") {
+		t.Errorf("16-color profile failed for background index. Expected 44, got %q", ansiBg)
+	}
+}
+
 func TestScreenBuf_ColorTransitions(t *testing.T) {
 	// Check transition from TrueColor to indexed palette
 	tcAttr := SetRGBFore(0, 0xFF0000)
 	palAttr := SetIndexFore(0, 4) // Regular blue index
 
-	got := attributesToANSI(palAttr, tcAttr, nil, false, nil)
+	got := attributesToANSI(palAttr, tcAttr, nil, ColorProfileTrueColor, nil)
 
 	// Since we changed color type (TrueColor -> Index), explicit code 38;5;4 must be triggered.
 	if !contains(got, "38;5;4") {
@@ -116,7 +137,8 @@ func TestScreenBuf_ColorTransitions(t *testing.T) {
 func TestAttributesToANSI_Styles(t *testing.T) {
 	// Bold + Strikeout
 	attr := ForegroundIntensity | CommonLvbStrikeout
-	got := attributesToANSI(attr, 0, nil, false, nil)
+	got := attributesToANSI(attr, 0, nil, ColorProfileTrueColor, nil)
+
 	// Note: result might vary depending on whether we treat 0 as having black/black or no color.
 	// But let's verify flags at least.
 	if !contains(got, "1") || !contains(got, "9") {
