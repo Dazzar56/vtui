@@ -491,6 +491,7 @@ func (fm *frameManager) HardRefresh() {
 func (fm *frameManager) Redraw() {
 	select {
 	case fm.RedrawChan <- struct{}{}:
+		DebugLog("FM: Redraw requested")
 	default:
 	}
 }
@@ -896,8 +897,19 @@ func (fm *frameManager) Run(reader *vtinput.Reader) {
 			return
 		}
 
-		// 1. Rendering
-		fm.renderPhase()
+		// In GPU mode, rendering is driven by the hardware thread callback (OnDraw).
+		// We skip the manual renderPhase in the main loop to avoid contention 
+		// on the ScreenBuf mutex and potential deadlocks.
+		skipRender := false
+		if fm.scr != nil && fm.scr.Renderer != nil {
+			if _, ok := fm.scr.Renderer.(*GogpuRenderer); ok {
+				skipRender = true
+			}
+		}
+
+		if !skipRender {
+			fm.renderPhase()
+		}
 
 		// 3. Event waiting (Blocking)
 		var e *vtinput.InputEvent
@@ -990,6 +1002,13 @@ func (fm *frameManager) Run(reader *vtinput.Reader) {
 func (fm *frameManager) renderPhase() {
 	if len(fm.frames) == 0 {
 		return
+	}
+	if fm.scr != nil && fm.scr.Renderer != nil {
+		// Only log periodically to avoid performance hit
+		if (time.Now().UnixMilli() / 1000) % 5 == 0 {
+			DebugLog("FM: renderPhase() for screen %dx%d, stack depth: %d, top frame: %q",
+				fm.scr.width, fm.scr.height, len(fm.frames), fm.frames[len(fm.frames)-1].GetTitle())
+		}
 	}
 	topFrame := fm.frames[len(fm.frames)-1]
 

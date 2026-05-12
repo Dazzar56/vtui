@@ -147,6 +147,9 @@ func main() {
 		} else if arg == "--gui=wayland" {
 			guiMode = true
 			guiBackend = "wayland"
+		} else if arg == "--gui=gogpu" {
+			guiMode = true
+			guiBackend = "gogpu"
 		}
 	}
 

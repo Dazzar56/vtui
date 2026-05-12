@@ -22,6 +22,9 @@ func RunInGUIWindow(cols, rows int, backend string, setupApp func()) error {
 	if backend == "x11" {
 		return runInX11Window(cols, rows, setupApp)
 	}
+	if backend == "gogpu" {
+		return runInGogpuWindow(cols, rows, setupApp)
+	}
 
 	// Default logic: Try X11 first (stability priority), then Wayland
 	if os.Getenv("DISPLAY") != "" {
@@ -84,4 +87,7 @@ func runInX11Window(cols, rows int, setupApp func()) error {
 	FrameManager.Run(reader)
 
 	return nil
+}
+func runInGogpuWindow(cols, rows int, setupApp func()) error {
+	return RunGogpuHost(cols, rows, setupApp)
 }
