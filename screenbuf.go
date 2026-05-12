@@ -588,3 +588,10 @@ func (r *AnsiRenderer) write(s string) {
 		os.Stdout.WriteString(s)
 	}
 }
+
+// GetCursorPos returns the current virtual cursor position.
+func (s *ScreenBuf) GetCursorPos() (int, int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.cursorX, s.cursorY
+}
