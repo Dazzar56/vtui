@@ -14,23 +14,6 @@ import (
 
 // X11Renderer implements SurfaceRenderer by drawing directly to an image.RGBA buffer
 // and pushing it to the X11Host.
-type glyphKey struct {
-	r  rune
-	fg uint32
-	bg uint32
-	w  int
-}
-
-type renderStats struct {
-	frameCount int
-	totalDraw  time.Duration
-	totalFlush time.Duration
-	totalRows  int
-	dirtyRows  int
-	glyphs     int
-	putImages  int
-	lastReport time.Time
-}
 
 type X11Renderer struct {
 	host       *X11Host
