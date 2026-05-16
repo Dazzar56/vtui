@@ -4,6 +4,7 @@ package vtui
 
 import (
 	"image/color"
+	"math"
 	"strings"
 	"time"
 	"sync"
@@ -86,6 +87,204 @@ func (r *GogpuRenderer) SetCursor(x, y int, visible bool, shape CursorShape) {
 
 func (r *GogpuRenderer) SetPalette(pal *[256]uint32) {}
 
+func (r *GogpuRenderer) drawCustomChar(dc *gg.Context, char rune, x, y, w, h float64) bool {
+	thick := math.Max(1, math.Floor(r.host.gogpuScale))
+
+	mx := math.Floor(x + w/2 - thick/2)
+	my := math.Floor(y + h/2 - thick/2)
+
+	// Double line offsets
+	ofs := math.Floor(math.Min(w, h) / 4)
+	if ofs < 1 {
+		ofs = 1
+	}
+
+	switch char {
+	case '─', '━':
+		t := thick
+		if char == '━' {
+			t *= 2
+		}
+		dc.DrawRectangle(x, math.Floor(y+h/2-t/2), w, t)
+	case '│', '┃':
+		t := thick
+		if char == '┃' {
+			t *= 2
+		}
+		dc.DrawRectangle(math.Floor(x+w/2-t/2), y, t, h)
+	case '┌', '┏':
+		t := thick
+		if char == '┏' {
+			t *= 2
+		}
+		mxx, myy := math.Floor(x+w/2-t/2), math.Floor(y+h/2-t/2)
+		dc.DrawRectangle(mxx, myy, w-(mxx-x), t)
+		dc.DrawRectangle(mxx, myy, t, h-(myy-y))
+	case '┐', '┓':
+		t := thick
+		if char == '┓' {
+			t *= 2
+		}
+		mxx, myy := math.Floor(x+w/2-t/2), math.Floor(y+h/2-t/2)
+		dc.DrawRectangle(x, myy, mxx-x+t, t)
+		dc.DrawRectangle(mxx, myy, t, h-(myy-y))
+	case '└', '┗':
+		t := thick
+		if char == '┗' {
+			t *= 2
+		}
+		mxx, myy := math.Floor(x+w/2-t/2), math.Floor(y+h/2-t/2)
+		dc.DrawRectangle(mxx, myy, w-(mxx-x), t)
+		dc.DrawRectangle(mxx, y, t, myy-y+t)
+	case '┘', '┛':
+		t := thick
+		if char == '┛' {
+			t *= 2
+		}
+		mxx, myy := math.Floor(x+w/2-t/2), math.Floor(y+h/2-t/2)
+		dc.DrawRectangle(x, myy, mxx-x+t, t)
+		dc.DrawRectangle(mxx, y, t, myy-y+t)
+	case '├', '┣':
+		t := thick
+		if char == '┣' {
+			t *= 2
+		}
+		mxx, myy := math.Floor(x+w/2-t/2), math.Floor(y+h/2-t/2)
+		dc.DrawRectangle(mxx, myy, w-(mxx-x), t)
+		dc.DrawRectangle(mxx, y, t, h)
+	case '┤', '┫':
+		t := thick
+		if char == '┫' {
+			t *= 2
+		}
+		mxx, myy := math.Floor(x+w/2-t/2), math.Floor(y+h/2-t/2)
+		dc.DrawRectangle(x, myy, mxx-x+t, t)
+		dc.DrawRectangle(mxx, y, t, h)
+	case '┬', '┳':
+		t := thick
+		if char == '┳' {
+			t *= 2
+		}
+		mxx, myy := math.Floor(x+w/2-t/2), math.Floor(y+h/2-t/2)
+		dc.DrawRectangle(x, myy, w, t)
+		dc.DrawRectangle(mxx, myy, t, h-(myy-y))
+	case '┴', '┻':
+		t := thick
+		if char == '┻' {
+			t *= 2
+		}
+		mxx, myy := math.Floor(x+w/2-t/2), math.Floor(y+h/2-t/2)
+		dc.DrawRectangle(x, myy, w, t)
+		dc.DrawRectangle(mxx, y, t, myy-y+t)
+	case '┼', '╋':
+		t := thick
+		if char == '╋' {
+			t *= 2
+		}
+		mxx, myy := math.Floor(x+w/2-t/2), math.Floor(y+h/2-t/2)
+		dc.DrawRectangle(x, myy, w, t)
+		dc.DrawRectangle(mxx, y, t, h)
+
+	// Double lines
+	case '═':
+		dc.DrawRectangle(x, my-ofs, w, thick)
+		dc.DrawRectangle(x, my+ofs, w, thick)
+	case '║':
+		dc.DrawRectangle(mx-ofs, y, thick, h)
+		dc.DrawRectangle(mx+ofs, y, thick, h)
+	case '╔':
+		dc.DrawRectangle(mx-ofs, my-ofs, w-(mx-x-ofs), thick)
+		dc.DrawRectangle(mx+ofs, my+ofs, w-(mx-x+ofs), thick)
+		dc.DrawRectangle(mx-ofs, my-ofs, thick, h-(my-y-ofs))
+		dc.DrawRectangle(mx+ofs, my+ofs, thick, h-(my-y+ofs))
+	case '╗':
+		dc.DrawRectangle(x, my-ofs, mx-x+ofs+thick, thick)
+		dc.DrawRectangle(x, my+ofs, mx-x-ofs+thick, thick)
+		dc.DrawRectangle(mx+ofs, my-ofs, thick, h-(my-y-ofs))
+		dc.DrawRectangle(mx-ofs, my+ofs, thick, h-(my-y+ofs))
+	case '╚':
+		dc.DrawRectangle(mx-ofs, my+ofs, w-(mx-x-ofs), thick)
+		dc.DrawRectangle(mx+ofs, my-ofs, w-(mx-x+ofs), thick)
+		dc.DrawRectangle(mx-ofs, y, thick, my-y+ofs+thick)
+		dc.DrawRectangle(mx+ofs, y, thick, my-y-ofs+thick)
+	case '╝':
+		dc.DrawRectangle(x, my+ofs, mx-x+ofs+thick, thick)
+		dc.DrawRectangle(x, my-ofs, mx-x-ofs+thick, thick)
+		dc.DrawRectangle(mx+ofs, y, thick, my-y+ofs+thick)
+		dc.DrawRectangle(mx-ofs, y, thick, my-y-ofs+thick)
+	case '╠':
+		dc.DrawRectangle(mx-ofs, my-ofs, w-(mx-x-ofs), thick)
+		dc.DrawRectangle(mx+ofs, my+ofs, w-(mx-x+ofs), thick)
+		dc.DrawRectangle(mx-ofs, y, thick, h)
+		dc.DrawRectangle(mx+ofs, y, thick, h)
+	case '╣':
+		dc.DrawRectangle(x, my-ofs, mx-x+ofs+thick, thick)
+		dc.DrawRectangle(x, my+ofs, mx-x-ofs+thick, thick)
+		dc.DrawRectangle(mx+ofs, y, thick, h)
+		dc.DrawRectangle(mx-ofs, y, thick, h)
+	case '╦':
+		dc.DrawRectangle(x, my-ofs, w, thick)
+		dc.DrawRectangle(x, my+ofs, w, thick)
+		dc.DrawRectangle(mx-ofs, my+ofs, thick, h-(my-y+ofs))
+		dc.DrawRectangle(mx+ofs, my+ofs, thick, h-(my-y+ofs))
+	case '╩':
+		dc.DrawRectangle(x, my-ofs, w, thick)
+		dc.DrawRectangle(x, my+ofs, w, thick)
+		dc.DrawRectangle(mx-ofs, y, thick, my-y-ofs+thick)
+		dc.DrawRectangle(mx+ofs, y, thick, my-y-ofs+thick)
+	case '╬':
+		dc.DrawRectangle(x, my-ofs, w, thick)
+		dc.DrawRectangle(x, my+ofs, w, thick)
+		dc.DrawRectangle(mx-ofs, y, thick, h)
+		dc.DrawRectangle(mx+ofs, y, thick, h)
+
+	// Mixed (used in VMenu)
+	case '╟':
+		dc.DrawRectangle(mx+ofs, my, w-(mx-x+ofs), thick)
+		dc.DrawRectangle(mx-ofs, y, thick, h)
+		dc.DrawRectangle(mx+ofs, y, thick, h)
+	case '╢':
+		dc.DrawRectangle(x, my, mx-x-ofs+thick, thick)
+		dc.DrawRectangle(mx-ofs, y, thick, h)
+		dc.DrawRectangle(mx+ofs, y, thick, h)
+
+	// Arrows
+	case '↑':
+		dc.DrawLine(mx, y+h*0.1, mx, y+h*0.9)
+		dc.DrawLine(mx, y+h*0.1, mx-w*0.3, y+h*0.4)
+		dc.DrawLine(mx, y+h*0.1, mx+w*0.3, y+h*0.4)
+		dc.SetLineWidth(thick)
+		dc.Stroke()
+		dc.SetLineWidth(0)
+		return true
+	case '↓':
+		dc.DrawLine(mx, y+h*0.1, mx, y+h*0.9)
+		dc.DrawLine(mx, y+h*0.9, mx-w*0.3, y+h*0.6)
+		dc.DrawLine(mx, y+h*0.9, mx+w*0.3, y+h*0.6)
+		dc.SetLineWidth(thick)
+		dc.Stroke()
+		dc.SetLineWidth(0)
+		return true
+
+	// Solid Blocks
+	case '█':
+		dc.DrawRectangle(x, y, w, h)
+	case '▀':
+		dc.DrawRectangle(x, y, w, h/2)
+	case '▄':
+		dc.DrawRectangle(x, y+h/2, w, h/2)
+	case '▌':
+		dc.DrawRectangle(x, y, w/2, h)
+	case '▐':
+		dc.DrawRectangle(x+w/2, y, w/2, h)
+
+	default:
+		return false
+	}
+
+	dc.Fill()
+	return true
+}
 func (r *GogpuRenderer) Flush() {
 	r.host.mu.Lock()
 	ctx := r.host.ctx
@@ -177,7 +376,8 @@ func (r *GogpuRenderer) Flush() {
 					totalFills++
 
 					var sb strings.Builder
-					hasText := false
+					batchX := lx
+					dc.SetColor(fg)
 
 					for sx := 0; sx < spanW; {
 						idx := rowOff + x + sx
@@ -193,25 +393,43 @@ func (r *GogpuRenderer) Flush() {
 							rw = 2
 						}
 
-						if currCell.Char != 0 && currCell.Char != ' ' && r.face != nil {
-							sb.WriteRune(rune(currCell.Char))
-							hasText = true
+						char := rune(currCell.Char)
+						isBox := (char >= 0x2500 && char <= 0x259F) || (char >= 0x2190 && char <= 0x2193)
+
+						if isBox {
+							if sb.Len() > 0 {
+								t_glyph_0 := time.Now()
+								dc.DrawString(sb.String(), batchX, ly+ascent)
+								timeGlyphs += time.Since(t_glyph_0)
+								sb.Reset()
+							}
+							if r.drawCustomChar(dc, char, lx+float64(sx*r.cellW), ly, float64(rw*r.cellW), float64(r.cellH)) {
+								totalGlyphs++
+								sx += rw
+								continue
+							}
+						}
+
+						if char != 0 && char != ' ' && r.face != nil {
+							if sb.Len() == 0 {
+								batchX = lx + float64(sx*r.cellW)
+							}
+							sb.WriteRune(char)
 							totalGlyphs++
 						} else {
-							// Добавляем пробел(ы) для сохранения позиционирования последующих символов
-							sb.WriteRune(' ')
-							if rw == 2 {
-								sb.WriteRune(' ')
+							if sb.Len() > 0 {
+								t_glyph_0 := time.Now()
+								dc.DrawString(sb.String(), batchX, ly+ascent)
+								timeGlyphs += time.Since(t_glyph_0)
+								sb.Reset()
 							}
 						}
 						sx += rw
 					}
 
-					if hasText && r.face != nil {
+					if sb.Len() > 0 && r.face != nil {
 						t_glyph_0 := time.Now()
-						dc.SetColor(fg)
-						// Отрисовываем всю строку (батч) целиком за 1 команду
-						dc.DrawString(sb.String(), lx, ly+ascent)
+						dc.DrawString(sb.String(), batchX, ly+ascent)
 						timeGlyphs += time.Since(t_glyph_0)
 					}
 
