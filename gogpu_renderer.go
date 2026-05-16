@@ -4,24 +4,34 @@ package vtui
 
 import (
 	"image/color"
+	"strings"
 	"time"
 	"sync"
 
 	"github.com/gogpu/gg"
 	"github.com/gogpu/gg/integration/ggcanvas"
+	"github.com/gogpu/gpucontext"
 	"github.com/gogpu/gg/text"
-	_ "github.com/gogpu/gg/gpu" // HW accel enabled
+	_ "github.com/gogpu/gg/gpu" // Включаем аппаратное ускорение рендеринга
 )
 
 var (
 	debugLastPhysW, debugLastPhysH int = -1, -1
 	debugDrawCount                 int = 0
 )
+// deviceOnlyProvider wraps DeviceProvider to HIDE the ScaleFactor() method from ggcanvas.
+// This prevents ggcanvas from applying automatic internal scaling, allowing vtui
+// to control scaling manually and bypass the quadrant rendering bug (#327).
+type deviceOnlyProvider struct {
+	gpucontext.DeviceProvider
+}
+
 type GogpuRenderer struct {
 	mu           sync.Mutex
 	host         *GogpuHost
 	face         text.Face
 	cellW, cellH int // logical cell sizes from font measurement
+	cols, rows   int // dimensions of the current renderBuf
 
 	cursorX, cursorY int
 	cursorVis        bool
@@ -44,6 +54,9 @@ func NewGogpuRenderer(host *GogpuHost, face text.Face, cw, ch int) *GogpuRendere
 func (r *GogpuRenderer) Render(buf, shadow []CharInfo, w, h int, force bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
+	r.cols = w
+	r.rows = h
 
 	needsRedraw := force
 	if !needsRedraw {
@@ -94,19 +107,21 @@ func (r *GogpuRenderer) Flush() {
 	}
 
 	w, h := ctx.Width(), ctx.Height()
-	fw, fh := ctx.FramebufferWidth(), ctx.FramebufferHeight()
 
-	if debugLastCtxW != w || debugLastCtxH != h || debugLastPhysW != fw || debugLastPhysH != fh {
-		DebugLog("GOGPU_RENDERER_RESIZE: CtxLog:%dx%d CtxPhys:%dx%d HostCell:%dx%d HostGrid:%dx%d ExpectedPhys:%dx%d Scale:%f",
-			w, h, fw, fh, r.cellW, r.cellH, r.host.cols, r.host.rows, r.host.cols*r.cellW, r.host.rows*r.cellH, r.host.gogpuScale)
+	if debugLastCtxW != w || debugLastCtxH != h {
+		DebugLog("GOGPU_RENDERER_RESIZE: CtxLog:%dx%d HostCell:%dx%d HostGrid:%dx%d ExpectedLog:%dx%d",
+			w, h, r.cellW, r.cellH, r.host.cols, r.host.rows, r.host.cols*r.cellW, r.host.rows*r.cellH)
 		debugLastCtxW, debugLastCtxH = w, h
-		debugLastPhysW, debugLastPhysH = fw, fh
 	}
+
+	// Workaround for gogpu bug #327: Use PHYSICAL dimensions for the canvas
+	// but tell ggcanvas to ignore system scaling by using deviceOnlyProvider.
+	fw, fh := ctx.FramebufferWidth(), ctx.FramebufferHeight()
 
 	if r.canvas == nil {
 		provider := app.GPUContextProvider()
 		if provider == nil { return }
-		r.canvas, _ = ggcanvas.New(provider, fw, fh)
+		r.canvas, _ = ggcanvas.New(&deviceOnlyProvider{provider}, fw, fh)
 	} else {
 		r.canvas.Resize(fw, fh)
 	}
@@ -114,26 +129,15 @@ func (r *GogpuRenderer) Flush() {
 	if r.dirty {
 		drawStart := time.Now()
 		var totalFills, totalGlyphs int
-		var timeFills, timeGlyphs, timeClear time.Duration
-
+		var timeFills, timeGlyphs time.Duration
+		
 		r.canvas.Draw(func(dc *gg.Context) {
-			t_clear_0 := time.Now()
-			dc.SetRGB(0, 0, 0)
-			dc.Clear()
-			timeClear = time.Since(t_clear_0)
-
-			// Убираем сжатие. Рисуем пиксель в пиксель.
+			// Workaround for gogpu bug #328: Clear state before drawing.
 			dc.Identity()
-			// GetMatrix не поддерживается, логируем доступные параметры контекста через PROBE ниже
+			dc.ClearPath()
 
-			// Логируем размеры для отладки
-			if debugDrawCount % 100 == 0 {
-				DebugLog("GOGPU_PROBE: Ctx=%dx%d FB=%dx%d r.cellW=%d r.cellH=%d", w, h, fw, fh, r.cellW, r.cellH)
-			}
-			if debugDrawCount == 0 {
-				DebugLog("GOGPU_PROBE_FIRST_FRAME: Expected grid is %dx%d. Drawing...", r.host.cols, r.host.rows)
-			}
-			debugDrawCount++
+			drawCols := r.cols
+			drawRows := r.rows
 
 			if r.face != nil {
 				dc.SetFont(r.face)
@@ -141,21 +145,21 @@ func (r *GogpuRenderer) Flush() {
 			metrics := r.face.Metrics()
 			ascent := float64(metrics.Ascent)
 
-			for y := 0; y < r.host.rows; y++ {
-				rowOff := y * r.host.cols
-				for x := 0; x < r.host.cols; {
+			for y := 0; y < drawRows; y++ {
+				rowOff := y * drawCols
+				for x := 0; x < drawCols; {
 					cell := r.renderBuf[rowOff+x]
-					_, bg := r.getCellColors(cell)
+					fg, bg := r.getCellColors(cell)
 
 					spanW := 0
-					for x+spanW < r.host.cols {
+					for x+spanW < drawCols {
 						nextCell := r.renderBuf[rowOff+x+spanW]
 						if nextCell.Char == WideCharFiller {
 							spanW++
 							continue
 						}
-						_, nextBg := r.getCellColors(nextCell)
-						if nextBg != bg {
+						nextFg, nextBg := r.getCellColors(nextCell)
+						if nextBg != bg || nextFg != fg {
 							break
 						}
 						spanW++
@@ -172,25 +176,43 @@ func (r *GogpuRenderer) Flush() {
 					timeFills += time.Since(t_fill_0)
 					totalFills++
 
-					for sx := 0; sx < spanW; sx++ {
-						currX := x + sx
-						currCell := r.renderBuf[rowOff+currX]
+					var sb strings.Builder
+					hasText := false
+
+					for sx := 0; sx < spanW; {
+						idx := rowOff + x + sx
+						currCell := r.renderBuf[idx]
+
 						if currCell.Char == WideCharFiller {
+							sx++
 							continue
 						}
+
+						rw := 1
+						if x+sx+1 < drawCols && r.renderBuf[idx+1].Char == WideCharFiller {
+							rw = 2
+						}
+
 						if currCell.Char != 0 && currCell.Char != ' ' && r.face != nil {
-							t_glyph_0 := time.Now()
-							cx := float64(currX * r.cellW)
-							cfg, _ := r.getCellColors(currCell)
-							dc.SetColor(cfg)
-							dc.DrawString(string(rune(currCell.Char)), cx, ly+ascent)
-							timeGlyphs += time.Since(t_glyph_0)
+							sb.WriteRune(rune(currCell.Char))
+							hasText = true
 							totalGlyphs++
-							
-							if debugDrawCount == 1 && y == 0 && currX == 0 {
-								DebugLog("GOGPU_PROBE_COORD: First char '%c' drawn at cx=%f, ly+ascent=%f", currCell.Char, cx, ly+ascent)
+						} else {
+							// Добавляем пробел(ы) для сохранения позиционирования последующих символов
+							sb.WriteRune(' ')
+							if rw == 2 {
+								sb.WriteRune(' ')
 							}
 						}
+						sx += rw
+					}
+
+					if hasText && r.face != nil {
+						t_glyph_0 := time.Now()
+						dc.SetColor(fg)
+						// Отрисовываем всю строку (батч) целиком за 1 команду
+						dc.DrawString(sb.String(), lx, ly+ascent)
+						timeGlyphs += time.Since(t_glyph_0)
 					}
 
 					x += spanW
@@ -213,8 +235,8 @@ func (r *GogpuRenderer) Flush() {
 		r.dirty = false
 		drawDur := time.Since(drawStart)
 		if drawDur > 5*time.Millisecond {
-			DebugLog("GOGPU_RENDERER_PERF: DrawTotal: %v, Clear: %v, Fills(%d): %v, Glyphs(%d): %v",
-				drawDur, timeClear, totalFills, timeFills, totalGlyphs, timeGlyphs)
+			DebugLog("GOGPU_RENDERER_PERF: DrawTotal: %v, Fills(%d): %v, Glyphs(%d): %v",
+				drawDur, totalFills, timeFills, totalGlyphs, timeGlyphs)
 		}
 	}
 
