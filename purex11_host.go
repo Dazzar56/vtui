@@ -395,7 +395,25 @@ func (h *PureX11Host) handleKeyEvent(detail xproto.Keycode, state uint16, isDown
 		}
 	}
 
+	// 1. Get current keysym and attempt to get its VK
 	vk := keysymToVK(uint32(sym))
+
+	// 2. If VK is unknown and we are in a non-Latin layout, try to derive
+	// a positional VK from the first group (Layout 1).
+	// This ensures shortcuts like Ctrl+C work correctly in all languages.
+	if vk == 0 && h.xkbState.LockedGroup() != 0 {
+		bm, lam, lom := h.xkbState.BaseMods(), h.xkbState.LatchedMods(), h.xkbState.LockedMods()
+		bg, lag, log := h.xkbState.BaseGroup(), h.xkbState.LatchedGroup(), h.xkbState.LockedGroup()
+
+		// Temporarily switch to Group 0 with no modifiers
+		h.xkbState.UpdateMask(0, 0, 0, 0, 0, 0)
+		vkSym := h.xkbState.KeyGetOneSym(kc)
+		vk = keysymToVK(uint32(vkSym))
+
+		// Restore original state
+		h.xkbState.UpdateMask(bm, lam, lom, bg, lag, log)
+	}
+
 	mods := h.translateModifiers(state)
 
 	if h.reader != nil {
