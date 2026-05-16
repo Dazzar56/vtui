@@ -135,6 +135,7 @@ func RunGogpuHost(cols, rows int, setupApp func()) error {
 
 	app.EventSource().OnKeyPress(func(key gpucontext.Key, mods gpucontext.Modifiers) {
 		vk := gogpuKeyToVK(key)
+		DebugLog("GOGPU_HOST: OnKeyPress key=%v, vk=%d", key, vk)
 
 		host.mu.Lock()
 		currMods := host.syncMods(vk, mods, true)
@@ -169,6 +170,7 @@ func RunGogpuHost(cols, rows int, setupApp func()) error {
 	})
 
 	app.EventSource().OnTextInput(func(text string) {
+		DebugLog("GOGPU_HOST: OnTextInput text=%q", text)
 		host.mu.Lock()
 		defer host.mu.Unlock()
 
@@ -303,15 +305,26 @@ func RunGogpuHost(cols, rows int, setupApp func()) error {
 	})
 
 	app.OnDraw(func(dc *gogpu.Context) {
+		startDraw := time.Now()
 		host.mu.Lock()
 		host.ctx = dc
+		appScale := host.app.ScaleFactor()
 		host.mu.Unlock()
 
 		host.scr.Renderer.Flush()
 
 		host.mu.Lock()
+		if host.gogpuScale != appScale {
+			DebugLog("GOGPU_HOST: Scale factor changed from %f to %f", host.gogpuScale, appScale)
+			host.gogpuScale = appScale
+		}
 		host.ctx = nil
 		host.mu.Unlock()
+
+		dur := time.Since(startDraw)
+		if dur > 5*time.Millisecond {
+			DebugLog("GOGPU_HOST: OnDraw execution time: %v", dur)
+		}
 	})
 
 	GetTerminalSize = func() (int, int, error) {
@@ -321,6 +334,9 @@ func RunGogpuHost(cols, rows int, setupApp func()) error {
 	setupApp()
 
 	go func() {
+		w, h := app.Size()
+		fw, fh := app.PhysicalSize()
+		DebugLog("GOGPU_HOST: Before Run(). App Size (Log): %dx%d. App PhysicalSize: %dx%d. ScaleFactor: %f", w, h, fw, fh, app.ScaleFactor())
 		DebugLog("GOGPU_HOST: FrameManager starting...")
 		FrameManager.Run(reader)
 		DebugLog("GOGPU_HOST: FrameManager exited. Forcing app shutdown to prevent blue screen hang.")

@@ -867,6 +867,7 @@ func (fm *frameManager) Run(reader *vtinput.Reader) {
 
 	handleResize := func() {
 		width, height, err := GetTerminalSize()
+		DebugLog("FM_RESIZE: handleResize triggered. GetTerminalSize returned: %dx%d (err: %v). Current scr: %dx%d", width, height, err, fm.scr.width, fm.scr.height)
 		if err != nil {
 			return // Keep existing size if we can't determine the new one
 		}
@@ -955,9 +956,11 @@ func (fm *frameManager) Run(reader *vtinput.Reader) {
 		// Burst process pending events and tasks to avoid redundant renders.
 		// This naturally throttles the UI when a background thread spams updates.
 		drainStart := time.Now()
+		drainCount := 0
 		for fm.running && !fm.IsShutdown() {
 			// Prevent event flood from starving the renderer (e.g. held down key)
 			if time.Since(drainStart) > 20*time.Millisecond {
+				DebugLog("FM_PERF: Drain loop break due to 20ms timeout. Processed %d events/tasks.", drainCount)
 				break
 			}
 
@@ -971,6 +974,7 @@ func (fm *frameManager) Run(reader *vtinput.Reader) {
 				if len(fm.frames) > 0 {
 					fm.dispatchEvent(ev, false)
 				}
+				drainCount++
 				continue
 			case task := <-fm.TaskChan:
 				if !idleTimer.Stop() {
@@ -979,6 +983,7 @@ func (fm *frameManager) Run(reader *vtinput.Reader) {
 				task()
 				fm.cleanupDoneFrames()
 				fm.Redraw()
+				drainCount++
 				continue
 			case <-idleTimer.C:
 			}
@@ -991,6 +996,7 @@ func (fm *frameManager) renderPhase() {
 	if len(fm.frames) == 0 {
 		return
 	}
+	renderPhaseStart := time.Now()
 	if fm.scr != nil && fm.scr.Renderer != nil {
 		// Only log periodically to avoid performance hit
 		if (time.Now().UnixMilli() / 1000) % 5 == 0 {
@@ -1116,6 +1122,10 @@ func (fm *frameManager) renderPhase() {
 		}
 
 		fm.scr.Flush()
+	}
+	renderPhaseDur := time.Since(renderPhaseStart)
+	if renderPhaseDur > 10*time.Millisecond {
+		DebugLog("FM_PERF: renderPhase took %v", renderPhaseDur)
 	}
 }
 

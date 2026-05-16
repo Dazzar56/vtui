@@ -95,6 +95,13 @@ func (r *GogpuRenderer) Flush() {
 	w, h := ctx.Width(), ctx.Height()
 	fw, fh := ctx.FramebufferWidth(), ctx.FramebufferHeight()
 
+	if debugLastCtxW != w || debugLastCtxH != h || debugLastPhysW != fw || debugLastPhysH != fh {
+		DebugLog("GOGPU_RENDERER_RESIZE: CtxLog:%dx%d CtxPhys:%dx%d HostCell:%dx%d HostGrid:%dx%d ExpectedPhys:%dx%d Scale:%f",
+			w, h, fw, fh, r.cellW, r.cellH, r.host.cols, r.host.rows, r.host.cols*r.cellW, r.host.rows*r.cellH, r.host.gogpuScale)
+		debugLastCtxW, debugLastCtxH = w, h
+		debugLastPhysW, debugLastPhysH = fw, fh
+	}
+
 	if r.canvas == nil {
 		provider := app.GPUContextProvider()
 		if provider == nil { return }
@@ -104,6 +111,7 @@ func (r *GogpuRenderer) Flush() {
 	}
 
 	if r.dirty {
+		drawStart := time.Now()
 		r.canvas.Draw(func(dc *gg.Context) {
 			dc.SetRGB(0, 0, 0)
 			dc.Clear()
@@ -113,7 +121,10 @@ func (r *GogpuRenderer) Flush() {
 
 			// Логируем размеры для отладки
 			if debugDrawCount % 100 == 0 {
-				DebugLog("GOGPU_PROBE: Ctx=%dx%d FB=%dx%d", w, h, fw, fh)
+				DebugLog("GOGPU_PROBE: Ctx=%dx%d FB=%dx%d r.cellW=%d r.cellH=%d", w, h, fw, fh, r.cellW, r.cellH)
+			}
+			if debugDrawCount == 0 {
+				DebugLog("GOGPU_PROBE_FIRST_FRAME: Expected grid is %dx%d. Drawing...", r.host.cols, r.host.rows)
 			}
 			debugDrawCount++
 
@@ -162,6 +173,10 @@ func (r *GogpuRenderer) Flush() {
 							cfg, _ := r.getCellColors(currCell)
 							dc.SetColor(cfg)
 							dc.DrawString(string(rune(currCell.Char)), cx, ly+ascent)
+
+							if debugDrawCount == 1 && y == 0 && currX == 0 {
+								DebugLog("GOGPU_PROBE_COORD: First char '%c' drawn at cx=%f, ly+ascent=%f", currCell.Char, cx, ly+ascent)
+							}
 						}
 					}
 
@@ -183,9 +198,18 @@ func (r *GogpuRenderer) Flush() {
 			}
 		})
 		r.dirty = false
+		drawDur := time.Since(drawStart)
+		if drawDur > 5*time.Millisecond {
+			DebugLog("GOGPU_RENDERER: ggcanvas.Draw took %v", drawDur)
+		}
 	}
 
+	renderStart := time.Now()
 	r.canvas.Render(ctx.RenderTarget())
+	renderDur := time.Since(renderStart)
+	if renderDur > 5*time.Millisecond {
+		DebugLog("GOGPU_RENDERER: ggcanvas.Render took %v", renderDur)
+	}
 }
 
 func (r *GogpuRenderer) getCellColors(cell CharInfo) (color.Color, color.Color) {
