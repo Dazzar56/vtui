@@ -306,7 +306,15 @@ func RunGogpuHost(cols, rows int, setupApp func()) error {
 		}
 	})
 
+	var infoLogged sync.Once
 	app.OnDraw(func(dc *gogpu.Context) {
+		infoLogged.Do(func() {
+			if provider := app.GPUContextProvider(); provider != nil {
+				info := provider.AdapterInfo()
+				DebugLog("GOGPU_HOST_ON_DRAW: Adapter confirmed: %q, Type: %v", info.Name, info.Type)
+			}
+		})
+
 		startDraw := time.Now()
 		host.mu.Lock()
 		host.ctx = dc
@@ -339,6 +347,13 @@ func RunGogpuHost(cols, rows int, setupApp func()) error {
 		w, h := app.Size()
 		fw, fh := app.PhysicalSize()
 		DebugLog("GOGPU_HOST: Before Run(). App Size (Log): %dx%d. App PhysicalSize: %dx%d. ScaleFactor: %f", w, h, fw, fh, app.ScaleFactor())
+
+		provider := app.GPUContextProvider()
+		if provider != nil {
+			info := provider.AdapterInfo()
+			DebugLog("GOGPU_HOST: Adapter: Name=%q, Type=%v", info.Name, info.Type)
+		}
+
 		DebugLog("GOGPU_HOST: FrameManager starting...")
 		FrameManager.Run(reader)
 		DebugLog("GOGPU_HOST: FrameManager exited. Forcing app shutdown to prevent blue screen hang.")

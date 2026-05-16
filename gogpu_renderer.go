@@ -113,11 +113,17 @@ func (r *GogpuRenderer) Flush() {
 	if r.dirty {
 		drawStart := time.Now()
 		var totalFills, totalGlyphs int
-		var timeFills, timeGlyphs time.Duration
+		var timeFills, timeGlyphs, timeClear time.Duration
 
 		r.canvas.Draw(func(dc *gg.Context) {
+			t_clear_0 := time.Now()
 			dc.SetRGB(0, 0, 0)
 			dc.Clear()
+			timeClear = time.Since(t_clear_0)
+
+			if debugDrawCount == 1 {
+				DebugLog("GOGPU_PROBE_INNER: DC size inside Draw: %f x %f", dc.Width(), dc.Height())
+			}
 
 			// Убираем сжатие. Рисуем пиксель в пиксель.
 			dc.Identity()
@@ -210,8 +216,8 @@ func (r *GogpuRenderer) Flush() {
 		r.dirty = false
 		drawDur := time.Since(drawStart)
 		if drawDur > 5*time.Millisecond {
-			DebugLog("GOGPU_RENDERER_PERF: DrawTotal: %v, Fills(%d): %v, Glyphs(%d): %v",
-				drawDur, totalFills, timeFills, totalGlyphs, timeGlyphs)
+			DebugLog("GOGPU_RENDERER_PERF: DrawTotal: %v, Clear: %v, Fills(%d): %v, Glyphs(%d): %v",
+				drawDur, timeClear, totalFills, timeFills, totalGlyphs, timeGlyphs)
 		}
 	}
 
