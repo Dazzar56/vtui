@@ -49,6 +49,14 @@ If a dialog is resized, a widget can:
 *   `GrowNone`: Stay exactly where it is.
 *   `GrowHiX`: Stretch its right edge (e.g., an `Edit` field expanding to fill width).
 *   `GrowLoX | GrowHiX | GrowLoY | GrowHiY`: Keep its relative distance from the bottom-right corner (e.g., an "OK" button anchored to the bottom).
+### 4. Pluggable Renderers (`SurfaceRenderer`)
+The framework abstracts the physical output through the `SurfaceRenderer` interface. This allows the same UI code to run in different environments:
+
+*   **AnsiRenderer:** The default backend. Translates buffer changes into optimized ANSI escape sequences for standard terminals.
+*   **GogpuRenderer:** A hardware-accelerated backend that draws directly to a GPU-backed window using the `gogpu` library. Provides crisp text rendering and high FPS.
+*   **X11/Wayland Renderers:** Native Unix backends that draw to software bitmapped windows without requiring a terminal emulator.
+
+You can select a backend at startup by passing the desired driver to `vtui.RunInGUIWindow`.
 
 ## Built-in Widgets
 
@@ -119,8 +127,11 @@ func main() {
 
 ## Demo app
 
-The repository includes a demo app:
+The repository includes a demo app that showcases widgets and layout features. You can run it directly in the terminal or test different GUI backends using command-line flags:
 
 ```bash
-go run ./cmd/test-app
+go run ./cmd/test-app                 # Default terminal mode
+go run ./cmd/test-app --gui=gogpu     # Hardware-accelerated GPU window
+go run ./cmd/test-app --gui=x11       # Native X11 window
+go run ./cmd/test-app --gui=wayland   # Native Wayland window
 ```
