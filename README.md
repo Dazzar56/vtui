@@ -55,6 +55,7 @@ The framework abstracts the physical output through the `SurfaceRenderer` interf
 *   **AnsiRenderer:** The default backend. Translates buffer changes into optimized ANSI escape sequences for standard terminals.
 *   **GogpuRenderer:** A hardware-accelerated backend that draws directly to a GPU-backed window using the `gogpu` library. Provides crisp text rendering and high FPS.
 *   **X11/Wayland Renderers:** Native Unix backends that draw to software bitmapped windows without requiring a terminal emulator.
+*   **PureX11Renderer:** A 100% pure Go X11 backend using the XGB library and SHM. Experimental and requires further testing.
 
 You can select a backend at startup by passing the desired driver to `vtui.RunInGUIWindow`.
 
