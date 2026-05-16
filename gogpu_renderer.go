@@ -10,6 +10,7 @@ import (
 	"github.com/gogpu/gg"
 	"github.com/gogpu/gg/integration/ggcanvas"
 	"github.com/gogpu/gg/text"
+	_ "github.com/gogpu/gg/gpu" // HW accel enabled
 )
 
 var (
