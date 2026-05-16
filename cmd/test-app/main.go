@@ -150,6 +150,9 @@ func main() {
 		} else if arg == "--gui=gogpu" {
 			guiMode = true
 			guiBackend = "gogpu"
+		} else if arg == "--gui=purex11" {
+			guiMode = true
+			guiBackend = "purex11"
 		}
 	}
 

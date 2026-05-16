@@ -1,16 +1,17 @@
 module github.com/unxed/vtui
 
-go 1.25.0
+go 1.25.5
 
 require (
 	github.com/BurntSushi/xgb v0.0.0-20210121224620-deaf085860bc
 	github.com/ebitengine/purego v0.10.0
 	github.com/gogpu/gg v0.46.8
-	github.com/gogpu/gogpu v0.35.0
+	github.com/gogpu/gogpu v0.36.1
 	github.com/gogpu/gpucontext v0.18.0
 	github.com/mattn/go-runewidth v0.0.15
 	github.com/neurlang/wayland v0.4.2
 	github.com/unxed/vtinput v0.0.0
+	github.com/unxed/xkb-go v0.1.2
 	golang.org/x/image v0.39.0
 	golang.org/x/sys v0.44.0
 	golang.org/x/term v0.40.0
