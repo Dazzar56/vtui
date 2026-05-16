@@ -75,19 +75,23 @@ func (r *GogpuRenderer) SetPalette(pal *[256]uint32) {}
 func (r *GogpuRenderer) Flush() {
 	r.host.mu.Lock()
 	ctx := r.host.ctx
+	app := r.host.app
 	r.host.mu.Unlock()
-
-	if ctx == nil {
-		return
-	}
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	if ctx == nil {
+		if r.dirty && app != nil {
+			app.RequestRedraw()
+		}
+		return
+	}
+
 	if len(r.renderBuf) == 0 {
 		return
 	}
-	
+
 	w, h := ctx.Width(), ctx.Height()
 	logW := r.host.cols * r.host.cellW
 	logH := r.host.rows * r.host.cellH
@@ -97,7 +101,7 @@ func (r *GogpuRenderer) Flush() {
 	canvasW, canvasH := logW, logH
 
 	if r.canvas == nil {
-		provider := r.host.app.GPUContextProvider()
+		provider := app.GPUContextProvider()
 		if provider == nil { return }
 		r.canvas, _ = ggcanvas.New(provider, canvasW, canvasH)
 	} else {
@@ -113,9 +117,10 @@ func (r *GogpuRenderer) Flush() {
 			dc.Identity()
 
 			// Логируем размеры для отладки
-			if debugDrawCount % 10 == 0 {
+			if debugDrawCount % 100 == 0 {
 				DebugLog("GOGPU_PROBE: Ctx=%dx%d CanvasForced=%dx%d", w, h, canvasW, canvasH)
 			}
+			debugDrawCount++
 
 			if r.face != nil {
 				dc.SetFont(r.face)
@@ -125,25 +130,47 @@ func (r *GogpuRenderer) Flush() {
 
 			for y := 0; y < r.host.rows; y++ {
 				rowOff := y * r.host.cols
-				for x := 0; x < r.host.cols; x++ {
+				for x := 0; x < r.host.cols; {
 					cell := r.renderBuf[rowOff+x]
-					if cell.Char == WideCharFiller {
-						continue
+					_, bg := r.getCellColors(cell)
+
+					spanW := 0
+					for x+spanW < r.host.cols {
+						nextCell := r.renderBuf[rowOff+x+spanW]
+						if nextCell.Char == WideCharFiller {
+							spanW++
+							continue
+						}
+						_, nextBg := r.getCellColors(nextCell)
+						if nextBg != bg {
+							break
+						}
+						spanW++
 					}
 
-					fg, bg := r.getCellColors(cell)
 					lx := float64(x * r.cellW)
 					ly := float64(y * r.cellH)
+					spanPixW := float64(spanW * r.cellW)
 
 					dc.SetColor(bg)
-					dc.DrawRectangle(lx, ly, float64(r.cellW), float64(r.cellH))
+					dc.DrawRectangle(lx, ly, spanPixW, float64(r.cellH))
 					dc.Fill()
 
-					if cell.Char != 0 && cell.Char != ' ' && r.face != nil {
-						dc.SetColor(fg)
-						// Monospace font character alignment inside the cell using ascent baseline
-						dc.DrawString(string(rune(cell.Char)), lx, ly+ascent)
+					for sx := 0; sx < spanW; sx++ {
+						currX := x + sx
+						currCell := r.renderBuf[rowOff+currX]
+						if currCell.Char == WideCharFiller {
+							continue
+						}
+						if currCell.Char != 0 && currCell.Char != ' ' && r.face != nil {
+							cx := float64(currX * r.cellW)
+							cfg, _ := r.getCellColors(currCell)
+							dc.SetColor(cfg)
+							dc.DrawString(string(rune(currCell.Char)), cx, ly+ascent)
+						}
 					}
+
+					x += spanW
 				}
 			}
 
