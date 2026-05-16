@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/gogpu/gg/text"
 	"github.com/gogpu/gogpu"
@@ -29,8 +30,30 @@ type GogpuHost struct {
 	lastW       int
 	lastH       int
 	ctx         *gogpu.Context
-	mouseBtn    uint32
-	currentMods vtinput.ControlKeyState
+	mouseBtn        uint32
+	currentMods     vtinput.ControlKeyState
+	pendingKeyEvent *vtinput.InputEvent
+	pendingKeyTimer *time.Timer
+}
+
+func (h *GogpuHost) syncMods(vk uint16, mods gpucontext.Modifiers, isDown bool) vtinput.ControlKeyState {
+	var sysMods vtinput.ControlKeyState
+	if mods.HasShift() { sysMods |= vtinput.ShiftPressed }
+	if mods.HasControl() { sysMods |= vtinput.LeftCtrlPressed }
+	if mods.HasAlt() { sysMods |= vtinput.LeftAltPressed }
+
+	if isDown {
+		if vk == vtinput.VK_SHIFT { sysMods |= vtinput.ShiftPressed }
+		if vk == vtinput.VK_CONTROL { sysMods |= vtinput.LeftCtrlPressed }
+		if vk == vtinput.VK_MENU { sysMods |= vtinput.LeftAltPressed }
+	} else {
+		if vk == vtinput.VK_SHIFT { sysMods &^= vtinput.ShiftPressed }
+		if vk == vtinput.VK_CONTROL { sysMods &^= vtinput.LeftCtrlPressed }
+		if vk == vtinput.VK_MENU { sysMods &^= vtinput.LeftAltPressed }
+	}
+
+	h.currentMods = sysMods
+	return sysMods
 }
 
 func RunGogpuHost(cols, rows int, setupApp func()) error {
@@ -75,27 +98,74 @@ func RunGogpuHost(cols, rows int, setupApp func()) error {
 		vk := gogpuKeyToVK(key)
 
 		host.mu.Lock()
-		if vk == vtinput.VK_SHIFT || vk == vtinput.VK_LSHIFT || vk == vtinput.VK_RSHIFT {
-			host.currentMods |= vtinput.ShiftPressed
+		currMods := host.syncMods(vk, mods, true)
+
+		// Сбрасываем предыдущее событие, если оно зависло
+		if host.pendingKeyEvent != nil {
+			if host.pendingKeyTimer != nil {
+				host.pendingKeyTimer.Stop()
+			}
+			host.reader.NativeEventChan <- host.pendingKeyEvent
+			host.pendingKeyEvent = nil
 		}
-		if vk == vtinput.VK_CONTROL || vk == vtinput.VK_LCONTROL || vk == vtinput.VK_RCONTROL {
-			host.currentMods |= vtinput.LeftCtrlPressed
+
+		if vk != 0 {
+			host.pendingKeyEvent = &vtinput.InputEvent{
+				Type:            vtinput.KeyEventType,
+				KeyDown:         true,
+				VirtualKeyCode:  vk,
+				ControlKeyState: currMods,
+			}
+			// Отложенная отправка: если OnText не придет в течение 2мс, отправляем только код клавиши
+			host.pendingKeyTimer = time.AfterFunc(2*time.Millisecond, func() {
+				host.mu.Lock()
+				defer host.mu.Unlock()
+				if host.pendingKeyEvent != nil {
+					host.reader.NativeEventChan <- host.pendingKeyEvent
+					host.pendingKeyEvent = nil
+				}
+			})
 		}
-		if vk == vtinput.VK_MENU || vk == vtinput.VK_LMENU || vk == vtinput.VK_RMENU {
-			host.currentMods |= vtinput.LeftAltPressed
-		}
-		currMods := host.currentMods
 		host.mu.Unlock()
+	})
 
-		if vk == 0 { return }
-		char := gogpuKeyToChar(key, (currMods & vtinput.ShiftPressed) != 0)
+	app.EventSource().OnTextInput(func(text string) {
+		host.mu.Lock()
+		defer host.mu.Unlock()
 
-		host.reader.NativeEventChan <- &vtinput.InputEvent{
-			Type:            vtinput.KeyEventType,
-			KeyDown:         true,
-			VirtualKeyCode:  vk,
-			Char:            char,
-			ControlKeyState: currMods,
+		runes := []rune(text)
+		if len(runes) == 0 {
+			return
+		}
+
+		if host.pendingKeyEvent != nil {
+			if host.pendingKeyTimer != nil {
+				host.pendingKeyTimer.Stop()
+			}
+			// Сливаем первый символ с ожидающим событием OnKeyPress
+			host.pendingKeyEvent.Char = runes[0]
+			host.reader.NativeEventChan <- host.pendingKeyEvent
+			host.pendingKeyEvent = nil
+
+			// Остальные символы отправляем отдельными событиями
+			for i := 1; i < len(runes); i++ {
+				host.reader.NativeEventChan <- &vtinput.InputEvent{
+					Type:            vtinput.KeyEventType,
+					KeyDown:         true,
+					Char:            runes[i],
+					ControlKeyState: host.currentMods,
+				}
+			}
+		} else {
+			// Если OnText пришел без OnKeyPress, просто отправляем текст
+			for _, r := range runes {
+				host.reader.NativeEventChan <- &vtinput.InputEvent{
+					Type:            vtinput.KeyEventType,
+					KeyDown:         true,
+					Char:            r,
+					ControlKeyState: host.currentMods,
+				}
+			}
 		}
 	})
 
@@ -103,16 +173,16 @@ func RunGogpuHost(cols, rows int, setupApp func()) error {
 		vk := gogpuKeyToVK(key)
 
 		host.mu.Lock()
-		if vk == vtinput.VK_SHIFT || vk == vtinput.VK_LSHIFT || vk == vtinput.VK_RSHIFT {
-			host.currentMods &^= vtinput.ShiftPressed
+		currMods := host.syncMods(vk, mods, false)
+
+		// Принудительно сбрасываем залипшее нажатие перед отпусканием
+		if host.pendingKeyEvent != nil {
+			if host.pendingKeyTimer != nil {
+				host.pendingKeyTimer.Stop()
+			}
+			host.reader.NativeEventChan <- host.pendingKeyEvent
+			host.pendingKeyEvent = nil
 		}
-		if vk == vtinput.VK_CONTROL || vk == vtinput.VK_LCONTROL || vk == vtinput.VK_RCONTROL {
-			host.currentMods &^= vtinput.LeftCtrlPressed
-		}
-		if vk == vtinput.VK_MENU || vk == vtinput.VK_LMENU || vk == vtinput.VK_RMENU {
-			host.currentMods &^= vtinput.LeftAltPressed
-		}
-		currMods := host.currentMods
 		host.mu.Unlock()
 
 		if vk == 0 { return }
@@ -203,23 +273,32 @@ func RunGogpuHost(cols, rows int, setupApp func()) error {
 	return app.Run()
 }
 
-func translateGogpuMods(m gpucontext.Modifiers) vtinput.ControlKeyState {
-	var mods vtinput.ControlKeyState
-	/*
-	if m.IsShift() {
-		mods |= vtinput.ShiftPressed
+func loadGogpuFont(size float64) (text.Face, int, int) {
+	candidates :=[]string{
+		"C:\\Windows\\Fonts\\consola.ttf",
+		"C:\\Windows\\Fonts\\arial.ttf",
+		"/usr/share/fonts/truetype/ubuntu/UbuntuMono-R.ttf",
+		"/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+		"/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
+		"/System/Library/Fonts/Supplemental/Courier New.ttf",
+		"/System/Library/Fonts/Monaco.ttf",
 	}
-	if m.IsCtrl() {
-		mods |= vtinput.LeftCtrlPressed
+	for _, p := range candidates {
+		if _, err := os.Stat(p); err == nil {
+			src, err := text.NewFontSourceFromFile(p)
+			if err == nil {
+				face := src.Face(size)
+				metrics := face.Metrics()
+				cellH := int(metrics.Ascent + metrics.Descent + 0.5)
+				cellW := int(face.Advance("A") + 0.5)
+				if cellW == 0 { cellW = 8 }
+				if cellH == 0 { cellH = 16 }
+				DebugLog("GOGPU_HOST: Loaded font %s (Cell size: %dx%d)", p, cellW, cellH)
+				return face, cellW, cellH
+			}
+		}
 	}
-	if m.IsAlt() {
-		mods |= vtinput.LeftAltPressed
-	}
-	if m.IsSuper() {
-		mods |= vtinput.EnhancedKey
-	}
-	*/
-	return mods
+	return nil, 8, 16
 }
 
 func gogpuKeyToVK(k gpucontext.Key) uint16 {
@@ -302,85 +381,4 @@ func gogpuKeyToVK(k gpucontext.Key) uint16 {
 	case gpucontext.KeySlash: return vtinput.VK_OEM_2
 	}
 	return 0
-}
-
-func gogpuKeyToChar(k gpucontext.Key, shift bool) rune {
-	switch k {
-	case gpucontext.KeyA: if shift { return 'A' } else { return 'a' }
-	case gpucontext.KeyB: if shift { return 'B' } else { return 'b' }
-	case gpucontext.KeyC: if shift { return 'C' } else { return 'c' }
-	case gpucontext.KeyD: if shift { return 'D' } else { return 'd' }
-	case gpucontext.KeyE: if shift { return 'E' } else { return 'e' }
-	case gpucontext.KeyF: if shift { return 'F' } else { return 'f' }
-	case gpucontext.KeyG: if shift { return 'G' } else { return 'g' }
-	case gpucontext.KeyH: if shift { return 'H' } else { return 'h' }
-	case gpucontext.KeyI: if shift { return 'I' } else { return 'i' }
-	case gpucontext.KeyJ: if shift { return 'J' } else { return 'j' }
-	case gpucontext.KeyK: if shift { return 'K' } else { return 'k' }
-	case gpucontext.KeyL: if shift { return 'L' } else { return 'l' }
-	case gpucontext.KeyM: if shift { return 'M' } else { return 'm' }
-	case gpucontext.KeyN: if shift { return 'N' } else { return 'n' }
-	case gpucontext.KeyO: if shift { return 'O' } else { return 'o' }
-	case gpucontext.KeyP: if shift { return 'P' } else { return 'p' }
-	case gpucontext.KeyQ: if shift { return 'Q' } else { return 'q' }
-	case gpucontext.KeyR: if shift { return 'R' } else { return 'r' }
-	case gpucontext.KeyS: if shift { return 'S' } else { return 's' }
-	case gpucontext.KeyT: if shift { return 'T' } else { return 't' }
-	case gpucontext.KeyU: if shift { return 'U' } else { return 'u' }
-	case gpucontext.KeyV: if shift { return 'V' } else { return 'v' }
-	case gpucontext.KeyW: if shift { return 'W' } else { return 'w' }
-	case gpucontext.KeyX: if shift { return 'X' } else { return 'x' }
-	case gpucontext.KeyY: if shift { return 'Y' } else { return 'y' }
-	case gpucontext.KeyZ: if shift { return 'Z' } else { return 'z' }
-	case gpucontext.Key0: if shift { return ')' } else { return '0' }
-	case gpucontext.Key1: if shift { return '!' } else { return '1' }
-	case gpucontext.Key2: if shift { return '@' } else { return '2' }
-	case gpucontext.Key3: if shift { return '#' } else { return '3' }
-	case gpucontext.Key4: if shift { return '$' } else { return '4' }
-	case gpucontext.Key5: if shift { return '%' } else { return '5' }
-	case gpucontext.Key6: if shift { return '^' } else { return '6' }
-	case gpucontext.Key7: if shift { return '&' } else { return '7' }
-	case gpucontext.Key8: if shift { return '*' } else { return '8' }
-	case gpucontext.Key9: if shift { return '(' } else { return '9' }
-	case gpucontext.KeySpace: return ' '
-	case gpucontext.KeyMinus: if shift { return '_' } else { return '-' }
-	case gpucontext.KeyEqual: if shift { return '+' } else { return '=' }
-	case gpucontext.KeyLeftBracket: if shift { return '{' } else { return '[' }
-	case gpucontext.KeyRightBracket: if shift { return '}' } else { return ']' }
-	case gpucontext.KeyBackslash: if shift { return '|' } else { return '\\' }
-	case gpucontext.KeySemicolon: if shift { return ':' } else { return ';' }
-	case gpucontext.KeyApostrophe: if shift { return '"' } else { return '\'' }
-	case gpucontext.KeyComma: if shift { return '<' } else { return ',' }
-	case gpucontext.KeyPeriod: if shift { return '>' } else { return '.' }
-	case gpucontext.KeySlash: if shift { return '?' } else { return '/' }
-	}
-	return 0
-}
-
-func loadGogpuFont(size float64) (text.Face, int, int) {
-	candidates :=[]string{
-		"C:\\Windows\\Fonts\\consola.ttf",
-		"C:\\Windows\\Fonts\\arial.ttf",
-		"/usr/share/fonts/truetype/ubuntu/UbuntuMono-R.ttf",
-		"/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
-		"/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
-		"/System/Library/Fonts/Supplemental/Courier New.ttf",
-		"/System/Library/Fonts/Monaco.ttf",
-	}
-	for _, p := range candidates {
-		if _, err := os.Stat(p); err == nil {
-			src, err := text.NewFontSourceFromFile(p)
-			if err == nil {
-				face := src.Face(size)
-				metrics := face.Metrics()
-				cellH := int(metrics.Ascent + metrics.Descent + 0.5)
-				cellW := int(face.Advance("A") + 0.5)
-				if cellW == 0 { cellW = 8 }
-				if cellH == 0 { cellH = 16 }
-				DebugLog("GOGPU_HOST: Loaded font %s (Cell size: %dx%d)", p, cellW, cellH)
-				return face, cellW, cellH
-			}
-		}
-	}
-	return nil, 8, 16
 }
