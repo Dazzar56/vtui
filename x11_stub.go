@@ -10,6 +10,8 @@ var (
 	shmData []byte
 )
 
+func setupX11SHM() {}
+
 func RunInX11Window(cols, rows int, setupApp func()) error {
 	return fmt.Errorf("GUI mode is not supported on this platform (BSD on arm64) due to upstream library limitations")
 }

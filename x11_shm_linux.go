@@ -17,7 +17,14 @@ var (
 	shmData []byte
 )
 
-func init() {
+var shmSetupDone bool
+
+func setupX11SHM() {
+	if shmSetupDone {
+		return
+	}
+	shmSetupDone = true
+
 	// Allocate 32MB segment (sufficient for a 4K display)
 	size := 3840 * 2160 * 4
 

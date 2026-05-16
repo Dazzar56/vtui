@@ -288,7 +288,10 @@ func main() {
 	}
 
 	if guiMode {
-		vtui.RunInGUIWindow(80, 30, guiBackend, setup)
+		if err := vtui.RunInGUIWindow(80, 30, guiBackend, setup); err != nil {
+			fmt.Fprintf(os.Stderr, "GUI Error: %v\n", err)
+			os.Exit(1)
+		}
 	} else {
 		restore, err := vtui.PrepareTerminal()
 		if err != nil {

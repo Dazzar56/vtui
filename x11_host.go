@@ -380,6 +380,10 @@ func NewX11Host(cols, rows, cellW, cellH int) (*X11Host, error) {
 	host.imgBuf = image.NewRGBA(image.Rect(0, 0, int(host.width), int(host.height)))
 
 	forceNoShm := os.Getenv("VTUI_NO_SHM") != ""
+	if !forceNoShm {
+		setupX11SHM()
+	}
+
 	if shmId > 0 && !forceNoShm {
 		host.bgraBuf = shmData
 		host.shmSeg = x11shmInit(conn, shmId)
