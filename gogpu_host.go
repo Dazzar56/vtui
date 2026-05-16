@@ -5,9 +5,12 @@ package vtui
 import (
 	"io"
 	"os"
+	"runtime"
 	"sync"
 	"time"
 
+	"github.com/BurntSushi/xgb"
+	"github.com/BurntSushi/xgb/xproto"
 	"github.com/gogpu/gg/text"
 	"github.com/gogpu/gogpu"
 	"github.com/gogpu/gpucontext"
@@ -18,6 +21,26 @@ var (
 	debugLastMouseX, debugLastMouseY float64 = -1, -1
 	debugLastCtxW, debugLastCtxH     int     = -1, -1
 )
+
+func getX11ManualScale() float64 {
+	if runtime.GOOS == "linux" && os.Getenv("WAYLAND_DISPLAY") == "" && os.Getenv("DISPLAY") != "" {
+		dpi := 96.0
+		tempConn, err := xgb.NewConn()
+		if err == nil && tempConn != nil {
+			setup := xproto.Setup(tempConn)
+			screen := setup.DefaultScreen(tempConn)
+			if screen.WidthInMillimeters > 0 {
+				dpi = (float64(screen.WidthInPixels) * 25.4) / float64(screen.WidthInMillimeters)
+			}
+			tempConn.Close()
+		}
+		if dpi > 120 {
+			return 2.0
+		}
+	}
+	return 1.0
+}
+
 type GogpuHost struct {
 	mu          sync.Mutex
 	app         *gogpu.App
@@ -27,6 +50,7 @@ type GogpuHost struct {
 	rows        int
 	cellW       int
 	cellH       int
+	gogpuScale  float64
 	lastW       int
 	lastH       int
 	ctx         *gogpu.Context
@@ -57,28 +81,43 @@ func (h *GogpuHost) syncMods(vk uint16, mods gpucontext.Modifiers, isDown bool) 
 }
 
 func RunGogpuHost(cols, rows int, setupApp func()) error {
-	fontSize := 18.0
-	face, cellW, cellH := loadGogpuFont(fontSize)
+	baseFontSize := 18.0
+	manualScale := getX11ManualScale()
 
-	DebugLog("GOGPU_HOST: Starting RunGogpuHost %dx%d (Cell: %dx%d)", cols, rows, cellW, cellH)
+	logicalFontSize := baseFontSize * manualScale
+	_, logCellW, logCellH := loadGogpuFont(logicalFontSize)
+
+	DebugLog("GOGPU_HOST: Starting RunGogpuHost %dx%d (LogCell: %dx%d, ManualScale: %.1f)", cols, rows, logCellW, logCellH, manualScale)
 	config := gogpu.DefaultConfig().
 		WithTitle(AppName).
-		WithSize(cols*cellW, rows*cellH)
+		WithSize(cols*logCellW, rows*logCellH)
 
 	app := gogpu.NewApp(config)
-	host := &GogpuHost{
-		app:   app,
-		cols:  cols,
-		rows:  rows,
-		cellW: cellW,
-		cellH: cellH,
+
+	gogpuScale := app.ScaleFactor()
+	finalScale := manualScale * gogpuScale
+	if finalScale < 1.0 {
+		finalScale = 1.0
 	}
-	DebugLog("GOGPU: Init Host %dx%d Cells. Font metrics: W=%d H=%d", cols, rows, cellW, cellH)
+
+	finalFontSize := baseFontSize * finalScale
+	face, physCellW, physCellH := loadGogpuFont(finalFontSize)
+
+	DebugLog("GOGPU_HOST: App Scale: %.1f, Final Scale: %.1f, PhysCell: %dx%d", gogpuScale, finalScale, physCellW, physCellH)
+
+	host := &GogpuHost{
+		app:        app,
+		cols:       cols,
+		rows:       rows,
+		cellW:      physCellW,
+		cellH:      physCellH,
+		gogpuScale: gogpuScale,
+	}
 
 	scr := NewScreenBuf()
 	host.scr = scr
 	scr.AllocBuf(cols, rows)
-	renderer := NewGogpuRenderer(host, face, cellW, cellH)
+	renderer := NewGogpuRenderer(host, face, physCellW, physCellH)
 	scr.Renderer = renderer
 
 	FrameManager.Init(scr)
@@ -197,18 +236,24 @@ func RunGogpuHost(cols, rows int, setupApp func()) error {
 	app.EventSource().OnMouseMove(func(x, y float64) {
 		host.mu.Lock()
 		btn := host.mouseBtn
+		scale := host.gogpuScale
+		cW := host.cellW
+		cH := host.cellH
 		host.mu.Unlock()
+
+		physX := x * scale
+		physY := y * scale
 
 		if x != debugLastMouseX || y != debugLastMouseY {
 			// Логируем только если координата изменилась более чем на 2 пикселя
-			DebugLog("GOGPU_MOUSE: RawXY=%.1f,%.1f Cell=%d,%d Btn=%d", x, y, int(x)/cellW, int(y)/cellH, btn)
+			DebugLog("GOGPU_MOUSE: RawXY=%.1f,%.1f PhysXY=%.1f,%.1f Cell=%d,%d Btn=%d", x, y, physX, physY, int(physX)/cW, int(physY)/cH, btn)
 			debugLastMouseX, debugLastMouseY = x, y
 		}
 
 		host.reader.NativeEventChan <- &vtinput.InputEvent{
 			Type:            vtinput.MouseEventType,
-			MouseX:          uint16(int(x) / cellW),
-			MouseY:          uint16(int(y) / cellH),
+			MouseX:          uint16(int(physX) / cW),
+			MouseY:          uint16(int(physY) / cH),
 			MouseEventFlags: vtinput.MouseMoved,
 			ButtonState:     btn,
 		}
@@ -219,13 +264,19 @@ func RunGogpuHost(cols, rows int, setupApp func()) error {
 
 		host.mu.Lock()
 		host.mouseBtn = btn
+		scale := host.gogpuScale
+		cW := host.cellW
+		cH := host.cellH
 		DebugLog("PROBE_CLICK: MouseRaw=%.1f,%.1f CtxSize=%dx%d LogSize=%dx%d", x, y, debugLastCtxW, debugLastCtxH, host.cols*host.cellW, host.rows*host.cellH)
 		host.mu.Unlock()
 
+		physX := x * scale
+		physY := y * scale
+
 		host.reader.NativeEventChan <- &vtinput.InputEvent{
 			Type:        vtinput.MouseEventType,
-			MouseX:      uint16(int(x) / cellW),
-			MouseY:      uint16(int(y) / cellH),
+			MouseX:      uint16(int(physX) / cW),
+			MouseY:      uint16(int(physY) / cH),
 			KeyDown:     true,
 			ButtonState: btn,
 		}
@@ -234,12 +285,18 @@ func RunGogpuHost(cols, rows int, setupApp func()) error {
 	app.EventSource().OnMouseRelease(func(button gpucontext.MouseButton, x, y float64) {
 		host.mu.Lock()
 		host.mouseBtn = 0
+		scale := host.gogpuScale
+		cW := host.cellW
+		cH := host.cellH
 		host.mu.Unlock()
+
+		physX := x * scale
+		physY := y * scale
 
 		host.reader.NativeEventChan <- &vtinput.InputEvent{
 			Type:        vtinput.MouseEventType,
-			MouseX:      uint16(int(x) / cellW),
-			MouseY:      uint16(int(y) / cellH),
+			MouseX:      uint16(int(physX) / cW),
+			MouseY:      uint16(int(physY) / cH),
 			KeyDown:     false,
 			ButtonState: 0,
 		}

@@ -93,19 +93,14 @@ func (r *GogpuRenderer) Flush() {
 	}
 
 	w, h := ctx.Width(), ctx.Height()
-	logW := r.host.cols * r.host.cellW
-	logH := r.host.rows * r.host.cellH
-
-	// ГИПОТЕЗА: ctx.Width() врет из-за кривого HiDPI в gogpu (отдает 400 вместо 800).
-	// Форсируем размер текстуры канваса до требуемого логического размера (800x630).
-	canvasW, canvasH := logW, logH
+	fw, fh := ctx.FramebufferWidth(), ctx.FramebufferHeight()
 
 	if r.canvas == nil {
 		provider := app.GPUContextProvider()
 		if provider == nil { return }
-		r.canvas, _ = ggcanvas.New(provider, canvasW, canvasH)
+		r.canvas, _ = ggcanvas.New(provider, fw, fh)
 	} else {
-		r.canvas.Resize(canvasW, canvasH)
+		r.canvas.Resize(fw, fh)
 	}
 
 	if r.dirty {
@@ -118,7 +113,7 @@ func (r *GogpuRenderer) Flush() {
 
 			// Логируем размеры для отладки
 			if debugDrawCount % 100 == 0 {
-				DebugLog("GOGPU_PROBE: Ctx=%dx%d CanvasForced=%dx%d", w, h, canvasW, canvasH)
+				DebugLog("GOGPU_PROBE: Ctx=%dx%d FB=%dx%d", w, h, fw, fh)
 			}
 			debugDrawCount++
 
