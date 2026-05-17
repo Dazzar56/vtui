@@ -1,4 +1,4 @@
-//go:build linux || openbsd || netbsd || dragonfly || darwin || freebsd
+//go:build linux || openbsd || netbsd || dragonfly || darwin || freebsd || windows
 
 package vtui
 
@@ -14,8 +14,10 @@ import (
 // loadBestFont attempts to find a suitable monospace TTF font on the system.
 // If none is found, it falls back to a built-in bitmap font.
 func loadBestFont(size float64, dpi float64) (font.Face, int, int) {
-	// Paths for common Linux distributions
+	// Paths for common Linux distributions and Windows
 	fontPaths := []string{
+		`C:\Windows\Fonts\consola.ttf`,
+		`C:\Windows\Fonts\lucon.ttf`,
 		"/usr/share/fonts/truetype/ubuntu/UbuntuMono-R.ttf",
 		"/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
 		"/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",

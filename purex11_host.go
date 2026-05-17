@@ -1,4 +1,4 @@
-//go:build linux || openbsd || netbsd || dragonfly || darwin || freebsd
+//go:build linux || openbsd || netbsd || dragonfly || darwin || freebsd || windows
 
 package vtui
 
@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"runtime"
 	"sync"
 
 	"github.com/BurntSushi/xgb"
@@ -124,12 +125,35 @@ func NewPureX11Host(cols, rows, cellW, cellH int) (*PureX11Host, error) {
 
 	// Attempt 1: Load compiled keymap directly from server via xkbcomp.
 	// This is the most reliable method for XWayland and complex Linux setups.
-	if _, err := exec.LookPath("xkbcomp"); err == nil {
+	var xkbcompPath string
+	if p, err := exec.LookPath("xkbcomp"); err == nil {
+		xkbcompPath = p
+	} else if runtime.GOOS == "windows" {
+		commonPaths := []string{
+			`C:\Program Files\VcXsrv\xkbcomp.exe`,
+			`C:\Program Files (x86)\VcXsrv\xkbcomp.exe`,
+			`C:\Program Files\Xming\xkbcomp.exe`,
+			`C:\Program Files (x86)\Xming\xkbcomp.exe`,
+			`C:\cygwin64\bin\xkbcomp.exe`,
+			`C:\cygwin\bin\xkbcomp.exe`,
+			`C:\msys64\usr\bin\xkbcomp.exe`,
+			`C:\msys64\mingw64\bin\xkbcomp.exe`,
+			`C:\msys64\mingw32\bin\xkbcomp.exe`,
+		}
+		for _, p := range commonPaths {
+			if _, err := os.Stat(p); err == nil {
+				xkbcompPath = p
+				break
+			}
+		}
+	}
+
+	if xkbcompPath != "" {
 		display := os.Getenv("DISPLAY")
 		if display == "" {
 			display = ":0"
 		}
-		cmd := exec.Command("xkbcomp", display, "-")
+		cmd := exec.Command(xkbcompPath, display, "-")
 		var out bytes.Buffer
 		cmd.Stdout = &out
 		if err := cmd.Run(); err == nil && out.Len() > 0 {
