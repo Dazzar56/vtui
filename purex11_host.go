@@ -22,22 +22,14 @@ type rawRequest []byte
 
 func (r rawRequest) Bytes() []byte { return r }
 
+// XkbState хранит полный ответ от XkbGetState
 type XkbState struct {
-	DeviceID         byte
-	Mods             byte
-	BaseMods         byte
-	LatchedMods      byte
-	LockedMods       byte
-	Group            byte
-	LockedGroup      byte
-	BaseGroup        int16
-	LatchedGroup     int16
-	CompatState      byte
-	GrabMods         byte
-	CompatGrabMods   byte
-	LookupMods       byte
-	CompatLookupMods byte
-	PtrBtnState      uint16
+	BaseMods     byte
+	LatchedMods  byte
+	LockedMods   byte
+	BaseGroup    int16
+	LatchedGroup int16
+	LockedGroup  byte
 }
 
 func initXkbExtension(X *xgb.Conn, xkbOpcode byte) error {
@@ -57,8 +49,8 @@ func initXkbExtension(X *xgb.Conn, xkbOpcode byte) error {
 func queryXkbState(X *xgb.Conn, xkbOpcode byte) (*XkbState, error) {
 	buf := make([]byte, 8)
 	buf[0] = xkbOpcode
-	buf[1] = 4 // XkbGetState
-	xgb.Put16(buf[2:], 2)
+	buf[1] = 4                // XkbGetState
+	xgb.Put16(buf[2:], 2)     // Length
 	xgb.Put16(buf[4:], 0x0100) // deviceSpec = XkbUseCoreKbd
 
 	cookie := X.NewCookie(true, true)
@@ -67,26 +59,17 @@ func queryXkbState(X *xgb.Conn, xkbOpcode byte) (*XkbState, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(reply) < 25 {
+	if len(reply) < 18 { // Минимальная длина для полей, которые нас интересуют
 		return nil, fmt.Errorf("XKB reply too short")
 	}
 
 	return &XkbState{
-		DeviceID:         reply[1],
-		Mods:             reply[8],
-		BaseMods:         reply[9],
-		LatchedMods:      reply[10],
-		LockedMods:       reply[11],
-		Group:            reply[12],
-		LockedGroup:      reply[13],
-		BaseGroup:        int16(xgb.Get16(reply[14:])),
-		LatchedGroup:     int16(xgb.Get16(reply[16:])),
-		CompatState:      reply[18],
-		GrabMods:         reply[19],
-		CompatGrabMods:   reply[20],
-		LookupMods:       reply[21],
-		CompatLookupMods: reply[22],
-		PtrBtnState:      xgb.Get16(reply[24:]),
+		BaseMods:     reply[9],
+		LatchedMods:  reply[10],
+		LockedMods:   reply[11],
+		LockedGroup:  reply[13],
+		BaseGroup:    int16(xgb.Get16(reply[14:])),
+		LatchedGroup: int16(xgb.Get16(reply[16:])),
 	}, nil
 }
 
@@ -397,15 +380,15 @@ func (h *PureX11Host) RunEventLoop() {
 }
 
 func (h *PureX11Host) handleKeyEvent(detail xproto.Keycode, state uint16, isDown bool) {
-	xkbState, err := queryXkbState(h.conn, h.xkbOpcode)
+	srv, err := queryXkbState(h.conn, h.xkbOpcode)
 	if err == nil {
 		h.xkbState.UpdateMask(
-			xkb.ModMask(xkbState.BaseMods),
-			xkb.ModMask(xkbState.LatchedMods),
-			xkb.ModMask(xkbState.LockedMods),
-			xkb.Group(xkbState.BaseGroup),
-			xkb.Group(xkbState.LatchedGroup),
-			xkb.Group(xkbState.LockedGroup),
+			xkb.ModMask(srv.BaseMods),
+			xkb.ModMask(srv.LatchedMods),
+			xkb.ModMask(srv.LockedMods),
+			xkb.Group(srv.BaseGroup),
+			xkb.Group(srv.LatchedGroup),
+			xkb.Group(srv.LockedGroup),
 		)
 	}
 
