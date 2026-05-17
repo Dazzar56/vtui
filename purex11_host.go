@@ -156,26 +156,38 @@ func NewPureX11Host(cols, rows, cellW, cellH int) (*PureX11Host, error) {
 		if display == "" {
 			display = ":0"
 		}
+		DebugLog("XKB: Executing %s %s -", xkbcompPath, display)
 		cmd := exec.Command(xkbcompPath, display, "-")
 		var out bytes.Buffer
+		var stderr bytes.Buffer
 		cmd.Stdout = &out
+		cmd.Stderr = &stderr
 		if err := cmd.Run(); err == nil && out.Len() > 0 {
-			keymap, _ = xkbCtx.NewKeymapFromString(out.Bytes(), xkb.KeymapFormatTextV1)
+			var kerr error
+			keymap, kerr = xkbCtx.NewKeymapFromString(out.Bytes(), xkb.KeymapFormatTextV1)
+			DebugLog("XKB: Loaded keymap from xkbcomp (%d bytes), err=%v", out.Len(), kerr)
+		} else {
+			DebugLog("XKB: xkbcomp failed: %v, stderr: %s", err, stderr.String())
 		}
+	} else {
+		DebugLog("XKB: No xkbcomp executable found.")
 	}
 
 	// Attempt 2: Fallback to RMLVO names from root window properties.
 	// This works for Windows X servers (Xming/VcXsrv) where xkbcomp might be missing.
 	if keymap == nil {
+		DebugLog("XKB: Trying fallback via _XKB_RULES_NAMES...")
 		rulesAtomCookie := xproto.InternAtom(conn, true, uint16(len("_XKB_RULES_NAMES")), "_XKB_RULES_NAMES")
 		rulesAtomReply, err := rulesAtomCookie.Reply()
 		if err != nil {
+			DebugLog("XKB: Failed to get _XKB_RULES_NAMES atom: %v", err)
 			return nil, fmt.Errorf("failed to get _XKB_RULES_NAMES atom: %v", err)
 		}
 
 		propCookie := xproto.GetProperty(conn, false, screen.Root, rulesAtomReply.Atom, xproto.AtomAny, 0, 1024)
 		propReply, err := propCookie.Reply()
 		if err != nil {
+			DebugLog("XKB: Failed to read _XKB_RULES_NAMES property: %v", err)
 			return nil, fmt.Errorf("failed to read _XKB_RULES_NAMES property: %v", err)
 		}
 
@@ -188,6 +200,7 @@ func NewPureX11Host(cols, rows, cellW, cellH int) (*PureX11Host, error) {
 			if len(parts) > 3 { rmlvo.Variant = string(parts[3]) }
 			if len(parts) > 4 { rmlvo.Options = string(parts[4]) }
 		}
+		DebugLog("XKB: RMLVO from server: Rules=%q Model=%q Layout=%q Variant=%q Options=%q", rmlvo.Rules, rmlvo.Model, rmlvo.Layout, rmlvo.Variant, rmlvo.Options)
 
 		if rmlvo.Layout == "" {
 			return nil, fmt.Errorf("no keyboard layout found in _XKB_RULES_NAMES and xkbcomp failed")
@@ -195,6 +208,7 @@ func NewPureX11Host(cols, rows, cellW, cellH int) (*PureX11Host, error) {
 
 		keymap, err = xkbCtx.NewKeymapFromNames(&rmlvo)
 		if err != nil {
+			DebugLog("XKB: Failed to compile keymap from names: %v", err)
 			return nil, fmt.Errorf("failed to compile keymap via RMLVO fallback: %v", err)
 		}
 	}

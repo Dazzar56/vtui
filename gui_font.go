@@ -18,6 +18,7 @@ func loadBestFont(size float64, dpi float64) (font.Face, int, int) {
 	fontPaths := []string{
 		`C:\Windows\Fonts\consola.ttf`,
 		`C:\Windows\Fonts\lucon.ttf`,
+		`C:\Windows\Fonts\cour.ttf`, // Courier New
 		"/usr/share/fonts/truetype/ubuntu/UbuntuMono-R.ttf",
 		"/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
 		"/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
@@ -28,11 +29,15 @@ func loadBestFont(size float64, dpi float64) (font.Face, int, int) {
 	for _, path := range fontPaths {
 		data, err := os.ReadFile(path)
 		if err != nil {
+			if !os.IsNotExist(err) {
+				DebugLog("GUI_FONT: Error reading %s: %v", path, err)
+			}
 			continue
 		}
 
 		f, err := opentype.Parse(data)
 		if err != nil {
+			DebugLog("GUI_FONT: Error parsing %s: %v", path, err)
 			continue
 		}
 
@@ -42,6 +47,7 @@ func loadBestFont(size float64, dpi float64) (font.Face, int, int) {
 			Hinting: font.HintingFull,
 		})
 		if err != nil {
+			DebugLog("GUI_FONT: Error creating face for %s: %v", path, err)
 			continue
 		}
 
@@ -53,11 +59,11 @@ func loadBestFont(size float64, dpi float64) (font.Face, int, int) {
 		advance, _ := face.GlyphAdvance('A')
 		cellW := advance.Ceil()
 
-		DebugLog("GUI: Loaded TTF font %s, metrics: %dx%d", filepath.Base(path), cellW, cellH)
+		DebugLog("GUI_FONT: Successfully loaded %s, metrics: %dx%d", filepath.Base(path), cellW, cellH)
 		return face, cellW, cellH
 	}
 
 	// Fallback to basicfont if no TTF found
-	DebugLog("GUI: No TTF font found, falling back to basicfont 7x13")
+	DebugLog("GUI_FONT: CRITICAL - No TTF font found! Falling back to basicfont 7x13 (ASCII only!)")
 	return basicfont.Face7x13, 7, 13
 }
