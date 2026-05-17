@@ -6,8 +6,8 @@ require (
 	github.com/BurntSushi/xgb v0.0.0-20210121224620-deaf085860bc
 	github.com/ebitengine/purego v0.10.0
 	github.com/gogpu/gg v0.46.8
-	github.com/gogpu/gogpu v0.36.1
-	github.com/gogpu/gpucontext v0.18.0
+	github.com/gogpu/gogpu v0.37.5
+	github.com/gogpu/gpucontext v0.19.0
 	github.com/mattn/go-runewidth v0.0.15
 	github.com/neurlang/wayland v0.4.2
 	github.com/unxed/vtinput v0.0.0
