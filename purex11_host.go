@@ -9,6 +9,7 @@ import (
 	"image"
 	"io"
 	"os"
+	"os/exec"
 	"sync"
 
 	"github.com/BurntSushi/xgb"
@@ -135,32 +136,57 @@ func NewPureX11Host(cols, rows, cellW, cellH int) (*PureX11Host, error) {
 	setup := xproto.Setup(conn)
 	screen := setup.DefaultScreen(conn)
 
-	rulesAtomCookie := xproto.InternAtom(conn, true, uint16(len("_XKB_RULES_NAMES")), "_XKB_RULES_NAMES")
-	rulesAtomReply, err := rulesAtomCookie.Reply()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get _XKB_RULES_NAMES atom: %v", err)
-	}
-
-	propCookie := xproto.GetProperty(conn, false, screen.Root, rulesAtomReply.Atom, xproto.AtomAny, 0, 1024)
-	propReply, err := propCookie.Reply()
-	if err != nil {
-		return nil, fmt.Errorf("failed to read _XKB_RULES_NAMES property: %v", err)
-	}
-
-	var rmlvo xkb.RuleNames
-	if propReply != nil && len(propReply.Value) > 0 {
-		parts := bytes.Split(propReply.Value, []byte{0})
-		if len(parts) > 0 { rmlvo.Rules = string(parts[0]) }
-		if len(parts) > 1 { rmlvo.Model = string(parts[1]) }
-		if len(parts) > 2 { rmlvo.Layout = string(parts[2]) }
-		if len(parts) > 3 { rmlvo.Variant = string(parts[3]) }
-		if len(parts) > 4 { rmlvo.Options = string(parts[4]) }
-	}
-
+	var keymap *xkb.Keymap
 	xkbCtx := xkb.NewContext(context.Background(), xkb.ContextNoFlags)
-	keymap, err := xkbCtx.NewKeymapFromNames(&rmlvo)
-	if err != nil {
-		return nil, fmt.Errorf("failed to compile keymap: %v", err)
+
+	// Attempt 1: Load compiled keymap directly from server via xkbcomp.
+	// This is the most reliable method for XWayland and complex Linux setups.
+	if _, err := exec.LookPath("xkbcomp"); err == nil {
+		display := os.Getenv("DISPLAY")
+		if display == "" {
+			display = ":0"
+		}
+		cmd := exec.Command("xkbcomp", display, "-")
+		var out bytes.Buffer
+		cmd.Stdout = &out
+		if err := cmd.Run(); err == nil && out.Len() > 0 {
+			keymap, _ = xkbCtx.NewKeymapFromString(out.Bytes(), xkb.KeymapFormatTextV1)
+		}
+	}
+
+	// Attempt 2: Fallback to RMLVO names from root window properties.
+	// This works for Windows X servers (Xming/VcXsrv) where xkbcomp might be missing.
+	if keymap == nil {
+		rulesAtomCookie := xproto.InternAtom(conn, true, uint16(len("_XKB_RULES_NAMES")), "_XKB_RULES_NAMES")
+		rulesAtomReply, err := rulesAtomCookie.Reply()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get _XKB_RULES_NAMES atom: %v", err)
+		}
+
+		propCookie := xproto.GetProperty(conn, false, screen.Root, rulesAtomReply.Atom, xproto.AtomAny, 0, 1024)
+		propReply, err := propCookie.Reply()
+		if err != nil {
+			return nil, fmt.Errorf("failed to read _XKB_RULES_NAMES property: %v", err)
+		}
+
+		var rmlvo xkb.RuleNames
+		if propReply != nil && len(propReply.Value) > 0 {
+			parts := bytes.Split(propReply.Value, []byte{0})
+			if len(parts) > 0 { rmlvo.Rules = string(parts[0]) }
+			if len(parts) > 1 { rmlvo.Model = string(parts[1]) }
+			if len(parts) > 2 { rmlvo.Layout = string(parts[2]) }
+			if len(parts) > 3 { rmlvo.Variant = string(parts[3]) }
+			if len(parts) > 4 { rmlvo.Options = string(parts[4]) }
+		}
+
+		if rmlvo.Layout == "" {
+			return nil, fmt.Errorf("no keyboard layout found in _XKB_RULES_NAMES and xkbcomp failed")
+		}
+
+		keymap, err = xkbCtx.NewKeymapFromNames(&rmlvo)
+		if err != nil {
+			return nil, fmt.Errorf("failed to compile keymap via RMLVO fallback: %v", err)
+		}
 	}
 	state := keymap.NewState()
 
