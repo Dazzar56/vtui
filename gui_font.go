@@ -56,7 +56,7 @@ func loadBestFont(size float64, dpi float64) (font.Face, int, int) {
 
 		msg := fmt.Sprintf("GUI_FONT: Successfully loaded %s (%dx%d)", path, cellW, cellH)
 		fmt.Fprintln(os.Stderr, msg)
-		DebugLog(msg)
+		DebugLog("%s", msg)
 		return face, cellW, cellH
 	}
 
