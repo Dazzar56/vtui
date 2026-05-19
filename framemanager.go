@@ -871,9 +871,8 @@ func (fm *frameManager) Run(reader *vtinput.Reader) {
 		if err != nil {
 			return // Keep existing size if we can't determine the new one
 		}
+
 		if width > 0 && height > 0 && (width != fm.scr.width || height != fm.scr.height) {
-			dx := width - fm.scr.width
-			dy := height - fm.scr.height
 
 			fm.scr.AllocBuf(width, height)
 
@@ -883,19 +882,17 @@ func (fm *frameManager) Run(reader *vtinput.Reader) {
 				}
 			}
 
-			// Adjust global UI elements anchored to the edges
+			// Re-dock global UI elements to the new screen edges.
+			// This ensures they stay at the top/bottom regardless of whether
+			// the active frame also tries to resize them.
 			if fm.MenuBar != nil {
-				fm.MenuBar.X2 += dx
+				fm.MenuBar.SetPosition(0, 0, width-1, 0)
 			}
 			if fm.KeyBar != nil {
-				fm.KeyBar.Y1 += dy
-				fm.KeyBar.Y2 += dy
-				fm.KeyBar.X2 += dx
+				fm.KeyBar.SetPosition(0, height-1, width-1, height-1)
 			}
 			if fm.StatusLine != nil {
-				fm.StatusLine.Y1 += dy
-				fm.StatusLine.Y2 += dy
-				fm.StatusLine.X2 += dx
+				fm.StatusLine.SetPosition(0, height-1, width-1, height-1)
 			}
 
 			fm.Redraw()
