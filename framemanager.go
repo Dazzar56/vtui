@@ -872,12 +872,32 @@ func (fm *frameManager) Run(reader *vtinput.Reader) {
 			return // Keep existing size if we can't determine the new one
 		}
 		if width > 0 && height > 0 && (width != fm.scr.width || height != fm.scr.height) {
+			dx := width - fm.scr.width
+			dy := height - fm.scr.height
+
 			fm.scr.AllocBuf(width, height)
+
 			for _, s := range fm.Screens {
 				for _, f := range s.Frames {
 					f.ResizeConsole(width, height)
 				}
 			}
+
+			// Adjust global UI elements anchored to the edges
+			if fm.MenuBar != nil {
+				fm.MenuBar.X2 += dx
+			}
+			if fm.KeyBar != nil {
+				fm.KeyBar.Y1 += dy
+				fm.KeyBar.Y2 += dy
+				fm.KeyBar.X2 += dx
+			}
+			if fm.StatusLine != nil {
+				fm.StatusLine.Y1 += dy
+				fm.StatusLine.Y2 += dy
+				fm.StatusLine.X2 += dx
+			}
+
 			fm.Redraw()
 		}
 	}
