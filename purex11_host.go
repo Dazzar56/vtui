@@ -1,4 +1,4 @@
-//go:build linux || openbsd || netbsd || dragonfly || darwin || freebsd || windows
+//go:build linux || openbsd || netbsd || dragonfly || darwin || freebsd || windows || illumos || solaris
 
 package vtui
 

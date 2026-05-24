@@ -1,4 +1,4 @@
-//go:build (linux || freebsd || openbsd || netbsd || dragonfly || darwin) && !((freebsd || openbsd || netbsd) && arm64)
+//go:build (linux || freebsd || openbsd || netbsd || dragonfly || darwin || illumos || solaris) && !((freebsd || openbsd || netbsd) && arm64)
 
 package vtui
 
