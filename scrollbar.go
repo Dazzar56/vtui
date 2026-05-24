@@ -8,10 +8,10 @@ import (
 
 // Symbols for the scrollbar, similar to Oem2Unicode from far2l
 var (
-	ScrollUpArrow    = '▲' // 0x25B2
-	ScrollDownArrow  = '▼' // 0x25BC
-	ScrollBlockLight = '░' // 0x2591 (BS_X_B0)
-	ScrollBlockDark  = '▓' // 0x2593 (BS_X_B2)
+	ScrollUpArrow    uint64 = '▲' // 0x25B2
+	ScrollDownArrow  uint64 = '▼' // 0x25BC
+	ScrollBlockLight uint64 = '░' // 0x2591 (BS_X_B0)
+	ScrollBlockDark  uint64 = '▓' // 0x2593 (BS_X_B2)
 )
 
 func init() {
