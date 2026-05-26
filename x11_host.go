@@ -400,12 +400,14 @@ func NewX11Host(cols, rows, cellW, cellH int) (*X11Host, error) {
 	// Important: first try empty modifiers to connect to system IMs (IBus, Fcitx, etc.)
 	xSetLocaleModifiers("")
 	im := xOpenIM(dpy, 0, 0, 0)
+	DebugLog("X11_FFI_DEBUG: Initial XOpenIM(dpy=0x%X) returned im=0x%X", dpy, im)
 
 	if im == 0 {
 		// Wayland/XWayland hack: if the system IM didn't respond, force internal IM
 		DebugLog("X11: System XOpenIM returned NULL, trying @im=none...")
 		xSetLocaleModifiers("@im=none")
 		im = xOpenIM(dpy, 0, 0, 0)
+		DebugLog("X11_FFI_DEBUG: Fallback XOpenIM with @im=none returned im=0x%X", im)
 	}
 
 	if im == 0 {
@@ -475,6 +477,8 @@ func NewX11Host(cols, rows, cellW, cellH int) (*X11Host, error) {
 			uintptr(0))
 		ic = res
 	}
+
+	DebugLog("X11_FFI_DEBUG: XCreateIC(im=0x%X, wid=0x%X) returned ic=0x%X", im, host.wid, ic)
 
 	if ic == 0 {
 		return nil, fmt.Errorf("XCreateIC failed: style 0x%X rejected. Check system log for Segfaults", bestStyle)
@@ -593,6 +597,9 @@ func (h *X11Host) RunEventLoop() {
 			var status int32   // Status is 4 bytes
 			var n uintptr
 
+			DebugLog("X11_FFI_DEBUG: KeyPress/Release event received. Keycode: %d, State: 0x%X, h.ic: 0x%X",
+				kev.Keycode, kev.State, h.ic)
+
 			// SOURCE OF TRUTH: Xutf8LookupString.
 			// This function handles all layout complexities, including multiple groups
 			// and custom modifiers that simple mapping tables often miss.
@@ -602,6 +609,11 @@ func (h *X11Host) RunEventLoop() {
 				n, _, _ = purego.SyscallN(xutf8LookupStringPtr, h.ic, uintptr(unsafe.Pointer(&ev)),
 					uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)),
 					uintptr(unsafe.Pointer(&keysym)), uintptr(unsafe.Pointer(&status)))
+
+				DebugLog("X11_FFI_DEBUG: Xutf8LookupString returned n=%d, keysym=0x%X, status=%d, raw_bytes=[% X]",
+					n, keysym, status, buf[:n])
+			} else {
+				DebugLog("X11_FFI_DEBUG: Skipping Xutf8LookupString because h.ic is NULL (0x0)")
 			}
 
 			vk := keysymToVK(uint32(keysym))
