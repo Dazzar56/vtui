@@ -3,15 +3,14 @@
 package vtui
 
 import (
-	"bytes"
-	"context"
 	"fmt"
 	"image"
 	"io"
 	"os"
-	"os/exec"
 	"runtime"
+	"strings"
 	"sync"
+	"unicode"
 
 	"github.com/jezek/xgb"
 	"github.com/jezek/xgb/xproto"
@@ -74,6 +73,112 @@ func queryXkbState(X *xgb.Conn, xkbOpcode byte) (*XkbState, error) {
 	}, nil
 }
 
+type CoreKeymap struct {
+	MinKeycode int
+	MaxKeycode int
+	SymsPerKey int
+	Syms       []xproto.Keysym
+}
+
+func loadCoreKeymap(conn *xgb.Conn, setup *xproto.SetupInfo) (*CoreKeymap, error) {
+	min := setup.MinKeycode
+	max := setup.MaxKeycode
+	count := byte(max - min + 1)
+
+	reply, err := xproto.GetKeyboardMapping(conn, min, count).Reply()
+	if err != nil {
+		return nil, err
+	}
+
+	return &CoreKeymap{
+		MinKeycode: int(min),
+		MaxKeycode: int(max),
+		SymsPerKey: int(reply.KeysymsPerKeycode),
+		Syms:       reply.Keysyms,
+	}, nil
+}
+
+func (km *CoreKeymap) Lookup(kc int, state uint16, group int) uint32 {
+	if kc < km.MinKeycode || kc > km.MaxKeycode {
+		return 0
+	}
+	offset := (kc - km.MinKeycode) * km.SymsPerKey
+	syms := km.Syms[offset : offset+km.SymsPerKey]
+
+	length := len(syms)
+	for length > 0 && syms[length-1] == 0 {
+		length--
+	}
+	if length == 0 {
+		return 0
+	}
+
+	shift := (state & 1) != 0
+	capsLock := (state & 2) != 0
+	altGr := (state&128) != 0 || (state&32) != 0
+
+	// Базовый индекс любой группы всегда group * 2
+	idx := group * 2
+	if idx >= length {
+		idx = 0
+	}
+
+	var symsHex []string
+	for _, s := range syms {
+		symsHex = append(symsHex, fmt.Sprintf("0x%X", s))
+	}
+
+	DebugLog("XKB_DEBUG: Keycode=%d state=0x%X group=%d colBase=%d syms=[%s]",
+		kc, state, group, idx, strings.Join(symsHex, ", "))
+
+	altGrApplied := false
+	if altGr {
+		// Аллокация смещений XKB Level 3 (AltGr)
+		offsets := []int{4, 2, 6, 8}
+		if km.SymsPerKey > 2 && km.SymsPerKey%2 == 0 {
+			offsets = append([]int{km.SymsPerKey / 2}, offsets...)
+		}
+
+		for _, o := range offsets {
+			if idx+o < length && syms[idx+o] != 0 {
+				// Применяем смещение только если мы находимся на английской раскладке (group==0),
+				// либо если символ действительно отличается от базы (чтобы предотвратить ложное срабатывание
+				// из-за подмешанного Mod5 на русской раскладке).
+				if group == 0 || syms[idx+o] != syms[idx] {
+					idx += o
+					altGrApplied = true
+					break
+				}
+			}
+		}
+	}
+
+	DebugLog("XKB_DEBUG: AltGr=%v altGrApplied=%v resolvedIdx=%d keysym=0x%X",
+		altGr, altGrApplied, idx, syms[idx])
+
+	baseSym := uint32(syms[idx])
+	shiftedSym := baseSym
+	if idx+1 < length && syms[idx+1] != 0 {
+		shiftedSym = uint32(syms[idx+1])
+	}
+
+	r := xkb.KeysymToUTF32(xkb.Keysym(baseSym))
+	isLetter := r != 0 && unicode.IsLetter(r)
+
+	resSym := baseSym
+	if shift {
+		if capsLock && isLetter {
+			resSym = baseSym
+		} else {
+			resSym = shiftedSym
+		}
+	} else if capsLock && isLetter {
+		resSym = shiftedSym
+	}
+
+	return resSym
+}
+
 type PureX11Host struct {
 	mu         sync.Mutex
 	conn       *xgb.Conn
@@ -95,9 +200,8 @@ type PureX11Host struct {
 	atomDelete xproto.Atom
 	dirtyLines []bool
 
-	xkbOpcode byte
-	keymap    *xkb.Keymap
-	xkbState  *xkb.State
+	xkbOpcode  byte
+	coreKeymap *CoreKeymap
 }
 
 func NewPureX11Host(cols, rows, cellW, cellH int) (*PureX11Host, error) {
@@ -120,97 +224,10 @@ func NewPureX11Host(cols, rows, cellW, cellH int) (*PureX11Host, error) {
 	setup := xproto.Setup(conn)
 	screen := setup.DefaultScreen(conn)
 
-	var keymap *xkb.Keymap
-	xkbCtx := xkb.NewContext(context.Background(), xkb.ContextNoFlags)
-
-	// Attempt 1: Load compiled keymap directly from server via xkbcomp.
-	// This is the most reliable method for XWayland and complex Linux setups.
-	var xkbcompPath string
-	if p, err := exec.LookPath("xkbcomp"); err == nil {
-		xkbcompPath = p
-	} else if runtime.GOOS == "windows" {
-		fmt.Fprintln(os.Stderr, "XKB: xkbcomp not in PATH, searching common X-server locations...")
-		commonPaths := []string{
-			`C:\Program Files\VcXsrv\xkbcomp.exe`,
-			`C:\Program Files (x86)\VcXsrv\xkbcomp.exe`,
-			`C:\Program Files\Xming\xkbcomp.exe`,
-			`C:\Program Files (x86)\Xming\xkbcomp.exe`,
-			`C:\cygwin64\bin\xkbcomp.exe`,
-			`C:\cygwin\bin\xkbcomp.exe`,
-			`C:\msys64\usr\bin\xkbcomp.exe`,
-			`C:\msys64\mingw64\bin\xkbcomp.exe`,
-			`C:\msys64\mingw32\bin\xkbcomp.exe`,
-		}
-		for _, p := range commonPaths {
-			if _, err := os.Stat(p); err == nil {
-				xkbcompPath = p
-				break
-			}
-		}
+	coreKeymap, err := loadCoreKeymap(conn, setup)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load core keymap: %v", err)
 	}
-
-	if xkbcompPath != "" {
-		display := os.Getenv("DISPLAY")
-		if display == "" {
-			display = ":0"
-		}
-		fmt.Fprintf(os.Stderr, "XKB: Found xkbcomp at %q, requesting keymap for %q...\n", xkbcompPath, display)
-		cmd := exec.Command(xkbcompPath, display, "-")
-		var out bytes.Buffer
-		var outErr bytes.Buffer
-		cmd.Stdout = &out
-		cmd.Stderr = &outErr
-		if err := cmd.Run(); err == nil && out.Len() > 0 {
-			var kerr error
-			keymap, kerr = xkbCtx.NewKeymapFromString(out.Bytes(), xkb.KeymapFormatTextV1)
-			fmt.Fprintf(os.Stderr, "XKB: Keymap loaded (%d bytes), parse_err: %v\n", out.Len(), kerr)
-		} else {
-			fmt.Fprintf(os.Stderr, "XKB: xkbcomp execution failed: %v\nOutput: %s\n", err, outErr.String())
-		}
-	} else {
-		fmt.Fprintln(os.Stderr, "XKB: No xkbcomp executable found in common paths.")
-	}
-
-	// Attempt 2: Fallback to RMLVO names from root window properties.
-	// This works for Windows X servers (Xming/VcXsrv) where xkbcomp might be missing.
-	if keymap == nil {
-		fmt.Fprintln(os.Stderr, "XKB: xkbcomp failed or not found, trying _XKB_RULES_NAMES fallback...")
-		rulesAtomCookie := xproto.InternAtom(conn, true, uint16(len("_XKB_RULES_NAMES")), "_XKB_RULES_NAMES")
-		rulesAtomReply, err := rulesAtomCookie.Reply()
-		if err != nil {
-			DebugLog("XKB: Failed to get _XKB_RULES_NAMES atom: %v", err)
-			return nil, fmt.Errorf("failed to get _XKB_RULES_NAMES atom: %v", err)
-		}
-
-		propCookie := xproto.GetProperty(conn, false, screen.Root, rulesAtomReply.Atom, xproto.AtomAny, 0, 1024)
-		propReply, err := propCookie.Reply()
-		if err != nil {
-			DebugLog("XKB: Failed to read _XKB_RULES_NAMES property: %v", err)
-			return nil, fmt.Errorf("failed to read _XKB_RULES_NAMES property: %v", err)
-		}
-
-		var rmlvo xkb.RuleNames
-		if propReply != nil && len(propReply.Value) > 0 {
-			parts := bytes.Split(propReply.Value, []byte{0})
-			if len(parts) > 0 { rmlvo.Rules = string(parts[0]) }
-			if len(parts) > 1 { rmlvo.Model = string(parts[1]) }
-			if len(parts) > 2 { rmlvo.Layout = string(parts[2]) }
-			if len(parts) > 3 { rmlvo.Variant = string(parts[3]) }
-			if len(parts) > 4 { rmlvo.Options = string(parts[4]) }
-		}
-		DebugLog("XKB: RMLVO from server: Rules=%q Model=%q Layout=%q Variant=%q Options=%q", rmlvo.Rules, rmlvo.Model, rmlvo.Layout, rmlvo.Variant, rmlvo.Options)
-
-		if rmlvo.Layout == "" {
-			return nil, fmt.Errorf("no keyboard layout found in _XKB_RULES_NAMES and xkbcomp failed")
-		}
-
-		keymap, err = xkbCtx.NewKeymapFromNames(&rmlvo)
-		if err != nil {
-			DebugLog("XKB: Failed to compile keymap from names: %v", err)
-			return nil, fmt.Errorf("failed to compile keymap via RMLVO fallback: %v", err)
-		}
-	}
-	state := keymap.NewState()
 
 	dpi := 96.0
 	if screen.WidthInMillimeters > 0 {
@@ -234,8 +251,7 @@ func NewPureX11Host(cols, rows, cellW, cellH int) (*PureX11Host, error) {
 		closeChan:  make(chan struct{}),
 		dirtyLines: make([]bool, rows*cellH),
 		xkbOpcode:  xkbOpcode,
-		keymap:     keymap,
-		xkbState:   state,
+		coreKeymap: coreKeymap,
 	}
 
 	var visualID xproto.Visualid
@@ -419,55 +435,45 @@ func (h *PureX11Host) RunEventLoop() {
 }
 
 func (h *PureX11Host) handleKeyEvent(detail xproto.Keycode, state uint16, isDown bool) {
-	srv, err := queryXkbState(h.conn, h.xkbOpcode)
-	if err == nil {
-		h.xkbState.UpdateMask(
-			xkb.ModMask(srv.BaseMods),
-			xkb.ModMask(srv.LatchedMods),
-			xkb.ModMask(srv.LockedMods),
-			xkb.Group(srv.BaseGroup),
-			xkb.Group(srv.LatchedGroup),
-			xkb.Group(srv.LockedGroup),
-		)
-	}
-
-	kc := xkb.Keycode(detail)
-	sym := h.xkbState.KeyGetOneSym(kc)
-	charStr := h.xkbState.KeyGetUTF8(kc)
-
-	char := rune(0)
-	if charStr != "" {
-		for _, r := range charStr {
-			char = r
-			break
+	group := 0
+	if h.xkbOpcode != 0 {
+		if srv, err := queryXkbState(h.conn, h.xkbOpcode); err == nil {
+			group = int(srv.BaseGroup) + int(srv.LockedGroup)
+			if group < 0 {
+				group = 0
+			}
+			if group > 3 {
+				group = group % 4
+			}
+			DebugLog("PUREX11_KEYBOARD: Key=%d X11State=0x%X srvGroup=%d (Base=%d Locked=%d)",
+				detail, state, srv.BaseGroup+int16(srv.LockedGroup), srv.BaseGroup, srv.LockedGroup)
+		} else {
+			DebugLog("PUREX11_KEYBOARD: queryXkbState error: %v", err)
 		}
 	}
 
-	// 1. Get current keysym and attempt to get its VK
-	vk := keysymToVK(uint32(sym))
+	sym := h.coreKeymap.Lookup(int(detail), state, group)
+	char := xkb.KeysymToUTF32(xkb.Keysym(sym))
+	DebugLog("PUREX11_KEYBOARD: Translated Keycode %d -> Sym=0x%X (Name: %s) Char=%q",
+		detail, sym, xkb.KeysymGetName(xkb.Keysym(sym)), string(char))
 
-	// 2. If VK is unknown and we are in a non-Latin layout, try to derive
-	// a positional VK from the first group (Layout 1).
-	// This ensures shortcuts like Ctrl+C work correctly in all languages.
-	if vk == 0 && h.xkbState.LockedGroup() != 0 {
-		bm, lam, lom := h.xkbState.BaseMods(), h.xkbState.LatchedMods(), h.xkbState.LockedMods()
-		bg, lag, log := h.xkbState.BaseGroup(), h.xkbState.LatchedGroup(), h.xkbState.LockedGroup()
+	vk := keysymToVK(sym)
 
-		// Temporarily switch to Group 0 with no modifiers
-		h.xkbState.UpdateMask(0, 0, 0, 0, 0, 0)
-		vkSym := h.xkbState.KeyGetOneSym(kc)
-		vk = keysymToVK(uint32(vkSym))
-
-		// Restore original state
-		h.xkbState.UpdateMask(bm, lam, lom, bg, lag, log)
+	// Fallback for positional VK if unknown and we are in an alternate layout
+	if vk == 0 && group > 0 {
+		baseSym := h.coreKeymap.Lookup(int(detail), state, 0)
+		vk = keysymToVK(baseSym)
 	}
 
 	mods := h.translateModifiers(state)
 
 	if h.reader != nil {
 		h.reader.NativeEventChan <- &vtinput.InputEvent{
-			Type: vtinput.KeyEventType, KeyDown: isDown, VirtualKeyCode: vk,
-			Char: char, ControlKeyState: mods,
+			Type:            vtinput.KeyEventType,
+			KeyDown:         isDown,
+			VirtualKeyCode:  vk,
+			Char:            char,
+			ControlKeyState: mods,
 		}
 	}
 }
@@ -628,3 +634,4 @@ func runInPureX11Window(cols, rows int, setupApp func()) error {
 
 	return nil
 }
+
