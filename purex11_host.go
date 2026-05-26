@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -20,6 +21,37 @@ import (
 	"github.com/unxed/vtinput"
 	"github.com/unxed/xkb-go"
 )
+
+var (
+	keyDeclRegexp  = regexp.MustCompile(`(?i)key\s+<[a-z0-9]+>`)
+	emptyKeyRegexp = regexp.MustCompile(`(?i)key\s+<\s*>`)
+)
+
+// isXkbcompOutputValid выполняет эвристическую проверку полноты карты клавиатуры.
+func isXkbcompOutputValid(output []byte) bool {
+	if len(output) == 0 {
+		return false
+	}
+	str := string(output)
+
+	// Проверка 1: Ищем пустые маркеры-заглушки (часто отправляются XQuartz)
+	if emptyKeyRegexp.MatchString(str) {
+		return false
+	}
+
+	// Проверка 2: Наличие фундаментальных клавиш управления
+	if !strings.Contains(str, "<ESC>") || !strings.Contains(str, "<RTRN>") {
+		return false
+	}
+
+	// Проверка 3: Подсчет общего количества задекларированных клавиш
+	matches := keyDeclRegexp.FindAllStringIndex(str, -1)
+	if len(matches) < 10 {
+		return false
+	}
+
+	return true
+}
 
 type rawRequest []byte
 
@@ -267,16 +299,7 @@ func NewPureX11Host(cols, rows, cellW, cellH int) (*PureX11Host, error) {
 		}
 	}
 
-	// По умолчанию xkbcomp используется только на Linux и BSD.
-	// На Windows и macOS (darwin) отдается приоритет более предсказуемому core-протоколу.
-	useXkbcomp := (runtime.GOOS == "linux" || runtime.GOOS == "freebsd" || runtime.GOOS == "openbsd" || runtime.GOOS == "netbsd" || runtime.GOOS == "dragonfly") && xkbcompPath != ""
-
-	// Позволяем принудительно включить xkbcomp на Windows через переменную окружения при необходимости
-	if runtime.GOOS == "windows" && os.Getenv("VTUI_FORCE_XKBCOMP") != "" && xkbcompPath != "" {
-		useXkbcomp = true
-	}
-
-	if useXkbcomp {
+	if xkbcompPath != "" {
 		display := os.Getenv("DISPLAY")
 		if display == "" {
 			display = ":0"
@@ -284,12 +307,16 @@ func NewPureX11Host(cols, rows, cellW, cellH int) (*PureX11Host, error) {
 		cmd := exec.Command(xkbcompPath, display, "-")
 		var out bytes.Buffer
 		if err := cmd.Run(); err == nil && out.Len() > 0 {
-			xkbCtx := xkb.NewContext(context.Background(), xkb.ContextNoFlags)
-			if keymap, kerr := xkbCtx.NewKeymapFromString(out.Bytes(), xkb.KeymapFormatTextV1); kerr == nil {
-				xkbState = keymap.NewState()
-				DebugLog("XKB: Keymap loaded via xkbcomp (%d bytes)", out.Len())
+			if isXkbcompOutputValid(out.Bytes()) {
+				xkbCtx := xkb.NewContext(context.Background(), xkb.ContextNoFlags)
+				if keymap, kerr := xkbCtx.NewKeymapFromString(out.Bytes(), xkb.KeymapFormatTextV1); kerr == nil {
+					xkbState = keymap.NewState()
+					DebugLog("XKB: Keymap loaded via xkbcomp (%d bytes)", out.Len())
+				} else {
+					DebugLog("XKB: Failed to parse xkbcomp keymap: %v", kerr)
+				}
 			} else {
-				DebugLog("XKB: Failed to parse xkbcomp keymap: %v", kerr)
+				DebugLog("XKB: xkbcomp output failed feature detection validation (incomplete or empty map)")
 			}
 		} else {
 			DebugLog("XKB: xkbcomp execution failed or returned empty output")
