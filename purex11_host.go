@@ -121,10 +121,13 @@ const (
 )
 
 type CoreKeymap struct {
-	MinKeycode int
-	MaxKeycode int
-	SymsPerKey int
-	Syms       []xproto.Keysym
+	MinKeycode     int
+	MaxKeycode     int
+	SymsPerKey     int
+	Syms           []xproto.Keysym
+	NumLockMask    uint16
+	ModeSwitchMask uint16
+	AltGrMask      uint16
 }
 
 func loadCoreKeymap(conn *xgb.Conn, setup *xproto.SetupInfo) (*CoreKeymap, error) {
@@ -137,12 +140,42 @@ func loadCoreKeymap(conn *xgb.Conn, setup *xproto.SetupInfo) (*CoreKeymap, error
 		return nil, err
 	}
 
-	return &CoreKeymap{
+	km := &CoreKeymap{
 		MinKeycode: int(min),
 		MaxKeycode: int(max),
 		SymsPerKey: int(reply.KeysymsPerKeycode),
 		Syms:       reply.Keysyms,
-	}, nil
+	}
+
+	modReply, err := xproto.GetModifierMapping(conn).Reply()
+	if err == nil && modReply != nil {
+		kpm := int(modReply.KeycodesPerModifier)
+		for modIndex := 0; modIndex < 8; modIndex++ {
+			mask := uint16(1 << modIndex)
+			for i := 0; i < kpm; i++ {
+				kc := int(modReply.Keycodes[modIndex*kpm+i])
+				if kc >= km.MinKeycode && kc <= km.MaxKeycode {
+					offset := (kc - km.MinKeycode) * km.SymsPerKey
+					if offset < len(km.Syms) {
+						sym := uint32(km.Syms[offset])
+						switch sym {
+						case uint32(xkb.KeyNumLock):
+							km.NumLockMask |= mask
+						case uint32(xkb.KeyModeSwitch):
+							km.ModeSwitchMask |= mask
+						case uint32(xkb.KeyISOLevel3Shift), uint32(xkb.KeyAltR):
+							km.AltGrMask |= mask
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if km.NumLockMask == 0 { km.NumLockMask = 1 << 4 }
+	if km.AltGrMask == 0 { km.AltGrMask = 1 << 7 }
+
+	return km, nil
 }
 
 func (km *CoreKeymap) Lookup(kc int, state uint16, group int) uint32 {
@@ -165,57 +198,38 @@ func (km *CoreKeymap) Lookup(kc int, state uint16, group int) uint32 {
 
 	shift := (state & modMaskShift) != 0
 	capsLock := (state & modMaskLock) != 0
-	altGr := (state&modMaskAltGr5) != 0 || (state&modMaskAltGr3) != 0
+	numLock := (state & km.NumLockMask) != 0
 
-	// Эвристика ширины группы (защита от сбоя при SymsPerKey > 4)
+	modeSwitch := (state & km.ModeSwitchMask) != 0
+	altGr := (state & km.AltGrMask) != 0
+
+	effectiveGroup := group
+	if modeSwitch {
+		effectiveGroup++
+	}
+
 	groupWidth := 2
 	if km.SymsPerKey > 4 && km.SymsPerKey%4 == 0 {
 		groupWidth = 4
 	}
 
-	idx := group * groupWidth
+	idx := effectiveGroup * groupWidth
 	if idx >= length {
 		idx = 0
 	}
 
-	var symsHex []string
-	for _, s := range syms {
-		symsHex = append(symsHex, fmt.Sprintf("0x%X", s))
-	}
-
-	DebugLog("XKB_DEBUG: Keycode=%d state=0x%X group=%d groupWidth=%d colBase=%d syms=[%s]",
-		kc, state, group, groupWidth, idx, strings.Join(symsHex, ", "))
-
-	altGrApplied := false
 	if altGr {
-		altGrOffset := 0
-		if groupWidth == 4 && idx+2 < length && syms[idx+2] != 0 && syms[idx+2] != syms[idx] {
-			// Если ширина группы 4 (стандарт XKB), AltGr всегда имеет смещение +2
-			altGrOffset = 2
+		if groupWidth == 4 && idx+2 < length {
+			idx += 2
 		} else {
-			// Динамический поиск для нестандартных таблиц
-			offsets := []int{2, 4, 3, 6, 8}
-			if km.SymsPerKey > 2 {
-				offsets = append([]int{km.SymsPerKey / 2}, offsets...)
-			}
-			for _, o := range offsets {
-				if idx+o < length && syms[idx+o] != 0 && syms[idx+o] != syms[idx] {
-					// Защита от ложного Mod3/Mod5 (NumLock) в чужой группе
-					if group == 0 || (idx+o < len(syms) && syms[idx+o] != syms[o]) {
-						altGrOffset = o
-						break
-					}
+			for _, o := range []int{2, 3, 4} {
+				if idx+o < length && syms[idx+o] != 0 {
+					idx += o
+					break
 				}
 			}
 		}
-		if altGrOffset != 0 {
-			idx += altGrOffset
-			altGrApplied = true
-		}
 	}
-
-	DebugLog("XKB_DEBUG: AltGr=%v altGrApplied=%v resolvedIdx=%d keysym=0x%X",
-		altGr, altGrApplied, idx, syms[idx])
 
 	baseSym := uint32(syms[idx])
 	shiftedSym := baseSym
@@ -223,18 +237,46 @@ func (km *CoreKeymap) Lookup(kc int, state uint16, group int) uint32 {
 		shiftedSym = uint32(syms[idx+1])
 	}
 
-	r := xkb.KeysymToUTF32(xkb.Keysym(baseSym))
-	isLetter := r != 0 && unicode.IsLetter(r)
+	if xkb.KeysymIsKeypad(xkb.Keysym(baseSym)) || xkb.KeysymIsKeypad(xkb.Keysym(shiftedSym)) {
+		if numLock {
+			shift = !shift
+		}
+		if shift {
+			return shiftedSym
+		}
+		return baseSym
+	}
 
 	resSym := baseSym
 	if shift {
-		if capsLock && isLetter {
-			resSym = baseSym
-		} else {
-			resSym = shiftedSym
-		}
-	} else if capsLock && isLetter {
 		resSym = shiftedSym
+	}
+
+	if capsLock {
+		rBase := xkb.KeysymToUTF32(xkb.Keysym(baseSym))
+		rShifted := xkb.KeysymToUTF32(xkb.Keysym(shiftedSym))
+
+		isBaseLetter := rBase != 0 && unicode.IsLetter(rBase)
+		isShiftedLetter := rShifted != 0 && unicode.IsLetter(rShifted)
+
+		if isBaseLetter || isShiftedLetter {
+			if shift {
+				resSym = baseSym
+			} else {
+				resSym = shiftedSym
+			}
+		}
+	}
+
+	if resSym == baseSym && (shift || capsLock) {
+		r := xkb.KeysymToUTF32(xkb.Keysym(resSym))
+		if r != 0 && unicode.IsLower(r) {
+			upperR := unicode.ToUpper(r)
+			synSym := xkb.UTF32ToKeysym(upperR)
+			if synSym != xkb.KeyNoSymbol {
+				return uint32(synSym)
+			}
+		}
 	}
 
 	return resSym
