@@ -483,6 +483,17 @@ func (h *PureX11Host) RunEventLoop() {
 				}
 			}
 
+		case xproto.MappingNotifyEvent:
+			h.mu.Lock()
+			setup := xproto.Setup(h.conn)
+			if newKm, err := loadCoreKeymap(h.conn, setup); err == nil {
+				h.coreKeymap = newKm
+				DebugLog("PUREX11: Keyboard mapping reloaded after MappingNotify")
+			} else {
+				DebugLog("PUREX11: Failed to reload keyboard mapping: %v", err)
+			}
+			h.mu.Unlock()
+
 		case xproto.KeyPressEvent:
 			h.handleKeyEvent(e.Detail, e.State, true)
 		case xproto.KeyReleaseEvent:
