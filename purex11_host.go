@@ -219,9 +219,15 @@ func (km *CoreKeymap) Lookup(kc int, state uint16, group int) uint32 {
 	}
 
 	if altGr {
-		if groupWidth == 4 && idx+2 < length {
-			idx += 2
+		if groupWidth == 4 {
+			// Строгий стандарт XKB: AltGr всегда на смещении +2
+			if idx+2 < length && syms[idx+2] != 0 {
+				idx += 2
+			}
+			// Если 0, значит у клавиши нет AltGr-символа. Не ищем дальше,
+			// чтобы случайно не зацепить базовый символ из соседней группы (idx+4).
 		} else {
+			// Нестандартная ширина, пытаемся угадать оффсет
 			for _, o := range []int{2, 3, 4} {
 				if idx+o < length && syms[idx+o] != 0 {
 					idx += o
