@@ -3,10 +3,13 @@
 package vtui
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"image"
 	"io"
 	"os"
+	"os/exec"
 	"runtime"
 	"strings"
 	"sync"
@@ -73,6 +76,13 @@ func queryXkbState(X *xgb.Conn, xkbOpcode byte) (*XkbState, error) {
 	}, nil
 }
 
+const (
+	modMaskShift  = 1 << 0
+	modMaskLock   = 1 << 1
+	modMaskAltGr3 = 1 << 5 // Mod3
+	modMaskAltGr5 = 1 << 7 // Mod5
+)
+
 type CoreKeymap struct {
 	MinKeycode int
 	MaxKeycode int
@@ -103,6 +113,9 @@ func (km *CoreKeymap) Lookup(kc int, state uint16, group int) uint32 {
 		return 0
 	}
 	offset := (kc - km.MinKeycode) * km.SymsPerKey
+	if offset+km.SymsPerKey > len(km.Syms) {
+		return 0
+	}
 	syms := km.Syms[offset : offset+km.SymsPerKey]
 
 	length := len(syms)
@@ -113,9 +126,9 @@ func (km *CoreKeymap) Lookup(kc int, state uint16, group int) uint32 {
 		return 0
 	}
 
-	shift := (state & 1) != 0
-	capsLock := (state & 2) != 0
-	altGr := (state&128) != 0 || (state&32) != 0
+	shift := (state & modMaskShift) != 0
+	capsLock := (state & modMaskLock) != 0
+	altGr := (state&modMaskAltGr5) != 0 || (state&modMaskAltGr3) != 0
 
 	// Базовый индекс любой группы всегда group * 2
 	idx := group * 2
@@ -201,6 +214,7 @@ type PureX11Host struct {
 	dirtyLines []bool
 
 	xkbOpcode  byte
+	xkbState   *xkb.State
 	coreKeymap *CoreKeymap
 }
 
@@ -224,9 +238,40 @@ func NewPureX11Host(cols, rows, cellW, cellH int) (*PureX11Host, error) {
 	setup := xproto.Setup(conn)
 	screen := setup.DefaultScreen(conn)
 
-	coreKeymap, err := loadCoreKeymap(conn, setup)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load core keymap: %v", err)
+	var xkbState *xkb.State
+	var coreKeymap *CoreKeymap
+
+	isUnixDesktop := runtime.GOOS == "linux" || runtime.GOOS == "freebsd" || runtime.GOOS == "openbsd" || runtime.GOOS == "netbsd" || runtime.GOOS == "dragonfly"
+
+	if isUnixDesktop {
+		if xkbcompPath, err := exec.LookPath("xkbcomp"); err == nil {
+			display := os.Getenv("DISPLAY")
+			if display == "" {
+				display = ":0"
+			}
+			cmd := exec.Command(xkbcompPath, display, "-")
+			var out bytes.Buffer
+			if err := cmd.Run(); err == nil && out.Len() > 0 {
+				xkbCtx := xkb.NewContext(context.Background(), xkb.ContextNoFlags)
+				if keymap, kerr := xkbCtx.NewKeymapFromString(out.Bytes(), xkb.KeymapFormatTextV1); kerr == nil {
+					xkbState = keymap.NewState()
+					DebugLog("XKB: Keymap loaded via xkbcomp (%d bytes)", out.Len())
+				} else {
+					DebugLog("XKB: Failed to parse xkbcomp keymap: %v", kerr)
+				}
+			} else {
+				DebugLog("XKB: xkbcomp execution failed or returned empty output")
+			}
+		}
+	}
+
+	if xkbState == nil {
+		var err error
+		coreKeymap, err = loadCoreKeymap(conn, setup)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load core keymap: %v", err)
+		}
+		DebugLog("XKB: Core keymap fallback loaded successfully")
 	}
 
 	dpi := 96.0
@@ -251,6 +296,7 @@ func NewPureX11Host(cols, rows, cellW, cellH int) (*PureX11Host, error) {
 		closeChan:  make(chan struct{}),
 		dirtyLines: make([]bool, rows*cellH),
 		xkbOpcode:  xkbOpcode,
+		xkbState:   xkbState,
 		coreKeymap: coreKeymap,
 	}
 
@@ -435,6 +481,52 @@ func (h *PureX11Host) RunEventLoop() {
 }
 
 func (h *PureX11Host) handleKeyEvent(detail xproto.Keycode, state uint16, isDown bool) {
+	if h.xkbState != nil {
+		srv, err := queryXkbState(h.conn, h.xkbOpcode)
+		if err == nil {
+			h.xkbState.UpdateMask(
+				xkb.ModMask(srv.BaseMods),
+				xkb.ModMask(srv.LatchedMods),
+				xkb.ModMask(srv.LockedMods),
+				xkb.Group(srv.BaseGroup),
+				xkb.Group(srv.LatchedGroup),
+				xkb.Group(srv.LockedGroup),
+			)
+		}
+
+		kc := xkb.Keycode(detail)
+		sym := h.xkbState.KeyGetOneSym(kc)
+		char := h.xkbState.KeyGetUTF32(kc)
+		vk := keysymToVK(uint32(sym))
+
+		// Fallback for positional VK if unknown and we are in an alternate layout
+		if vk == 0 && h.xkbState.LockedGroup() != 0 {
+			bm, lam, lom := h.xkbState.BaseMods(), h.xkbState.LatchedMods(), h.xkbState.LockedMods()
+			bg, lag, log := h.xkbState.BaseGroup(), h.xkbState.LatchedGroup(), h.xkbState.LockedGroup()
+
+			// Temporarily switch to Group 0 with no modifiers
+			h.xkbState.UpdateMask(0, 0, 0, 0, 0, 0)
+			vkSym := h.xkbState.KeyGetOneSym(kc)
+			vk = keysymToVK(uint32(vkSym))
+
+			// Restore original state
+			h.xkbState.UpdateMask(bm, lam, lom, bg, lag, log)
+		}
+
+		mods := h.translateModifiers(state)
+
+		if h.reader != nil {
+			h.reader.NativeEventChan <- &vtinput.InputEvent{
+				Type:            vtinput.KeyEventType,
+				KeyDown:         isDown,
+				VirtualKeyCode:  vk,
+				Char:            char,
+				ControlKeyState: mods,
+			}
+		}
+		return
+	}
+
 	group := 0
 	if h.xkbOpcode != 0 {
 		if srv, err := queryXkbState(h.conn, h.xkbOpcode); err == nil {
