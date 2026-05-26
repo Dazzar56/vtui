@@ -241,27 +241,58 @@ func NewPureX11Host(cols, rows, cellW, cellH int) (*PureX11Host, error) {
 	var xkbState *xkb.State
 	var coreKeymap *CoreKeymap
 
-	isUnixDesktop := runtime.GOOS == "linux" || runtime.GOOS == "freebsd" || runtime.GOOS == "openbsd" || runtime.GOOS == "netbsd" || runtime.GOOS == "dragonfly"
+	var xkbcompPath string
+	if p, err := exec.LookPath("xkbcomp"); err == nil {
+		xkbcompPath = p
+	} else if runtime.GOOS == "windows" {
+		// Сохраняем логику поиска xkbcomp на Windows для совместимости,
+		// но по умолчанию не используем её, так как серверы VcXsrv/Xming
+		// могут отдавать некорректно структурированные карты.
+		commonPaths := []string{
+			`C:\Program Files\VcXsrv\xkbcomp.exe`,
+			`C:\Program Files (x86)\VcXsrv\xkbcomp.exe`,
+			`C:\Program Files\Xming\xkbcomp.exe`,
+			`C:\Program Files (x86)\Xming\xkbcomp.exe`,
+			`C:\cygwin64\bin\xkbcomp.exe`,
+			`C:\cygwin\bin\xkbcomp.exe`,
+			`C:\msys64\usr\bin\xkbcomp.exe`,
+			`C:\msys64\mingw64\bin\xkbcomp.exe`,
+			`C:\msys64\mingw32\bin\xkbcomp.exe`,
+		}
+		for _, p := range commonPaths {
+			if _, err := os.Stat(p); err == nil {
+				xkbcompPath = p
+				break
+			}
+		}
+	}
 
-	if isUnixDesktop {
-		if xkbcompPath, err := exec.LookPath("xkbcomp"); err == nil {
-			display := os.Getenv("DISPLAY")
-			if display == "" {
-				display = ":0"
-			}
-			cmd := exec.Command(xkbcompPath, display, "-")
-			var out bytes.Buffer
-			if err := cmd.Run(); err == nil && out.Len() > 0 {
-				xkbCtx := xkb.NewContext(context.Background(), xkb.ContextNoFlags)
-				if keymap, kerr := xkbCtx.NewKeymapFromString(out.Bytes(), xkb.KeymapFormatTextV1); kerr == nil {
-					xkbState = keymap.NewState()
-					DebugLog("XKB: Keymap loaded via xkbcomp (%d bytes)", out.Len())
-				} else {
-					DebugLog("XKB: Failed to parse xkbcomp keymap: %v", kerr)
-				}
+	// По умолчанию xkbcomp используется только на Linux и BSD.
+	// На Windows и macOS (darwin) отдается приоритет более предсказуемому core-протоколу.
+	useXkbcomp := (runtime.GOOS == "linux" || runtime.GOOS == "freebsd" || runtime.GOOS == "openbsd" || runtime.GOOS == "netbsd" || runtime.GOOS == "dragonfly") && xkbcompPath != ""
+
+	// Позволяем принудительно включить xkbcomp на Windows через переменную окружения при необходимости
+	if runtime.GOOS == "windows" && os.Getenv("VTUI_FORCE_XKBCOMP") != "" && xkbcompPath != "" {
+		useXkbcomp = true
+	}
+
+	if useXkbcomp {
+		display := os.Getenv("DISPLAY")
+		if display == "" {
+			display = ":0"
+		}
+		cmd := exec.Command(xkbcompPath, display, "-")
+		var out bytes.Buffer
+		if err := cmd.Run(); err == nil && out.Len() > 0 {
+			xkbCtx := xkb.NewContext(context.Background(), xkb.ContextNoFlags)
+			if keymap, kerr := xkbCtx.NewKeymapFromString(out.Bytes(), xkb.KeymapFormatTextV1); kerr == nil {
+				xkbState = keymap.NewState()
+				DebugLog("XKB: Keymap loaded via xkbcomp (%d bytes)", out.Len())
 			} else {
-				DebugLog("XKB: xkbcomp execution failed or returned empty output")
+				DebugLog("XKB: Failed to parse xkbcomp keymap: %v", kerr)
 			}
+		} else {
+			DebugLog("XKB: xkbcomp execution failed or returned empty output")
 		}
 	}
 
