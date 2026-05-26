@@ -3,6 +3,6 @@
 package vtui
 
 func recordLogMemory(line string) {}
-func RecordCrash(panicVal any, stack []byte) string { return "" }func SetupStderrLog() {}
+func RecordCrash(panicVal any, stack []byte) string { return "" }
 func SetupStderrLog() {}
 func CleanupStderrLog() {}
