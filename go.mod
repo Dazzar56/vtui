@@ -9,7 +9,7 @@ require (
 	github.com/jezek/xgb v1.3.1
 	github.com/mattn/go-runewidth v0.0.15
 	github.com/neurlang/wayland v0.4.2
-	github.com/unxed/keytrans v0.1.17
+	github.com/unxed/keytrans v0.1.18
 	github.com/unxed/vtinput v0.0.0
 	golang.org/x/image v0.40.0
 	golang.org/x/sys v0.44.0
@@ -21,7 +21,7 @@ require (
 	github.com/emmansun/base64 v0.9.0 // indirect
 	github.com/fogleman/gg v1.3.0 // indirect
 	github.com/go-text/typesetting v0.3.4 // indirect
-	github.com/go-webgpu/goffi v0.5.2 // indirect
+	github.com/go-webgpu/goffi v0.5.3 // indirect
 	github.com/go-webgpu/webgpu v0.4.3 // indirect
 	github.com/gogpu/gputypes v0.5.0 // indirect
 	github.com/gogpu/naga v0.17.13 // indirect
@@ -43,4 +43,4 @@ require (
 // This line tells Go to use a local copy of vtinput
 replace github.com/unxed/vtinput => ../vtinput
 
-replace github.com/ebitengine/purego => github.com/unxed/pureffi v0.1.1
+replace github.com/ebitengine/purego => github.com/unxed/pureffi v0.1.2
