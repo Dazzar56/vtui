@@ -20,14 +20,14 @@ func RunInGUIWindow(cols, rows int, backend string, setupApp func()) error {
 		return runInGogpuWindow(cols, rows, setupApp)
 	}
 
-	if os.Getenv("DISPLAY") != "" {
-		DebugLog("GUI: DISPLAY detected, starting X11 Host (default)")
-		return runInX11Window(cols, rows, setupApp)
+	if os.Getenv("WAYLAND_DISPLAY") != "" {
+		DebugLog("GUI: WAYLAND_DISPLAY detected, starting Wayland Host (default)")
+		return runInWaylandWindow(cols, rows, setupApp)
 	}
 
-	if os.Getenv("WAYLAND_DISPLAY") != "" {
-		DebugLog("GUI: WAYLAND_DISPLAY detected, starting Wayland Host")
-		return runInWaylandWindow(cols, rows, setupApp)
+	if os.Getenv("DISPLAY") != "" {
+		DebugLog("GUI: DISPLAY detected, starting X11 Host")
+		return runInX11Window(cols, rows, setupApp)
 	}
 
 	return fmt.Errorf("no GUI display found (neither DISPLAY nor WAYLAND_DISPLAY are set)")
