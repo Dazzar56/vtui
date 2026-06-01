@@ -169,17 +169,22 @@ func NewX11Host(cols, rows, cellW, cellH int) (*X11Host, error) {
 	xproto.MapWindow(conn, host.wid)
 	_, _ = xproto.GetInputFocus(conn).Reply()
 
-	info := keytrans.OSInfo{
-		DisplayString: os.Getenv("DISPLAY"),
-		XgbConn:       conn,
-		WindowID:      uint32(host.wid),
-	}
-	host.translator = keytrans.NewX11Translator(info)
-	if host.translator != nil {
-		DebugLog("X11: Keytrans translator initialized with backend: %s", host.translator.Name())
-	} else {
-		DebugLog("X11: WARNING - Keytrans translator failed to initialize")
-	}
+	go func() {
+		info := keytrans.OSInfo{
+			DisplayString: os.Getenv("DISPLAY"),
+			XgbConn:       conn,
+			WindowID:      uint32(host.wid),
+		}
+		translator := keytrans.NewX11Translator(info)
+		host.mu.Lock()
+		host.translator = translator
+		host.mu.Unlock()
+		if translator != nil {
+			DebugLog("X11: Keytrans translator initialized asynchronously with backend: %s", translator.Name())
+		} else {
+			DebugLog("X11: WARNING - Keytrans translator failed to initialize asynchronously")
+		}
+	}()
 
 	return host, nil
 }
@@ -188,8 +193,12 @@ func (h *X11Host) Close() {
 	if h.shmSeg != 0 {
 		x11shmDetach(h.conn, h.shmSeg)
 	}
-	if h.translator != nil {
-		h.translator.Close()
+	h.mu.Lock()
+	tr := h.translator
+	h.translator = nil
+	h.mu.Unlock()
+	if tr != nil {
+		tr.Close()
 	}
 	h.conn.Close()
 	close(h.closeChan)
@@ -279,8 +288,11 @@ func (h *X11Host) RunEventLoop() {
 }
 
 func (h *X11Host) handleKeyEvent(detail xproto.Keycode, state uint16, isDown bool) {
-	if h.translator != nil {
-		wev := h.translator.TranslateX11(uint8(detail), state, isDown)
+	h.mu.Lock()
+	tr := h.translator
+	h.mu.Unlock()
+	if tr != nil {
+		wev := tr.TranslateX11(uint8(detail), state, isDown)
 		event := &vtinput.InputEvent{
 			Type:            vtinput.KeyEventType,
 			KeyDown:         wev.KeyDown,
