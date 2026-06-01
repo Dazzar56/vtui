@@ -6,6 +6,8 @@ import (
 	"context"
 	"path/filepath"
 	"time"
+	"runtime"
+	"strings"
 
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
@@ -138,6 +140,7 @@ func showShowcaseDialog() {
 func main() {
 	guiMode := false
 	guiBackend := ""
+	ttyMode := false
 	for _, arg := range os.Args {
 		if arg == "--gui" {
 			guiMode = true
@@ -150,6 +153,8 @@ func main() {
 		} else if arg == "--gui=gogpu" {
 			guiMode = true
 			guiBackend = "gogpu"
+		} else if arg == "--tty" {
+			ttyMode = true
 		} else if arg == "--debug" {
 			os.Setenv("VTUI_DEBUG", "1")
 		}
@@ -286,15 +291,10 @@ func main() {
 
 		// IMPORTANT: Actually put the dialog into the FrameManager stack
 		dlg.Center(width, height)
-		vtui.FrameManager.Push(dlg)
+	vtui.FrameManager.Push(dlg)
 	}
 
-	if guiMode {
-		if err := vtui.RunInGUIWindow(80, 30, guiBackend, setup); err != nil {
-			fmt.Fprintf(os.Stderr, "GUI Error: %v\n", err)
-			os.Exit(1)
-		}
-	} else {
+	runConsole := func() {
 		restore, err := vtui.PrepareTerminal()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -311,5 +311,71 @@ func main() {
 
 		reader := vtinput.NewReader(os.Stdin)
 		vtui.FrameManager.Run(reader)
+	}
+
+	runGuiWithBackend := func(backend string) error {
+		return vtui.RunInGUIWindow(80, 30, backend, setup)
+	}
+
+	tryRunDefaultGui := func() error {
+		var errs []string
+		if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
+			if err := runGuiWithBackend("gogpu"); err == nil {
+				return nil
+			} else {
+				errs = append(errs, fmt.Sprintf("gogpu: %v", err))
+			}
+			if os.Getenv("DISPLAY") != "" {
+				if err := runGuiWithBackend("x11"); err == nil {
+					return nil
+				} else {
+					errs = append(errs, fmt.Sprintf("x11: %v", err))
+				}
+			}
+		} else {
+			if os.Getenv("WAYLAND_DISPLAY") != "" {
+				if err := runGuiWithBackend("wayland"); err == nil {
+					return nil
+				} else {
+					errs = append(errs, fmt.Sprintf("wayland: %v", err))
+				}
+			}
+			if os.Getenv("DISPLAY") != "" {
+				if err := runGuiWithBackend("x11"); err == nil {
+					return nil
+				} else {
+					errs = append(errs, fmt.Sprintf("x11: %v", err))
+				}
+			}
+		}
+		if len(errs) > 0 {
+			return fmt.Errorf("all GUI backends failed: %s", strings.Join(errs, "; "))
+		}
+		return fmt.Errorf("no suitable GUI environment detected")
+	}
+
+	if ttyMode {
+		runConsole()
+		return
+	}
+
+	if guiMode {
+		if guiBackend != "" {
+			if err := runGuiWithBackend(guiBackend); err != nil {
+				fmt.Fprintf(os.Stderr, "GUI Error: %v\n", err)
+				os.Exit(1)
+			}
+		} else {
+			if err := tryRunDefaultGui(); err != nil {
+				fmt.Fprintf(os.Stderr, "GUI Error: %v\n", err)
+				os.Exit(1)
+			}
+		}
+		return
+	}
+
+	// Default auto-detect mode (neither --gui nor --tty specified)
+	if err := tryRunDefaultGui(); err != nil {
+		runConsole()
 	}
 }
