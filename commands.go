@@ -18,14 +18,13 @@ const (
 	CmReceivedFocus        // Фрейм получил focus
 	CmReleasedFocus        // Фрейм потерял focus
 
-	CmMenuLeft      = 302
-	CmMenuRight     = 303
-	CmMenuClose     = 304
+	CmMenuLeft  = 302
+	CmMenuRight = 303
+	CmMenuClose = 304
 
 	// CmApp is the starting offset for application-specific commands.
 	CmApp = 1000
 )
-
 
 // CommandSet is a collection of command IDs, used to enable/disable groups of actions.
 type CommandSet struct {
@@ -37,17 +36,23 @@ func NewCommandSet() CommandSet {
 }
 
 func (cs *CommandSet) Disable(cmd int) {
-	if cs.mask == nil { cs.mask = make(map[int]bool) }
+	if cs.mask == nil {
+		cs.mask = make(map[int]bool)
+	}
 	cs.mask[cmd] = true
 }
 
 func (cs *CommandSet) Enable(cmd int) {
-	if cs.mask == nil { return }
+	if cs.mask == nil {
+		return
+	}
 	delete(cs.mask, cmd)
 }
 
 func (cs *CommandSet) IsDisabled(cmd int) bool {
-	if cs.mask == nil { return false }
+	if cs.mask == nil {
+		return false
+	}
 	return cs.mask[cmd]
 }
 

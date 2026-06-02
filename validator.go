@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
-	"unicode"
 	"strings"
+	"unicode"
 )
 
 // Validator is an interface for validating string input in Edit controls.
@@ -37,7 +37,9 @@ func (v *IntRangeValidator) Validate(s string) bool {
 func (v *IntRangeValidator) Error(owner Frame) {
 	msg := fmt.Sprintf("Value must be an integer\nbetween %d and %d.", v.Min, v.Max)
 	title := " Invalid Input "
-	if v.Title != "" { title = v.Title }
+	if v.Title != "" {
+		title = v.Title
+	}
 	ShowMessageOn(owner, title, msg, []string{"&Ok"})
 }
 func (v *IntRangeValidator) IsValidInput(s string) bool {
@@ -69,7 +71,7 @@ func (v *RegexValidator) Error(owner Frame) {
 		msg = "Input does not match required format."
 	}
 	ShowMessageOn(owner, " Invalid Input ", msg, []string{"&Ok"})
-}// FilterValidator restricts input to a specific set of characters.
+} // FilterValidator restricts input to a specific set of characters.
 type FilterValidator struct {
 	ValidChars   string
 	ErrorMessage string
@@ -129,13 +131,16 @@ func (v *LookupValidator) Error(owner Frame) {
 	}
 	ShowMessageOn(owner, " Invalid Input ", msg, []string{"&Ok"})
 }
+
 // OctalValidator ensures input is a valid octal number (0-7).
 type OctalValidator struct {
 	MaxDigits int
 }
 
 func (v *OctalValidator) Validate(s string) bool {
-	if s == "" { return true }
+	if s == "" {
+		return true
+	}
 	_, err := strconv.ParseUint(s, 8, 32)
 	return err == nil && len(s) <= v.MaxDigits
 }
@@ -188,17 +193,25 @@ func (v *MaskValidator) check(s string, partial bool) bool {
 		m := mask[i]
 		switch m {
 		case '#':
-			if !unicode.IsDigit(r) { return false }
+			if !unicode.IsDigit(r) {
+				return false
+			}
 		case '?':
-			if !unicode.IsLetter(r) { return false }
+			if !unicode.IsLetter(r) {
+				return false
+			}
 		case '&':
-			if !unicode.IsLetter(r) { return false }
+			if !unicode.IsLetter(r) {
+				return false
+			}
 		case '!':
 			// Any char is allowed, uppercase check handled during typing usually
 		case '@':
 			// Any char allowed
 		default:
-			if r != m { return false }
+			if r != m {
+				return false
+			}
 		}
 	}
 	return true

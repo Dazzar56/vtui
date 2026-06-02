@@ -1,8 +1,8 @@
 package vtui
 
 import (
-	"testing"
 	"github.com/unxed/vtinput"
+	"testing"
 )
 
 func TestRadioGroup_ProcessMouse(t *testing.T) {
@@ -13,10 +13,10 @@ func TestRadioGroup_ProcessMouse(t *testing.T) {
 	// Click on B (index 1), Col 1, Row 0
 	// X1 is 0, Col 0 is 6 wide, so Col 1 starts at 6. Y is 0.
 	handled := rg.ProcessMouse(&vtinput.InputEvent{
-		Type: vtinput.MouseEventType,
-		KeyDown: true,
+		Type:        vtinput.MouseEventType,
+		KeyDown:     true,
 		ButtonState: vtinput.FromLeft1stButtonPressed,
-		MouseX: 7, MouseY: 0, // Column 0 is 7 chars wide (4 prefix + 1 char + 2 padding)
+		MouseX:      7, MouseY: 0, // Column 0 is 7 chars wide (4 prefix + 1 char + 2 padding)
 	})
 
 	if !handled {

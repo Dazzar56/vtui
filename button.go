@@ -1,8 +1,8 @@
 package vtui
 
 import (
-	"github.com/unxed/vtinput"
 	"github.com/mattn/go-runewidth"
+	"github.com/unxed/vtinput"
 )
 
 // Button represents an interactive button.
@@ -11,7 +11,6 @@ type Button struct {
 	OnClick   func()
 	IsDefault bool
 }
-
 
 func NewButton(x, y int, text string) *Button {
 	b := &Button{}
@@ -31,11 +30,12 @@ func (b *Button) Show(scr *ScreenBuf) {
 }
 
 func (b *Button) DisplayObject(scr *ScreenBuf) {
-	if !b.IsVisible() { return }
+	if !b.IsVisible() {
+		return
+	}
 	n, h := b.GetStateAttrs(ColDialogButton, ColDialogSelectedButton, ColDialogHighlightButton, ColDialogHighlightSelectedButton)
 	NewPainter(scr).DrawHighlightedText(b.X1, b.Y1, b.cleanText, b.hotkeyPos, n, h)
 }
-
 
 func (b *Button) ProcessKey(e *vtinput.InputEvent) bool {
 	if !e.KeyDown {
@@ -51,7 +51,9 @@ func (b *Button) ProcessKey(e *vtinput.InputEvent) bool {
 }
 
 func (b *Button) ProcessMouse(e *vtinput.InputEvent) bool {
-	if b.IsDisabled() { return false }
+	if b.IsDisabled() {
+		return false
+	}
 	if e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
 		return b.FireAction(b.OnClick, nil)
 	}

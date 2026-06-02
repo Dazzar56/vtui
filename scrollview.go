@@ -6,11 +6,11 @@ import "github.com/unxed/vtinput"
 // for list-based UI elements. It embeds ScreenObject.
 type ScrollView struct {
 	ScreenObject
-	TopPos      int
-	SelectPos   int
-	ItemCount   int
-	ViewHeight  int
-	Wrap        bool
+	TopPos       int
+	SelectPos    int
+	ItemCount    int
+	ViewHeight   int
+	Wrap         bool
 	IsSelectable func(int) bool
 
 	ShowScrollBar bool
@@ -108,13 +108,17 @@ func (sv *ScrollView) HandleMouseScroll(e *vtinput.InputEvent) bool {
 }
 
 func (sv *ScrollView) EnsureVisible() {
-	if sv.ViewHeight <= 0 { return }
+	if sv.ViewHeight <= 0 {
+		return
+	}
 	if sv.SelectPos < sv.TopPos {
 		sv.TopPos = sv.SelectPos
 	} else if sv.SelectPos >= sv.TopPos+sv.ViewHeight {
 		sv.TopPos = sv.SelectPos - sv.ViewHeight + 1
 	}
-	if sv.TopPos < 0 { sv.TopPos = 0 }
+	if sv.TopPos < 0 {
+		sv.TopPos = 0
+	}
 }
 
 // SetSelectPos manually sets the selection index and updates TopPos to keep it visible.
@@ -124,8 +128,12 @@ func (sv *ScrollView) SetSelectPos(pos int) {
 		sv.TopPos = 0
 		return
 	}
-	if pos < 0 { pos = 0 }
-	if pos >= sv.ItemCount { pos = sv.ItemCount - 1 }
+	if pos < 0 {
+		pos = 0
+	}
+	if pos >= sv.ItemCount {
+		pos = sv.ItemCount - 1
+	}
 	sv.SelectPos = pos
 	sv.EnsureVisible()
 }
@@ -155,10 +163,20 @@ func (sv *ScrollView) MoveRelative(delta int) bool {
 		for j := 0; j < sv.ItemCount; j++ {
 			testPos += step
 			if testPos < 0 {
-				if sv.Wrap { testPos = sv.ItemCount - 1 } else { testPos = 0; break }
+				if sv.Wrap {
+					testPos = sv.ItemCount - 1
+				} else {
+					testPos = 0
+					break
+				}
 			}
 			if testPos >= sv.ItemCount {
-				if sv.Wrap { testPos = 0 } else { testPos = sv.ItemCount - 1; break }
+				if sv.Wrap {
+					testPos = 0
+				} else {
+					testPos = sv.ItemCount - 1
+					break
+				}
 			}
 			if sv.IsSelectable == nil || sv.IsSelectable(testPos) {
 				newPos = testPos
@@ -211,7 +229,9 @@ func (sv *ScrollView) GetClickIndex(my int) int {
 }
 
 func (sv *ScrollView) HandleKey(e *vtinput.InputEvent) bool {
-	if !e.KeyDown { return false }
+	if !e.KeyDown {
+		return false
+	}
 
 	oldPos := sv.SelectPos
 	handled := false
@@ -233,8 +253,12 @@ func (sv *ScrollView) HandleKey(e *vtinput.InputEvent) bool {
 }
 
 func (sv *ScrollView) HandleMouse(e *vtinput.InputEvent) bool {
-	if e.Type != vtinput.MouseEventType { return false }
-	if sv.HandleMouseScroll(e) { return true }
+	if e.Type != vtinput.MouseEventType {
+		return false
+	}
+	if sv.HandleMouseScroll(e) {
+		return true
+	}
 
 	if e.ButtonState != 0 && e.KeyDown {
 		clickIdx := sv.GetClickIndex(int(e.MouseY))
@@ -247,7 +271,7 @@ func (sv *ScrollView) HandleMouse(e *vtinput.InputEvent) bool {
 			}
 
 			// Trigger actions only for the primary (left) button
-			if e.ButtonState == vtinput.FromLeft1stButtonPressed && (e.MouseEventFlags & vtinput.DoubleClick) != 0 && sv.OnAction != nil {
+			if e.ButtonState == vtinput.FromLeft1stButtonPressed && (e.MouseEventFlags&vtinput.DoubleClick) != 0 && sv.OnAction != nil {
 				sv.OnAction(sv.SelectPos)
 			}
 			return true

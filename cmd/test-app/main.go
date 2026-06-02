@@ -1,13 +1,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
-	"context"
 	"path/filepath"
-	"time"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
@@ -17,11 +17,11 @@ import (
 // localVFS is a minimal stub to satisfy vtui dialogs without relying on external VFS.
 type localVFS struct{ path string }
 
-func (v *localVFS) GetPath() string { return v.path }
-func (v *localVFS) SetPath(p string) error { v.path = p; return nil }
+func (v *localVFS) GetPath() string         { return v.path }
+func (v *localVFS) SetPath(p string) error  { v.path = p; return nil }
 func (v *localVFS) Join(e ...string) string { return filepath.Join(e...) }
-func (v *localVFS) Dir(p string) string { return filepath.Dir(p) }
-func (v *localVFS) Base(p string) string { return filepath.Base(p) }
+func (v *localVFS) Dir(p string) string     { return filepath.Dir(p) }
+func (v *localVFS) Base(p string) string    { return filepath.Base(p) }
 func (v *localVFS) ReadDir(ctx context.Context, p string, onChunk func([]vtui.FSItem)) error {
 	entries, _ := os.ReadDir(p)
 	var items []vtui.FSItem
@@ -76,7 +76,9 @@ type fileRow struct {
 }
 
 func (f fileRow) GetCellText(col int) string {
-	if col == 0 { return f.name }
+	if col == 0 {
+		return f.name
+	}
 	return f.size
 }
 
@@ -88,19 +90,19 @@ func showShowcaseDialog() {
 
 	// Left side: TreeView demonstration
 	dlg.AddItem(vtui.NewGroupBox(x+2, y+1, x+25, y+14, "TreeView"))
-	
+
 	root := &vtui.TreeNode{Text: "System", Expanded: true}
 	etc := &vtui.TreeNode{Text: "etc", Expanded: false}
 	etc.AddChild(&vtui.TreeNode{Text: "passwd"})
 	etc.AddChild(&vtui.TreeNode{Text: "hosts"})
-	
+
 	usr := &vtui.TreeNode{Text: "usr", Expanded: true}
 	bin := &vtui.TreeNode{Text: "bin", Expanded: true}
 	bin.AddChild(&vtui.TreeNode{Text: "bash"})
 	bin.AddChild(&vtui.TreeNode{Text: "cat"})
 	usr.AddChild(bin)
 	usr.AddChild(&vtui.TreeNode{Text: "lib", Expanded: false})
-	
+
 	root.AddChild(etc)
 	root.AddChild(usr)
 
@@ -208,32 +210,43 @@ func main() {
 		// Elements
 		dlg.AddItem(vtui.NewGroupBox(x1+2, y1+1, x1+35, y1+5, "Execution Mode"))
 		rg := vtui.NewRadioGroup(x1+4, y1+2, 1, []string{"&Fast and Dangerous", "Slow and &Stable"})
-		dlg.AddItem(vtui.NewLabel(x1+3, y1+1, "&Mode:", rg)); dlg.AddItem(rg)
+		dlg.AddItem(vtui.NewLabel(x1+3, y1+1, "&Mode:", rg))
+		dlg.AddItem(rg)
 
 		combo := vtui.NewComboBox(x1+14, y1+7, 16, []string{"UTF-8", "CP866", "Win-1251"})
-		dlg.AddItem(vtui.NewLabel(x1+2, y1+7, "&Encoding:", combo)); dlg.AddItem(combo)
+		dlg.AddItem(vtui.NewLabel(x1+2, y1+7, "&Encoding:", combo))
+		dlg.AddItem(combo)
 
 		cmdEdit := vtui.NewEdit(x1+14, y1+9, 16, "ls -la")
 		cmdEdit.History = []string{"git status", "go build", "rm -rf /", "ls -la"}
 		cmdEdit.ShowHistoryButton = true
 		cmdEdit.OnAction = func() {
 			text := cmdEdit.GetText()
-			if text != "" { cmdEdit.AddHistory(text) }
+			if text != "" {
+				cmdEdit.AddHistory(text)
+			}
 			vtui.ShowMessage(" Execute ", "Command added to history:\n"+text, []string{"&Ok"})
 		}
-		dlg.AddItem(vtui.NewLabel(x1+2, y1+9, "&Command:", cmdEdit)); dlg.AddItem(cmdEdit)
+		dlg.AddItem(vtui.NewLabel(x1+2, y1+9, "&Command:", cmdEdit))
+		dlg.AddItem(cmdEdit)
 
-		cb3 := vtui.NewCheckbox(x1+2, y1+11, "3-s&tate Checkbox", true); cb3.State = 2; dlg.AddItem(cb3)
+		cb3 := vtui.NewCheckbox(x1+2, y1+11, "3-s&tate Checkbox", true)
+		cb3.State = 2
+		dlg.AddItem(cb3)
 
 		dlg.AddItem(vtui.NewVText(x1+37, y1+2, "│CORE│", vtui.Palette[vtui.ColDialogText]))
 		dlg.AddItem(vtui.NewGroupBox(x1+40, y1+1, x1+73, y1+5, "Features"))
 		cg := vtui.NewCheckGroup(x1+42, y1+2, 2, []string{"Enable &AI", "A&uto-upd", "&Logging", "&Debug"})
-		cg.States[1] = true; dlg.AddItem(cg)
+		cg.States[1] = true
+		dlg.AddItem(cg)
 
-		opMenu := vtui.NewVMenu(" Operations "); opMenu.SetPosition(x1+40, y1+7, x1+64, y1+12)
+		opMenu := vtui.NewVMenu(" Operations ")
+		opMenu.SetPosition(x1+40, y1+7, x1+64, y1+12)
 		opMenu.AddItem(vtui.MenuItem{Text: "&Copy File", Command: 1001})
-		opMenu.AddItem(vtui.MenuItem{Text: "&Move File"}); opMenu.AddSeparator()
-		opMenu.AddItem(vtui.MenuItem{Text: "&Delete"}); opMenu.AddItem(vtui.MenuItem{Text: "&Attributes"})
+		opMenu.AddItem(vtui.MenuItem{Text: "&Move File"})
+		opMenu.AddSeparator()
+		opMenu.AddItem(vtui.MenuItem{Text: "&Delete"})
+		opMenu.AddItem(vtui.MenuItem{Text: "&Attributes"})
 		dlg.AddItem(opMenu)
 
 		dlg.AddItem(vtui.NewSeparator(x1, y1+14, 76, true, true))
@@ -245,7 +258,9 @@ func main() {
 			fileRow{"rocket_launcher.sh", "128 KB"},
 			fileRow{"data.json", "10 MB"},
 		})
-		table.ShowScrollBar = true; table.SetGrowMode(vtui.GrowHiX | vtui.GrowHiY); dlg.AddItem(table)
+		table.ShowScrollBar = true
+		table.SetGrowMode(vtui.GrowHiX | vtui.GrowHiY)
+		dlg.AddItem(table)
 
 		// Bottom Buttons (Y coordinate is now inside the 27-row window)
 		btnY := y1 + 25
@@ -284,14 +299,16 @@ func main() {
 		go func() {
 			for {
 				time.Sleep(1 * time.Second)
-				if vtui.FrameManager == nil || vtui.FrameManager.IsShutdown() { break }
+				if vtui.FrameManager == nil || vtui.FrameManager.IsShutdown() {
+					break
+				}
 				vtui.FrameManager.Redraw()
 			}
 		}()
 
 		// IMPORTANT: Actually put the dialog into the FrameManager stack
 		dlg.Center(width, height)
-	vtui.FrameManager.Push(dlg)
+		vtui.FrameManager.Push(dlg)
 	}
 
 	runConsole := func() {

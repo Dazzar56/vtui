@@ -63,7 +63,7 @@ func CalcScrollBar(length, topItem, itemsCount int) (caretPos, caretLength int) 
 	cLen := MathRound(trackLen*viewHeight, total)
 	cLen = Max(1, cLen)
 	if cLen >= trackLen && trackLen > 0 {
-		cLen = trackLen -1
+		cLen = trackLen - 1
 	}
 	cLen = Min(cLen, trackLen)
 
@@ -79,7 +79,6 @@ func CalcScrollBar(length, topItem, itemsCount int) (caretPos, caretLength int) 
 		// Exact proportion guarantees touching the bottom edge at the very end of the list
 		cPos = MathRound(top*maxCaret, maxTop)
 	}
-
 
 	return int(cPos), int(cLen)
 }
@@ -133,7 +132,6 @@ type ScrollBar struct {
 	repeatAction int // -1, 1, -2, 2
 }
 
-
 func NewScrollBar(x, y, h int) *ScrollBar {
 	sb := &ScrollBar{PgStep: h}
 	sb.SetPosition(x, y, x, y+h-1)
@@ -146,9 +144,13 @@ func (sb *ScrollBar) SetParams(val, min, max int) {
 
 func (sb *ScrollBar) Show(scr *ScreenBuf) {
 	sb.ScreenObject.Show(scr)
-	if !sb.IsVisible() { return }
+	if !sb.IsVisible() {
+		return
+	}
 	h := sb.Y2 - sb.Y1 + 1
-	if h < 2 || sb.Max <= sb.Min { return }
+	if h < 2 || sb.Max <= sb.Min {
+		return
+	}
 
 	attr := Palette[ColTableBox]
 	// Using itemsCount calculation: maxTop = total - viewHeight => total = maxTop + viewHeight
@@ -181,7 +183,9 @@ func (sb *ScrollBar) ProcessMouse(e *vtinput.InputEvent) bool {
 		itemsCount := sb.Max + h
 		_, caretLen := CalcScrollBar(h, sb.Value, itemsCount)
 		dragRange := trackLen - caretLen
-		if dragRange <= 0 { return true }
+		if dragRange <= 0 {
+			return true
+		}
 
 		dy := my - sb.dragStartY
 		itemsPerPixel := float64(sb.Max) / float64(dragRange)
@@ -208,14 +212,18 @@ func (sb *ScrollBar) ProcessMouse(e *vtinput.InputEvent) bool {
 	if my == sb.Y1 {
 		action = -1 // Up arrow
 	} else if my == sb.Y2 {
-		action = 1  // Down arrow
+		action = 1 // Down arrow
 	} else if clickRelY >= cPos && clickRelY < cPos+cLen {
 		sb.isDragging = true
 		sb.dragStartY = my
 		sb.dragStartVal = sb.Value
 		return true
 	} else {
-		if clickRelY < cPos { action = -2 } else { action = 2 } // PgUp/PgDown
+		if clickRelY < cPos {
+			action = -2
+		} else {
+			action = 2
+		} // PgUp/PgDown
 	}
 
 	if action != 0 {
@@ -231,27 +239,49 @@ func (sb *ScrollBar) ProcessMouse(e *vtinput.InputEvent) bool {
 func (sb *ScrollBar) triggerStep() {
 	switch sb.repeatAction {
 	case -1:
-		if sb.OnStep != nil { sb.OnStep(-1) } else { sb.scroll(sb.Value - 1) }
+		if sb.OnStep != nil {
+			sb.OnStep(-1)
+		} else {
+			sb.scroll(sb.Value - 1)
+		}
 	case 1:
-		if sb.OnStep != nil { sb.OnStep(1) } else { sb.scroll(sb.Value + 1) }
+		if sb.OnStep != nil {
+			sb.OnStep(1)
+		} else {
+			sb.scroll(sb.Value + 1)
+		}
 	case -2:
-		if sb.OnStep != nil { sb.OnStep(-2) } else { sb.scroll(sb.Value - sb.PgStep) }
+		if sb.OnStep != nil {
+			sb.OnStep(-2)
+		} else {
+			sb.scroll(sb.Value - sb.PgStep)
+		}
 	case 2:
-		if sb.OnStep != nil { sb.OnStep(2) } else { sb.scroll(sb.Value + sb.PgStep) }
+		if sb.OnStep != nil {
+			sb.OnStep(2)
+		} else {
+			sb.scroll(sb.Value + sb.PgStep)
+		}
 	}
 }
 
 func (sb *ScrollBar) doRepeat() {
 	FrameManager.PostTask(func() {
-		if sb.repeatTimer == nil { return }
+		if sb.repeatTimer == nil {
+			return
+		}
 		sb.triggerStep()
 		sb.repeatTimer = time.AfterFunc(50*time.Millisecond, sb.doRepeat)
 	})
 }
 
 func (sb *ScrollBar) scroll(v int) {
-	if v < sb.Min { v = sb.Min }
-	if v > sb.Max { v = sb.Max }
+	if v < sb.Min {
+		v = sb.Min
+	}
+	if v > sb.Max {
+		v = sb.Max
+	}
 	if v != sb.Value {
 		sb.Value = v
 		if sb.OnScroll != nil {

@@ -1,8 +1,8 @@
 package vtui
 
 import (
-	"strings"
 	"github.com/mattn/go-runewidth"
+	"strings"
 )
 
 // Painter provides high-level drawing primitives on top of a ScreenBuf.
@@ -21,7 +21,9 @@ func (p *Painter) Fill(x1, y1, x2, y2 int, char rune, attr uint64) {
 
 // DrawBox draws a frame of specified type (SingleBox, DoubleBox).
 func (p *Painter) DrawBox(x1, y1, x2, y2 int, attr uint64, boxType int) {
-	if boxType == NoBox || x2 <= x1 || y2 <= y1 { return }
+	if boxType == NoBox || x2 <= x1 || y2 <= y1 {
+		return
+	}
 	sym := getBoxSymbols(boxType)
 	w := x2 - x1 + 1
 
@@ -43,7 +45,9 @@ func (p *Painter) DrawBox(x1, y1, x2, y2 int, attr uint64, boxType int) {
 
 // DrawTitle draws a centered title on the top border of a box.
 func (p *Painter) DrawTitle(x1, y1, x2 int, title string, attr uint64) {
-	if title == "" { return }
+	if title == "" {
+		return
+	}
 	w := x2 - x1 + 1
 	vLen := runewidth.StringWidth(title)
 
@@ -88,31 +92,42 @@ func (p *Painter) DrawHighlightedText(x, y int, cleanText string, hkPos int, nor
 	}
 	p.scr.Write(x, y, cells)
 }
+
 // DrawStringHighlighted draws a string, highlighting the character after the '&' symbol.
 // This is used for dynamic strings that are not stored in a ScreenObject.
 func (p *Painter) DrawStringHighlighted(x, y int, text string, normAttr, highAttr uint64) {
 	cells, _ := StringToCharInfoHighlighted(text, normAttr, highAttr)
 	p.scr.Write(x, y, cells)
 }
+
 // DrawControlText renders text that may contain an ampersand for hotkey highlighting.
 func (p *Painter) DrawControlText(x, y int, text string, normAttr, highAttr uint64) {
 	clean, _, hkPos := ParseAmpersandString(text)
 	p.DrawHighlightedText(x, y, clean, hkPos, normAttr, highAttr)
 }
+
 // DrawLine draws a horizontal line segment, optionally with connectors.
 func (p *Painter) DrawLine(x1, y1, x2, y2 int, char rune, attr uint64, connectLeft, connectRight bool) {
-	if x1 > x2 || y1 > y2 { return }
+	if x1 > x2 || y1 > y2 {
+		return
+	}
 
 	count := x2 - x1 + 1
-	if count <= 0 { return }
+	if count <= 0 {
+		return
+	}
 
 	lineRunes := make([]rune, count)
 	for i := range lineRunes {
 		lineRunes[i] = char
 	}
 
-	if connectLeft { lineRunes[0] = boxSymbols[bsVMenuHCrossLeft] }
-	if connectRight { lineRunes[len(lineRunes)-1] = boxSymbols[bsVMenuHCrossRight] }
+	if connectLeft {
+		lineRunes[0] = boxSymbols[bsVMenuHCrossLeft]
+	}
+	if connectRight {
+		lineRunes[len(lineRunes)-1] = boxSymbols[bsVMenuHCrossRight]
+	}
 
 	p.scr.Write(x1, y1, RunesToCharInfo(lineRunes, attr))
 }
@@ -131,4 +146,3 @@ func GetHighlighter(filename string, content string) Highlighter {
 	}
 	return nil
 }
-

@@ -40,7 +40,9 @@ Welcome to the intro.
 
 	// 1. Test topic extraction
 	contents := engine.GetTopic("Contents")
-	if contents == nil { t.Fatal("Topic 'Contents' not found") }
+	if contents == nil {
+		t.Fatal("Topic 'Contents' not found")
+	}
 
 	// 2. Test sticky headers
 	if contents.StickyRows != 1 {

@@ -41,6 +41,7 @@ func (f *BorderedFrame) getControlOffset() int {
 	}
 	return offset
 }
+
 // IsBorderClick returns true if the coordinates hit the frame border.
 func (f *BorderedFrame) IsBorderClick(x, y int) bool {
 	if f.boxType == NoBox {
@@ -63,7 +64,9 @@ func (f *BorderedFrame) Show(scr *ScreenBuf) {
 
 // DisplayObject renders the frame and title using a Painter.
 func (f *BorderedFrame) DisplayObject(scr *ScreenBuf) {
-	if f.boxType == NoBox { return }
+	if f.boxType == NoBox {
+		return
+	}
 	p := NewPainter(scr)
 
 	p.Fill(f.X1, f.Y1, f.X2, f.Y2, ' ', Palette[f.ColorBackgroundIdx])

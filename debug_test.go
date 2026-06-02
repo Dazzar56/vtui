@@ -2,8 +2,8 @@ package vtui
 
 import (
 	"os"
-	"strings"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 

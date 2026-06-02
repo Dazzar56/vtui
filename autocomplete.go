@@ -9,9 +9,9 @@ import (
 
 type AutoCompleteMenu struct {
 	Window
-	Edit      *Edit
-	lb        *ListBox
-	Matches   []string
+	Edit    *Edit
+	lb      *ListBox
+	Matches []string
 }
 
 func NewAutoCompleteMenu(edit *Edit) *AutoCompleteMenu {

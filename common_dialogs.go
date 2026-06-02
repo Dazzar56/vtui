@@ -2,9 +2,9 @@ package vtui
 
 import (
 	"context"
+	"github.com/mattn/go-runewidth"
 	"sort"
 	"strings"
-	"github.com/mattn/go-runewidth"
 )
 
 // FSItem represents a generic file or directory entry for UI dialogs.
@@ -40,11 +40,15 @@ func SelectDirDialog(title string, initialPath string, vfs FSProvider) *Window {
 			currentItems := []string{".."}
 			vfs.ReadDir(context.Background(), p, func(chunk []FSItem) {
 				for _, e := range chunk {
-					if e.IsDir && e.Name != ".." { currentItems = append(currentItems, e.Name) }
+					if e.IsDir && e.Name != ".." {
+						currentItems = append(currentItems, e.Name)
+					}
 				}
 			})
 			FrameManager.PostTask(func() {
-				if dlg.IsDone() { return }
+				if dlg.IsDone() {
+					return
+				}
 				lb.Items = currentItems
 				// Sort folders alphabetically (ignoring "..")
 				if len(currentItems) > 2 {
@@ -54,24 +58,38 @@ func SelectDirDialog(title string, initialPath string, vfs FSProvider) *Window {
 				}
 				lb.Items = currentItems
 				lb.UpdateRows()
-				if targetToSelect != "" { lb.SelectName(targetToSelect) } else { lb.SetSelectPos(0) }
+				if targetToSelect != "" {
+					lb.SelectName(targetToSelect)
+				} else {
+					lb.SetSelectPos(0)
+				}
 				FrameManager.Redraw()
 			})
 		}()
 	}
 
 	lb.OnSelect = func(idx int) {
-		if idx < 0 || idx >= len(lb.Items) { return }
-		if lb.Items[idx] == ".." { pathEdit.SetText(vfs.Dir(vfs.GetPath())) } else { pathEdit.SetText(vfs.Join(vfs.GetPath(), lb.Items[idx])) }
+		if idx < 0 || idx >= len(lb.Items) {
+			return
+		}
+		if lb.Items[idx] == ".." {
+			pathEdit.SetText(vfs.Dir(vfs.GetPath()))
+		} else {
+			pathEdit.SetText(vfs.Join(vfs.GetPath(), lb.Items[idx]))
+		}
 	}
 
 	lb.OnAction = func(idx int) {
-		if idx < 0 || idx >= len(lb.Items) { return }
+		if idx < 0 || idx >= len(lb.Items) {
+			return
+		}
 		selected := lb.Items[idx]
 		oldPath := vfs.GetPath()
 		if err := vfs.SetPath(vfs.Join(oldPath, selected)); err == nil {
 			target := ""
-			if selected == ".." { target = vfs.Base(oldPath) }
+			if selected == ".." {
+				target = vfs.Base(oldPath)
+			}
 			updateList(vfs.GetPath(), target)
 			pathEdit.SetText(vfs.GetPath())
 		}
@@ -82,7 +100,10 @@ func SelectDirDialog(title string, initialPath string, vfs FSProvider) *Window {
 	btnOk.OnClick = func() { dlg.SetExitCode(1) }
 	btnCancel.OnClick = func() { dlg.SetExitCode(-1) }
 
-	dlg.AddItem(pathEdit); dlg.AddItem(lb); dlg.AddItem(btnOk); dlg.AddItem(btnCancel)
+	dlg.AddItem(pathEdit)
+	dlg.AddItem(lb)
+	dlg.AddItem(btnOk)
+	dlg.AddItem(btnCancel)
 
 	vbox := NewVBoxLayout(dlg.X1+2, dlg.Y1+2, width-4, height-4)
 	vbox.Add(pathEdit, Margins{Bottom: 1}, AlignFill)
@@ -140,7 +161,9 @@ func createMessageDialog(title string, text string, buttons []string) *Window {
 	textWidth := 0
 	for _, l := range lines {
 		w := runewidth.StringWidth(l)
-		if w > textWidth { textWidth = w }
+		if w > textWidth {
+			textWidth = w
+		}
 	}
 
 	dlgWidth := textWidth + sidePadding
@@ -149,9 +172,13 @@ func createMessageDialog(title string, text string, buttons []string) *Window {
 	}
 	if title != "" {
 		tw := runewidth.StringWidth(title) + 6
-		if tw > dlgWidth { dlgWidth = tw }
+		if tw > dlgWidth {
+			dlgWidth = tw
+		}
 	}
-	if dlgWidth > maxDialogWidth { dlgWidth = maxDialogWidth }
+	if dlgWidth > maxDialogWidth {
+		dlgWidth = maxDialogWidth
+	}
 
 	// 3. Finalize Dialog height
 	// Borders (2) + Padding (2) + Lines (len)
@@ -279,7 +306,9 @@ func SelectFileDialog(title string, initialPath string, vfs FSProvider, onOk fun
 				allEntries = append(allEntries, chunk...)
 			})
 			FrameManager.PostTask(func() {
-				if dlg.IsDone() { return }
+				if dlg.IsDone() {
+					return
+				}
 				items := []string{".."}
 				// Sort entries: Directories first, then files, both alphabetically
 				sort.Slice(allEntries, func(i, j int) bool {
@@ -289,35 +318,59 @@ func SelectFileDialog(title string, initialPath string, vfs FSProvider, onOk fun
 					return strings.ToLower(allEntries[i].Name) < strings.ToLower(allEntries[j].Name)
 				})
 				items = []string{".."}
-				isDirMap = make(map[string]bool); isDirMap[".."] = true
-				for _, e := range allEntries { if e.IsDir { items = append(items, e.Name); isDirMap[e.Name] = true } }
-				for _, e := range allEntries { if !e.IsDir { items = append(items, e.Name); isDirMap[e.Name] = false } }
+				isDirMap = make(map[string]bool)
+				isDirMap[".."] = true
+				for _, e := range allEntries {
+					if e.IsDir {
+						items = append(items, e.Name)
+						isDirMap[e.Name] = true
+					}
+				}
+				for _, e := range allEntries {
+					if !e.IsDir {
+						items = append(items, e.Name)
+						isDirMap[e.Name] = false
+					}
+				}
 				lb.Items = items
 				lb.UpdateRows()
-				if targetToSelect != "" { lb.SelectName(targetToSelect) } else { lb.SetSelectPos(0) }
+				if targetToSelect != "" {
+					lb.SelectName(targetToSelect)
+				} else {
+					lb.SetSelectPos(0)
+				}
 				FrameManager.Redraw()
 			})
 		}()
 	}
 
 	lb.OnSelect = func(idx int) {
-		if idx >= 0 && idx < len(lb.Items) && !isDirMap[lb.Items[idx]] { fileEdit.SetText(lb.Items[idx]) }
+		if idx >= 0 && idx < len(lb.Items) && !isDirMap[lb.Items[idx]] {
+			fileEdit.SetText(lb.Items[idx])
+		}
 	}
 	lb.OnAction = func(idx int) {
-		if idx < 0 || idx >= len(lb.Items) { return }
+		if idx < 0 || idx >= len(lb.Items) {
+			return
+		}
 		selected := lb.Items[idx]
 		if isDirMap[selected] {
 			oldPath := vfs.GetPath()
 			if err := vfs.SetPath(vfs.Join(oldPath, selected)); err == nil {
 				target := ""
-				if selected == ".." { target = vfs.Base(oldPath) }
+				if selected == ".." {
+					target = vfs.Base(oldPath)
+				}
 				updateList(vfs.GetPath(), target)
 				pathEdit.SetText(vfs.GetPath())
 			}
-		} else { dlg.SetExitCode(1) }
+		} else {
+			dlg.SetExitCode(1)
+		}
 	}
 
-	btnOk := NewButton(0, 0, Msg("vtui.Ok")); btnCancel := NewButton(0, 0, Msg("vtui.Cancel"))
+	btnOk := NewButton(0, 0, Msg("vtui.Ok"))
+	btnCancel := NewButton(0, 0, Msg("vtui.Cancel"))
 	btnOk.OnClick = func() {
 		if onOk != nil {
 			onOk(vfs.Join(vfs.GetPath(), fileEdit.GetText()))
@@ -326,20 +379,29 @@ func SelectFileDialog(title string, initialPath string, vfs FSProvider, onOk fun
 	}
 	btnCancel.OnClick = func() { dlg.SetExitCode(-1) }
 
-	dlg.AddItem(lblPath); dlg.AddItem(pathEdit); dlg.AddItem(lb)
-	dlg.AddItem(lblFile); dlg.AddItem(fileEdit); dlg.AddItem(btnOk); dlg.AddItem(btnCancel)
+	dlg.AddItem(lblPath)
+	dlg.AddItem(pathEdit)
+	dlg.AddItem(lb)
+	dlg.AddItem(lblFile)
+	dlg.AddItem(fileEdit)
+	dlg.AddItem(btnOk)
+	dlg.AddItem(btnCancel)
 
 	vbox := NewVBoxLayout(dlg.X1+2, dlg.Y1+2, width-4, height-4)
 	rowPath := NewHBoxLayout(0, 0, width-4, 1)
-	rowPath.Add(lblPath, Margins{Right: 1}, AlignTop); rowPath.Add(pathEdit, Margins{}, AlignFill)
+	rowPath.Add(lblPath, Margins{Right: 1}, AlignTop)
+	rowPath.Add(pathEdit, Margins{}, AlignFill)
 	vbox.Add(rowPath, Margins{}, AlignFill)
 	vbox.Add(lb, Margins{Top: 1, Bottom: 1}, AlignFill)
 	rowFile := NewHBoxLayout(0, 0, width-4, 1)
-	rowFile.Add(lblFile, Margins{Right: 1}, AlignTop); rowFile.Add(fileEdit, Margins{}, AlignFill)
+	rowFile.Add(lblFile, Margins{Right: 1}, AlignTop)
+	rowFile.Add(fileEdit, Margins{}, AlignFill)
 	vbox.Add(rowFile, Margins{}, AlignFill)
 	rowBtns := NewHBoxLayout(0, 0, width-4, 1)
-	rowBtns.HorizontalAlign = AlignCenter; rowBtns.Spacing = 2
-	rowBtns.Add(btnOk, Margins{}, AlignTop); rowBtns.Add(btnCancel, Margins{}, AlignTop)
+	rowBtns.HorizontalAlign = AlignCenter
+	rowBtns.Spacing = 2
+	rowBtns.Add(btnOk, Margins{}, AlignTop)
+	rowBtns.Add(btnCancel, Margins{}, AlignTop)
 	vbox.Add(rowBtns, Margins{Top: 1}, AlignFill)
 	vbox.Apply()
 
@@ -366,13 +428,17 @@ func InputBoxOn(anchor Frame, title, prompt, defaultText string, onOk func(strin
 	btnCancel := NewButton(0, 0, Msg("vtui.Cancel"))
 
 	btnOk.OnClick = func() {
-		if onOk != nil { onOk(edit.GetText()) }
+		if onOk != nil {
+			onOk(edit.GetText())
+		}
 		dlg.SetExitCode(1)
 	}
 	btnCancel.OnClick = func() { dlg.SetExitCode(-1) }
 
-	dlg.AddItem(lbl); dlg.AddItem(edit)
-	dlg.AddItem(btnOk); dlg.AddItem(btnCancel)
+	dlg.AddItem(lbl)
+	dlg.AddItem(edit)
+	dlg.AddItem(btnOk)
+	dlg.AddItem(btnCancel)
 
 	// Layout construction
 	vbox := NewVBoxLayout(dlg.X1+2, dlg.Y1+2, width-4, height-4)

@@ -76,7 +76,9 @@ func ValidateLayout(c Container) []error {
 			}
 
 			isDeco := func(el UIElement) bool {
-				_, s := el.(*Separator); _, f := el.(*BorderedFrame); _, g := el.(*GroupBox)
+				_, s := el.(*Separator)
+				_, f := el.(*BorderedFrame)
+				_, g := el.(*GroupBox)
 				return s || f || g
 			}
 

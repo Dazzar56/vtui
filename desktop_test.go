@@ -25,7 +25,7 @@ func TestDesktop_ExitKeys(t *testing.T) {
 	FrameManager.Init(NewSilentScreenBuf())
 	d2 := NewDesktop()
 	FrameManager.Push(d2)
-	
+
 	d2.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_ESCAPE})
 	if !FrameManager.IsShutdown() {
 		t.Error("Desktop should trigger Shutdown on ESC via CmQuit")

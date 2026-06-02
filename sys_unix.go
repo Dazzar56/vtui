@@ -3,8 +3,8 @@
 package vtui
 
 import (
-	"os"
 	"golang.org/x/sys/unix"
+	"os"
 )
 
 func RedirectStderr(f *os.File) error {

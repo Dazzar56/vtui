@@ -1,12 +1,14 @@
 package vtui
 
 import (
-	"github.com/unxed/vtinput"
 	"github.com/mattn/go-runewidth"
+	"github.com/unxed/vtinput"
 )
 
 func gridNav(idx, count, cols int, vk uint16) (int, bool) {
-	if cols < 1 { cols = 1 }
+	if cols < 1 {
+		cols = 1
+	}
 	row := idx / cols
 	col := idx % cols
 	rows := (count + cols - 1) / cols
@@ -19,7 +21,9 @@ func gridNav(idx, count, cols int, vk uint16) (int, bool) {
 			// Snake: bottom of previous column
 			lastRowInPrev := rows - 1
 			newIdx := lastRowInPrev*cols + (col - 1)
-			for newIdx >= count { newIdx -= cols }
+			for newIdx >= count {
+				newIdx -= cols
+			}
 			return newIdx, true
 		}
 	case vtinput.VK_DOWN:

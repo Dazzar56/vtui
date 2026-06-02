@@ -9,11 +9,11 @@ import (
 func TestVBoxLayout_Alignment(t *testing.T) {
 	// Container: X=0, W=100
 	vbox := NewVBoxLayout(0, 0, 100, 50)
-	
-	left := NewButton(0, 0, "L")    // width 5: "[ L ]"
-	center := NewButton(0, 0, "C")  // width 5
-	right := NewButton(0, 0, "R")   // width 5
-	fill := NewEdit(0, 0, 10, "F")  // initial width 10
+
+	left := NewButton(0, 0, "L")   // width 5: "[ L ]"
+	center := NewButton(0, 0, "C") // width 5
+	right := NewButton(0, 0, "R")  // width 5
+	fill := NewEdit(0, 0, 10, "F") // initial width 10
 
 	vbox.Add(left, Margins{Left: 10}, AlignLeft)
 	vbox.Add(center, Margins{}, AlignCenter)
@@ -24,24 +24,32 @@ func TestVBoxLayout_Alignment(t *testing.T) {
 
 	// 1. AlignLeft: 0 (X) + 10 (Margin) = 10
 	x1, _, _, _ := left.GetPosition()
-	if x1 != 10 { t.Errorf("AlignLeft failed: expected 10, got %d", x1) }
+	if x1 != 10 {
+		t.Errorf("AlignLeft failed: expected 10, got %d", x1)
+	}
 
 	// 2. AlignCenter: (100 - 5) / 2 = 47 (approx)
 	x1, _, _, _ = center.GetPosition()
-	if x1 != 47 && x1 != 48 { t.Errorf("AlignCenter failed: expected ~47, got %d", x1) }
+	if x1 != 47 && x1 != 48 {
+		t.Errorf("AlignCenter failed: expected ~47, got %d", x1)
+	}
 
 	// 3. AlignRight: 100 - 10 (Margin) - 5 (Width) = 85
 	x1, _, _, _ = right.GetPosition()
-	if x1 != 85 { t.Errorf("AlignRight failed: expected 85, got %d", x1) }
+	if x1 != 85 {
+		t.Errorf("AlignRight failed: expected 85, got %d", x1)
+	}
 
 	// 4. AlignFill: X = 0+5=5, Width = 100-5-5=90. X2 = 5+90-1 = 94
 	x1, _, x2, _ := fill.GetPosition()
-	if x1 != 5 || x2 != 94 { t.Errorf("AlignFill failed: expected 5..94, got %d..%d", x1, x2) }
+	if x1 != 5 || x2 != 94 {
+		t.Errorf("AlignFill failed: expected 5..94, got %d..%d", x1, x2)
+	}
 }
 
 func TestVBoxLayout_VerticalSpacing(t *testing.T) {
 	vbox := NewVBoxLayout(0, 10, 50, 50)
-	
+
 	// Buttons are 1 line high
 	b1 := NewButton(0, 0, "B1")
 	b2 := NewButton(0, 0, "B2")
@@ -54,10 +62,14 @@ func TestVBoxLayout_VerticalSpacing(t *testing.T) {
 	vbox.Apply()
 
 	_, y1, _, y2 := b1.GetPosition()
-	if y1 != 12 || y2 != 12 { t.Errorf("B1 Y coords wrong: %d..%d", y1, y2) }
+	if y1 != 12 || y2 != 12 {
+		t.Errorf("B1 Y coords wrong: %d..%d", y1, y2)
+	}
 
 	_, by1, _, _ := b2.GetPosition()
-	if by1 != 17 { t.Errorf("B2 Y coords wrong: expected 17, got %d", by1) }
+	if by1 != 17 {
+		t.Errorf("B2 Y coords wrong: expected 17, got %d", by1)
+	}
 }
 
 // --- HBoxLayout Tests ---
@@ -77,19 +89,23 @@ func TestHBoxLayout_SpacingAndMargins(t *testing.T) {
 
 	// B1: X = 0 + 2 (Margin) = 2. X2 = 2+6-1 = 7
 	x1, _, x2, _ := b1.GetPosition()
-	if x1 != 2 || x2 != 7 { t.Errorf("HBox B1 failed: %d..%d", x1, x2) }
+	if x1 != 2 || x2 != 7 {
+		t.Errorf("HBox B1 failed: %d..%d", x1, x2)
+	}
 
 	// B2: X = B1_X2 (7) + B1_Right (3) + Spacing (5) + B2_Left (1) + 1 = 17
 	bx1, _, _, _ := b2.GetPosition()
-	if bx1 != 17 { t.Errorf("HBox B2 failed: expected 17, got %d", bx1) }
+	if bx1 != 17 {
+		t.Errorf("HBox B2 failed: expected 17, got %d", bx1)
+	}
 }
 
 func TestHBoxLayout_CrossAlignment(t *testing.T) {
 	// Container: height 10, Y=10
 	hbox := NewHBoxLayout(0, 10, 100, 10)
-	
-	top := NewButton(0, 0, "T")    // height 1
-	center := NewButton(0, 0, "C") 
+
+	top := NewButton(0, 0, "T") // height 1
+	center := NewButton(0, 0, "C")
 	bottom := NewButton(0, 0, "B")
 	fill := NewEdit(0, 0, 10, "F")
 
@@ -102,25 +118,33 @@ func TestHBoxLayout_CrossAlignment(t *testing.T) {
 
 	// 1. AlignTop: 10 (Y) + 1 (Margin) = 11
 	_, y1, _, _ := top.GetPosition()
-	if y1 != 11 { t.Errorf("HBox AlignTop failed: %d", y1) }
+	if y1 != 11 {
+		t.Errorf("HBox AlignTop failed: %d", y1)
+	}
 
 	// 2. AlignCenter: 10 + (10 - 1) / 2 = 14 (approx)
 	_, y1, _, _ = center.GetPosition()
-	if y1 != 14 && y1 != 15 { t.Errorf("HBox AlignCenter failed: %d", y1) }
+	if y1 != 14 && y1 != 15 {
+		t.Errorf("HBox AlignCenter failed: %d", y1)
+	}
 
 	// 3. AlignBottom: 10 + 10 (Height) - 1 (Margin) - 1 (Width) = 18
 	_, y1, _, _ = bottom.GetPosition()
-	if y1 != 18 { t.Errorf("HBox AlignBottom failed: %d", y1) }
+	if y1 != 18 {
+		t.Errorf("HBox AlignBottom failed: %d", y1)
+	}
 
 	// 4. AlignFill: Y1 = 10+2=12, Height = 10-2-2=6. Y2 = 12+6-1 = 17
 	_, y1, _, y2 := fill.GetPosition()
-	if y1 != 12 || y2 != 17 { t.Errorf("HBox AlignFill failed: %d..%d", y1, y2) }
+	if y1 != 12 || y2 != 17 {
+		t.Errorf("HBox AlignFill failed: %d..%d", y1, y2)
+	}
 }
 
 func TestHBoxLayout_BlockAlignment(t *testing.T) {
 	hbox := NewHBoxLayout(0, 0, 100, 1)
 	hbox.Spacing = 0
-	
+
 	b1 := NewButton(0, 0, "B1") // width 6
 	b2 := NewButton(0, 0, "B2") // width 6
 
@@ -132,14 +156,18 @@ func TestHBoxLayout_BlockAlignment(t *testing.T) {
 	hbox.Apply()
 	// Total width = 6 + 6 = 12. Block should start at 100 - 12 = 88
 	x1, _, _, _ := b1.GetPosition()
-	if x1 != 88 { t.Errorf("HBox AlignBlockRight failed: expected 88, got %d", x1) }
+	if x1 != 88 {
+		t.Errorf("HBox AlignBlockRight failed: expected 88, got %d", x1)
+	}
 
 	// --- 2. Center alignment of the whole block ---
 	hbox.HorizontalAlign = AlignCenter
 	hbox.Apply()
 	// Total width 12. Start at (100 - 12) / 2 = 44
 	x1, _, _, _ = b1.GetPosition()
-	if x1 != 44 { t.Errorf("HBox AlignBlockCenter failed: expected 44, got %d", x1) }
+	if x1 != 44 {
+		t.Errorf("HBox AlignBlockCenter failed: expected 44, got %d", x1)
+	}
 }
 
 func TestLayout_NegativeMarginsSafety(t *testing.T) {
@@ -147,10 +175,10 @@ func TestLayout_NegativeMarginsSafety(t *testing.T) {
 	vbox := NewVBoxLayout(0, 0, 10, 10)
 	btn := NewButton(0, 0, "B")
 	vbox.Add(btn, Margins{Top: -5, Left: -5}, AlignLeft)
-	
+
 	// Should not panic
 	vbox.Apply()
-	
+
 	x1, y1, _, _ := btn.GetPosition()
 	if x1 != -5 || y1 != -5 {
 		t.Errorf("Negative margins should be respected if provided: (%d, %d)", x1, y1)

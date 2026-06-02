@@ -4,11 +4,11 @@ package vtui
 
 import (
 	"fmt"
-	"strings"
 	"os"
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"time"
 )
@@ -104,6 +104,7 @@ func getCrashDir() string {
 	}
 	return filepath.Join(cd, AppName, "crashes")
 }
+
 // SetupStderrLog redirects standard error to a file in the crash directory.
 // This allows capturing low-level Go runtime fatal errors (like Out Of Memory).
 func SetupStderrLog() {
@@ -150,6 +151,7 @@ func GetVersionInfo() string {
 	}
 	return "unknown version"
 }
+
 // RecordCrash writes the crash details and the in-memory log buffer to a file.
 func RecordCrash(panicVal any, stack []byte) string {
 	crashDir := getCrashDir()

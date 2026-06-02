@@ -1,8 +1,8 @@
 package vtui
 
 import (
-	"testing"
 	"github.com/unxed/vtinput"
+	"testing"
 )
 
 func TestScrollBar_WidgetMouse(t *testing.T) {
@@ -17,21 +17,27 @@ func TestScrollBar_WidgetMouse(t *testing.T) {
 		Type: vtinput.MouseEventType, KeyDown: true, ButtonState: vtinput.FromLeft1stButtonPressed,
 		MouseY: 0,
 	})
-	if val != 4 { t.Errorf("Top arrow click failed, got %d", val) }
+	if val != 4 {
+		t.Errorf("Top arrow click failed, got %d", val)
+	}
 
 	// 2. Click bottom arrow (Y=9)
 	sb.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: true, ButtonState: vtinput.FromLeft1stButtonPressed,
 		MouseY: 9,
 	})
-	if val != 5 { t.Errorf("Bottom arrow click failed, got %d", val) }
+	if val != 5 {
+		t.Errorf("Bottom arrow click failed, got %d", val)
+	}
 
 	// 3. Page Up area (Value 5, Track 1-8, Thumb 2-4. Click at Y=1)
 	sb.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: true, ButtonState: vtinput.FromLeft1stButtonPressed,
 		MouseY: 1,
 	})
-	if val != 0 { t.Errorf("PageUp click failed (5-10=-5 -> 0), got %d", val) }
+	if val != 0 {
+		t.Errorf("PageUp click failed (5-10=-5 -> 0), got %d", val)
+	}
 
 	// 4. Page Down area (Value 5, Click at Y=7)
 	sb.SetParams(5, 0, 20)
@@ -39,7 +45,9 @@ func TestScrollBar_WidgetMouse(t *testing.T) {
 		Type: vtinput.MouseEventType, KeyDown: true, ButtonState: vtinput.FromLeft1stButtonPressed,
 		MouseY: 7,
 	})
-	if val != 15 { t.Errorf("PageDown click failed (5+10=15), got %d", val) }
+	if val != 15 {
+		t.Errorf("PageDown click failed (5+10=15), got %d", val)
+	}
 }
 
 func TestScrollBar_OnStep(t *testing.T) {
@@ -54,14 +62,18 @@ func TestScrollBar_OnStep(t *testing.T) {
 		Type: vtinput.MouseEventType, KeyDown: true, ButtonState: vtinput.FromLeft1stButtonPressed,
 		MouseY: 0, MouseX: 0,
 	})
-	if stepVal != -1 { t.Errorf("OnStep Up failed, got %d", stepVal) }
+	if stepVal != -1 {
+		t.Errorf("OnStep Up failed, got %d", stepVal)
+	}
 
 	// 2. Click Down Arrow (Y=9)
 	sb.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: true, ButtonState: vtinput.FromLeft1stButtonPressed,
 		MouseY: 9, MouseX: 0,
 	})
-	if stepVal != 1 { t.Errorf("OnStep Down failed, got %d", stepVal) }
+	if stepVal != 1 {
+		t.Errorf("OnStep Down failed, got %d", stepVal)
+	}
 }
 
 func TestScrollBar_Dragging(t *testing.T) {
@@ -76,7 +88,9 @@ func TestScrollBar_Dragging(t *testing.T) {
 		Type: vtinput.MouseEventType, KeyDown: true, ButtonState: vtinput.FromLeft1stButtonPressed,
 		MouseY: 1, MouseX: 0,
 	})
-	if !sb.isDragging { t.Fatal("Dragging should start") }
+	if !sb.isDragging {
+		t.Fatal("Dragging should start")
+	}
 
 	// 2. Move mouse to Y=5 (middle of the track)
 	sb.ProcessMouse(&vtinput.InputEvent{
@@ -93,5 +107,7 @@ func TestScrollBar_Dragging(t *testing.T) {
 		Type: vtinput.MouseEventType, KeyDown: false, ButtonState: 0,
 		MouseY: 5, MouseX: 0,
 	})
-	if sb.isDragging { t.Error("Dragging should stop on release") }
+	if sb.isDragging {
+		t.Error("Dragging should stop on release")
+	}
 }

@@ -2,14 +2,14 @@ package vtui
 
 import (
 	"fmt"
-	"os"
-	"sync"
-	"time"
-	"strings"
-	"path/filepath"
 	"github.com/mattn/go-runewidth"
 	"github.com/unxed/vtinput"
 	"golang.org/x/term"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"time"
 )
 
 // FrameType defines the type of a frame for introspection.
@@ -78,7 +78,9 @@ func (s *AppScreen) GetProgress() int {
 }
 
 func (s *AppScreen) NeedsAttention() bool {
-	if len(s.Frames) == 0 { return false }
+	if len(s.Frames) == 0 {
+		return false
+	}
 	top := s.Frames[len(s.Frames)-1]
 	// Проверяем флаг подавления внимания
 	suppressed := false
@@ -105,22 +107,22 @@ type frameManager struct {
 
 	// Global standard UI components
 	DisabledCommands CommandSet
-	MenuBar    *MenuBar
-	StatusLine *StatusLine
-	KeyBar     *KeyBar
+	MenuBar          *MenuBar
+	StatusLine       *StatusLine
+	KeyBar           *KeyBar
 
 	capturedFrame Frame // Points to the active screen's captured frame
 
 	// Switcher State
-	ctrlPressed      bool
-	switcherMenu     *VMenu
-	running          bool
+	ctrlPressed  bool
+	switcherMenu *VMenu
+	running      bool
 
-	lastMouseClickTime time.Time
+	lastMouseClickTime     time.Time
 	lastMouseX, lastMouseY int
-	lastMouseButton uint32
-	Reader *vtinput.Reader
-	currentToast *Toast
+	lastMouseButton        uint32
+	Reader                 *vtinput.Reader
+	currentToast           *Toast
 }
 
 type Toast struct {
@@ -130,13 +132,17 @@ type Toast struct {
 
 // ShowToast displays a non-blocking popup message at the top of the screen that disappears after the duration.
 func ShowToast(msg string, dur time.Duration) {
-	if FrameManager == nil { return }
+	if FrameManager == nil {
+		return
+	}
 	FrameManager.PostTask(func() {
 		FrameManager.currentToast = &Toast{Message: msg, Expires: time.Now().Add(dur)}
 		FrameManager.Redraw()
 		go func() {
 			time.Sleep(dur)
-			if FrameManager != nil { FrameManager.Redraw() }
+			if FrameManager != nil {
+				FrameManager.Redraw()
+			}
 		}()
 	})
 }
@@ -204,7 +210,9 @@ func (fm *frameManager) createScreen(f Frame, transparent bool) *AppScreen {
 }
 func (fm *frameManager) AddScreen(f Frame) {
 	// If we are already shutting down or in an inconsistent state, bail out.
-	if fm.Screens == nil { return }
+	if fm.Screens == nil {
+		return
+	}
 
 	fm.SyncCurrentScreen()
 	fm.Screens = append(fm.Screens, fm.createScreen(f, false))
@@ -213,7 +221,9 @@ func (fm *frameManager) AddScreen(f Frame) {
 }
 
 func (fm *frameManager) AddScreenHeadless(f Frame) {
-	if fm.Screens == nil { return }
+	if fm.Screens == nil {
+		return
+	}
 	fm.SyncCurrentScreen()
 	fm.Screens = append(fm.Screens, fm.createScreen(f, true))
 	fm.ActiveIdx = len(fm.Screens) - 1
@@ -288,12 +298,16 @@ func (fm *frameManager) Init(scr *ScreenBuf) {
 			for {
 				if len(queue) == 0 {
 					task, ok := <-fm.taskChanIn
-					if !ok { return }
+					if !ok {
+						return
+					}
 					queue = append(queue, task)
 				} else {
 					select {
 					case task, ok := <-fm.taskChanIn:
-						if !ok { return }
+						if !ok {
+							return
+						}
 						queue = append(queue, task)
 					case fm.TaskChan <- queue[0]:
 						queue[0] = nil
@@ -306,7 +320,6 @@ func (fm *frameManager) Init(scr *ScreenBuf) {
 
 	fm.injectedEvents = make([]*vtinput.InputEvent, 0)
 	SetDefaultPalette()
-
 
 	fm.scr.ThemePalette = &ThemePalette
 
@@ -461,6 +474,7 @@ func (fm *frameManager) Pop() {
 		}
 	}
 }
+
 // RemoveFrame deletes a specific frame from the stack, regardless of its position.
 func (fm *frameManager) RemoveFrame(f Frame) {
 	isTop := len(fm.frames) > 0 && fm.frames[len(fm.frames)-1] == f
@@ -495,12 +509,14 @@ func (fm *frameManager) Redraw() {
 	default:
 	}
 }
+
 // PostTask schedules a function to be executed safely on the main UI thread.
 func (fm *frameManager) PostTask(task func()) {
 	if fm.taskChanIn != nil {
 		fm.taskChanIn <- task
 	}
 }
+
 // EmitCommand broadcasts a command starting from the top-most frame
 // and going down the stack until a frame handles it. (Turbo Vision style)
 func (fm *frameManager) EmitCommand(cmd int, args any) bool {
@@ -544,10 +560,12 @@ func (fm *frameManager) Shutdown() {
 	// In tests we don't actually want to close the channel because
 	// other tests might still have pending background goroutines.
 }
+
 // IsShutdown returns true if the FrameManager has been shut down explicitly.
 func (fm *frameManager) IsShutdown() bool {
 	return fm.Screens == nil
 }
+
 // WaitForFar2lReply safely blocks and waits for a specific Far2l reply from the event channel.
 // Any other events received during this time are stashed to be processed later.
 func (fm *frameManager) WaitForFar2lReply(expectedID uint8, timeout time.Duration) *vtinput.Far2lStack {
@@ -593,7 +611,9 @@ func (fm *frameManager) CycleWindows(forward bool) bool {
 	menu := fm.switcherMenu
 	if forward {
 		newPos := menu.SelectPos - 1
-		if newPos < 0 { newPos = len(menu.Items) - 1 }
+		if newPos < 0 {
+			newPos = len(menu.Items) - 1
+		}
 		menu.SetSelectPos(newPos)
 	} else {
 		newPos := (menu.SelectPos + 1) % len(menu.Items)
@@ -624,7 +644,11 @@ func (fm *frameManager) getScreenInfo(idx int, maxTitleLen int) (prefix, title, 
 		filled := (p * barLen) / 100
 		bar := "["
 		for b := 0; b < barLen; b++ {
-			if b < filled { bar += "#" } else { bar += "." }
+			if b < filled {
+				bar += "#"
+			} else {
+				bar += "."
+			}
 		}
 		suffix = " " + bar + "]"
 	}
@@ -639,14 +663,22 @@ func (fm *frameManager) showScreensMenu() {
 
 	scrW := fm.GetScreenSize()
 	scrH := 25
-	if fm.scr != nil { scrH = fm.scr.height }
+	if fm.scr != nil {
+		scrH = fm.scr.height
+	}
 
 	menuW := (scrW * 60) / 100
-	if menuW < 40 { menuW = 40 }
-	if menuW > 100 { menuW = 100 }
+	if menuW < 40 {
+		menuW = 40
+	}
+	if menuW > 100 {
+		menuW = 100
+	}
 
 	maxTitleLen := menuW - 19
-	if maxTitleLen < 10 { maxTitleLen = 10 }
+	if maxTitleLen < 10 {
+		maxTitleLen = 10
+	}
 
 	for i := range fm.Screens {
 		pre, tit, suf, _ := fm.getScreenInfo(i, maxTitleLen)
@@ -658,7 +690,9 @@ func (fm *frameManager) showScreensMenu() {
 	}
 
 	menuH := len(fm.Screens) + 2
-	if menuH > 15 { menuH = 15 }
+	if menuH > 15 {
+		menuH = 15
+	}
 	x := (scrW - menuW) / 2
 	y := (scrH - menuH) / 2
 	menu.SetPosition(x, y, x+menuW-1, y+menuH-1)
@@ -678,7 +712,9 @@ func (fm *frameManager) cleanupDoneFrames() {
 		wasModified := false
 		for i := len(s.Frames) - 1; i >= 0; i-- {
 			if s.Frames[i].IsDone() {
-				if s.CapturedFrame == s.Frames[i] { s.CapturedFrame = nil }
+				if s.CapturedFrame == s.Frames[i] {
+					s.CapturedFrame = nil
+				}
 				s.Frames = append(s.Frames[:i], s.Frames[i+1:]...)
 				wasModified = true
 				DebugLog("FM: Frame removed from Screen %d. Remaining: %d", sIdx, len(s.Frames))
@@ -727,6 +763,7 @@ func (fm *frameManager) cleanupOrphanedMenus() {
 		activeMenu.closeSub()
 	}
 }
+
 // GetTopFrameType returns the type of the topmost frame or -1 if empty.
 func (fm *frameManager) GetTopFrameType() FrameType {
 	if len(fm.frames) == 0 {
@@ -743,11 +780,15 @@ func (fm *frameManager) GetTopFrame() Frame {
 }
 
 func (fm *frameManager) GetScreenSize() int {
-	if fm.scr == nil { return 80 }
+	if fm.scr == nil {
+		return 80
+	}
 	return fm.scr.width
 }
 func (fm *frameManager) GetScreenHeight() int {
-	if fm.scr == nil { return 25 }
+	if fm.scr == nil {
+		return 25
+	}
 	return fm.scr.height
 }
 func (fm *frameManager) GetSyncStats() string {
@@ -985,9 +1026,14 @@ func (fm *frameManager) Run(reader *vtinput.Reader) {
 			select {
 			case ev, ok := <-fm.EventChan:
 				if !idleTimer.Stop() {
-					select { case <-idleTimer.C: default: }
+					select {
+					case <-idleTimer.C:
+					default:
+					}
 				}
-				if !ok { return }
+				if !ok {
+					return
+				}
 				if len(fm.frames) > 0 {
 					fm.dispatchEvent(ev, false)
 				}
@@ -995,7 +1041,10 @@ func (fm *frameManager) Run(reader *vtinput.Reader) {
 				continue
 			case task := <-fm.TaskChan:
 				if !idleTimer.Stop() {
-					select { case <-idleTimer.C: default: }
+					select {
+					case <-idleTimer.C:
+					default:
+					}
 				}
 				task()
 				fm.cleanupDoneFrames()
@@ -1016,7 +1065,7 @@ func (fm *frameManager) renderPhase() {
 	renderPhaseStart := time.Now()
 	if fm.scr != nil && fm.scr.Renderer != nil {
 		// Only log periodically to avoid performance hit
-		if (time.Now().UnixMilli() / 1000) % 5 == 0 {
+		if (time.Now().UnixMilli()/1000)%5 == 0 {
 			DebugLog("FM: renderPhase() for screen %dx%d, stack depth: %d, top frame: %q",
 				fm.scr.width, fm.scr.height, len(fm.frames), fm.frames[len(fm.frames)-1].GetTitle())
 		}
@@ -1110,7 +1159,9 @@ func (fm *frameManager) renderPhase() {
 				msg := " " + fm.currentToast.Message + " "
 				attr := SetRGBBoth(0, 0xFFFFFF, 0x444444) // White on Dark Gray
 				x := (fm.scr.width - runewidth.StringWidth(msg)) / 2
-				if x < 0 { x = 0 }
+				if x < 0 {
+					x = 0
+				}
 				fm.scr.Write(x, 0, StringToCharInfo(msg, attr))
 			}
 		}
@@ -1255,7 +1306,7 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 			}
 			return // Don't pass keys to background frames when menu is active
 		}
-	} else if (ev.Type == vtinput.KeyEventType && !ev.KeyDown) {
+	} else if ev.Type == vtinput.KeyEventType && !ev.KeyDown {
 		DebugLog("INPUT: KeyRelease VK=%s Char=%d (Stack: %d frames, ActiveIdx: %d)", vtinput.VKString(ev.VirtualKeyCode), ev.Char, len(fm.frames), fm.ActiveIdx)
 	}
 
@@ -1318,9 +1369,9 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 				x1, y1, x2, y2 := f.GetPosition()
 				hitShadow := f.HasShadow() && mx >= x1 && mx <= x2+2 && my >= y1 && my <= y2+1
 
-		if f.HitTest(mx, my) || hitShadow {
-			if i != len(fm.frames)-1 {
-				DebugLog("FM: Mouse hit background frame %d (type %d), requesting focus.", i, f.GetType())
+				if f.HitTest(mx, my) || hitShadow {
+					if i != len(fm.frames)-1 {
+						DebugLog("FM: Mouse hit background frame %d (type %d), requesting focus.", i, f.GetType())
 						// Try to bring it to front before passing the event
 						if fm.RequestFocus(f) {
 							handled = f.ProcessMouse(ev)

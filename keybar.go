@@ -82,7 +82,9 @@ func (kb *KeyBar) ProcessMouse(e *vtinput.InputEvent) bool {
 }
 
 func (kb *KeyBar) DisplayObject(scr *ScreenBuf) {
-	if !kb.IsVisible() { return }
+	if !kb.IsVisible() {
+		return
+	}
 
 	labels := kb.Normal
 	if kb.shiftState {
@@ -98,7 +100,9 @@ func (kb *KeyBar) DisplayObject(scr *ScreenBuf) {
 
 	width := kb.X2 - kb.X1 + 1
 	slotWidth := width / 12
-	if slotWidth < 3 { slotWidth = 3 }
+	if slotWidth < 3 {
+		slotWidth = 3
+	}
 
 	numAttr := Palette[ColKeyBarNum]
 	textAttr := Palette[ColKeyBarText]
@@ -108,7 +112,9 @@ func (kb *KeyBar) DisplayObject(scr *ScreenBuf) {
 
 	for i := 0; i < 12; i++ {
 		x := kb.X1 + (i * slotWidth)
-		if x > kb.X2 { break }
+		if x > kb.X2 {
+			break
+		}
 
 		// 1. Draw number
 		numStr := fmt.Sprintf("%d", i+1)

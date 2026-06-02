@@ -117,7 +117,7 @@ func SetDefaultPalette() {
 	// Help (Match far2l: DarkGray on LightGray/White)
 	Palette[ColHelpText] = SetRGBBoth(0, black, 0xD3D7CF)
 	Palette[ColHelpBold] = SetRGBBoth(0, white, 0xD3D7CF)
-	Palette[ColHelpLink] = SetRGBBoth(0, 0x0000A0, 0xD3D7CF) // Blue links
+	Palette[ColHelpLink] = SetRGBBoth(0, 0x0000A0, 0xD3D7CF)      // Blue links
 	Palette[ColHelpSelectedLink] = SetRGBBoth(0, white, 0x0000A0) // White on Blue
 	Palette[ColHelpBox] = Palette[ColHelpText]
 }

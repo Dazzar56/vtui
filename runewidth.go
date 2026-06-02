@@ -32,6 +32,7 @@ func ExtractHotkey(s string) rune {
 		return 0
 	}
 }
+
 // StringToCharInfo converts a string into a slice of CharInfo cells,
 // correctly handling double-width characters by inserting WideCharFillers.
 // It currently ignores zero-width characters to keep cell alignment strict.

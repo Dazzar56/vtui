@@ -7,18 +7,18 @@ import (
 	"io"
 	"sync"
 
-	"github.com/neurlang/wayland/wl"
 	window "github.com/neurlang/wayland/windowtrace"
+	"github.com/neurlang/wayland/wl"
 	"github.com/unxed/vtinput"
 )
 
 // WaylandHost encapsulates the connection to the Wayland compositor.
 type WaylandHost struct {
-	mu         sync.Mutex
-	display    *window.Display
-	win        *window.Window
-	widget     *window.Widget
-	reader     *vtinput.Reader
+	mu      sync.Mutex
+	display *window.Display
+	win     *window.Window
+	widget  *window.Widget
+	reader  *vtinput.Reader
 
 	imgBuf     *image.RGBA
 	cols, rows int
@@ -26,9 +26,9 @@ type WaylandHost struct {
 	cellH      int
 	scale      int
 
-	mouseX     int
-	mouseY     int
-	mouseBtn   uint32
+	mouseX   int
+	mouseY   int
+	mouseBtn uint32
 }
 
 func runInWaylandWindow(cols, rows int, setupApp func()) error {
@@ -142,7 +142,7 @@ func (h *WaylandHost) Redraw(widget *window.Widget) {
 				// Cairo format: ARGB32 native (BGRA in memory on little endian)
 				dIdx := dstOff + x*4
 				sIdx := srcOff + x*4
-				dst[dIdx]   = src.Pix[sIdx+2] // B
+				dst[dIdx] = src.Pix[sIdx+2]   // B
 				dst[dIdx+1] = src.Pix[sIdx+1] // G
 				dst[dIdx+2] = src.Pix[sIdx]   // R
 				dst[dIdx+3] = 255             // A
@@ -182,9 +182,12 @@ func (h *WaylandHost) Button(w *window.Widget, input *window.Input, time uint32,
 
 	// Wayland standard button codes (linux/input-event-codes.h)
 	switch button {
-	case 272: bs = vtinput.FromLeft1stButtonPressed // BTN_LEFT
-	case 273: bs = vtinput.RightmostButtonPressed   // BTN_RIGHT
-	case 274: bs = vtinput.FromLeft2ndButtonPressed // BTN_MIDDLE
+	case 272:
+		bs = vtinput.FromLeft1stButtonPressed // BTN_LEFT
+	case 273:
+		bs = vtinput.RightmostButtonPressed // BTN_RIGHT
+	case 274:
+		bs = vtinput.FromLeft2ndButtonPressed // BTN_MIDDLE
 	}
 
 	h.mouseBtn = bs
@@ -258,12 +261,16 @@ func (h *WaylandHost) getMods(input *window.Input) vtinput.ControlKeyState {
 
 // Unused Handlers to satisfy interface
 func (h *WaylandHost) Focus(w *window.Window, device *window.Input) {}
-func (h *WaylandHost) TouchUp(w *window.Widget, i *window.Input, serial uint32, time uint32, id int32) {}
-func (h *WaylandHost) TouchDown(w *window.Widget, i *window.Input, serial uint32, time uint32, id int32, x float32, y float32) {}
-func (h *WaylandHost) TouchMotion(w *window.Widget, i *window.Input, time uint32, id int32, x float32, y float32) {}
-func (h *WaylandHost) TouchFrame(w *window.Widget, i *window.Input) {}
+func (h *WaylandHost) TouchUp(w *window.Widget, i *window.Input, serial uint32, time uint32, id int32) {
+}
+func (h *WaylandHost) TouchDown(w *window.Widget, i *window.Input, serial uint32, time uint32, id int32, x float32, y float32) {
+}
+func (h *WaylandHost) TouchMotion(w *window.Widget, i *window.Input, time uint32, id int32, x float32, y float32) {
+}
+func (h *WaylandHost) TouchFrame(w *window.Widget, i *window.Input)            {}
 func (h *WaylandHost) TouchCancel(w *window.Widget, width int32, height int32) {}
-func (h *WaylandHost) Axis(w *window.Widget, i *window.Input, time uint32, axis uint32, value float32) {}
-func (h *WaylandHost) AxisSource(w *window.Widget, i *window.Input, source uint32) {}
+func (h *WaylandHost) Axis(w *window.Widget, i *window.Input, time uint32, axis uint32, value float32) {
+}
+func (h *WaylandHost) AxisSource(w *window.Widget, i *window.Input, source uint32)          {}
 func (h *WaylandHost) AxisStop(w *window.Widget, i *window.Input, time uint32, axis uint32) {}
-func (h *WaylandHost) PointerFrame(w *window.Widget, i *window.Input) {}
+func (h *WaylandHost) PointerFrame(w *window.Widget, i *window.Input)                       {}

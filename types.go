@@ -28,18 +28,19 @@ type SmallRect struct {
 type CharInfo struct {
 	Char       uint64 // Equivalent to union with COMP_CHAR UnicodeChar
 	Attributes uint64 // DWORD64 Equivalent Attributes (lower 16 bits are flags, 16-39 are Fore RGB, 40-63 are Back RGB)
-}// GrowMode flags for responsive layout resizing (analogous to Turbo Vision)
+} // GrowMode flags for responsive layout resizing (analogous to Turbo Vision)
 type GrowMode int
 
 const (
-	GrowNone   GrowMode = 0
-	GrowLoX    GrowMode = 0x01
-	GrowHiX    GrowMode = 0x02
-	GrowLoY    GrowMode = 0x04
-	GrowHiY    GrowMode = 0x08
-	GrowAll    GrowMode = 0x0f
-	GrowRel    GrowMode = 0x10
+	GrowNone GrowMode = 0
+	GrowLoX  GrowMode = 0x01
+	GrowHiX  GrowMode = 0x02
+	GrowLoY  GrowMode = 0x04
+	GrowHiY  GrowMode = 0x08
+	GrowAll  GrowMode = 0x0f
+	GrowRel  GrowMode = 0x10
 )
+
 // LinkAction defines how a target element reacts to a source element's state change.
 type LinkAction int
 
@@ -49,6 +50,7 @@ const (
 	LinkShowIfChecked
 	LinkHideIfChecked
 )
+
 // UIElement is the interface that all screen objects (widgets, frames, windows) implement.
 type UIElement interface {
 	GetPosition() (int, int, int, int)
@@ -88,10 +90,12 @@ type DataControl interface {
 	SetData(value any)
 	GetData() any
 }
+
 // FocusContainer is an interface for UI elements that manage a focusable child.
 type FocusContainer interface {
 	GetFocusedItem() UIElement
 }
+
 // Highlighter defines a capability to provide syntax coloring.
 type Highlighter interface {
 	// Highlight processes a line of text.
@@ -110,6 +114,7 @@ type HighlighterProvider interface {
 	// Create generates a new Highlighter instance for a specific file.
 	Create(filename string, content string) Highlighter
 }
+
 // SurfaceRenderer определяет, как логический буфер CharInfo переносится на экран.
 type CursorShape int
 

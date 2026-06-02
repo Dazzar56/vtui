@@ -59,6 +59,7 @@ func (so *ScreenObject) SetOwner(owner CommandHandler) {
 func (so *ScreenObject) GetOwner() CommandHandler {
 	return so.owner
 }
+
 // NotifyChange informs the owner that the element's data or state has changed.
 func (so *ScreenObject) NotifyChange() {
 	if so.owner != nil {
@@ -86,6 +87,7 @@ func (so *ScreenObject) WantsChars() bool {
 func (so *ScreenObject) GetFocusLink() UIElement {
 	return nil
 }
+
 // SetPosition sets the object's coordinates.
 // Important: this does not trigger a redraw.
 func (so *ScreenObject) SetPosition(x1, y1, x2, y2 int) {
@@ -117,6 +119,7 @@ func (so *ScreenObject) Hide(scr *ScreenBuf) {
 func (so *ScreenObject) IsVisible() bool {
 	return so.visible
 }
+
 // SetVisible manually sets the visibility flag.
 func (so *ScreenObject) SetVisible(v bool) {
 	so.visible = v
@@ -143,6 +146,7 @@ func (so *ScreenObject) SetCanFocus(c bool) {
 func (so *ScreenObject) CanFocus() bool {
 	return so.canFocus
 }
+
 // IsDisabled returns true if the object is explicitly disabled.
 func (so *ScreenObject) IsDisabled() bool {
 	return so.disabled
@@ -236,6 +240,7 @@ func (so *ScreenObject) GetKeyLabels() *KeySet {
 func (so *ScreenObject) GetMenuBar() *MenuBar {
 	return nil
 }
+
 // GetStateAttr returns the appropriate color attribute based on focus and disabled states.
 func (so *ScreenObject) GetStateAttr(normIdx, focIdx int) uint64 {
 	idx := normIdx
@@ -253,6 +258,7 @@ func (so *ScreenObject) GetStateAttr(normIdx, focIdx int) uint64 {
 func (so *ScreenObject) GetStateAttrs(normIdx, focIdx, highIdx, focHighIdx int) (uint64, uint64) {
 	return so.GetStateAttr(normIdx, focIdx), so.GetStateAttr(highIdx, focHighIdx)
 }
+
 // FireAction centralizes the logic for executing an optional callback or emitting the internal Command.
 // It gives priority to the callback.
 func (so *ScreenObject) FireAction(callback func(), args any) bool {
@@ -265,6 +271,7 @@ func (so *ScreenObject) FireAction(callback func(), args any) bool {
 	}
 	return false
 }
+
 // HandleCommand is the default implementation for command routing.
 // It bubbles the command up to the owner.
 func (so *ScreenObject) HandleCommand(cmd int, args any) bool {

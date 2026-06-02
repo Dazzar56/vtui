@@ -1,8 +1,8 @@
 package vtui
 
 import (
-	"strings"
 	"github.com/mattn/go-runewidth"
+	"strings"
 )
 
 // WrapText splits a string into an array of strings not exceeding maxWidth.
@@ -83,7 +83,7 @@ func WrapText(text string, maxWidth int) []string {
 	}
 
 	return result
-}// TruncateMiddle shortens a string by removing characters from the middle
+} // TruncateMiddle shortens a string by removing characters from the middle
 // and replacing them with "...".
 func TruncateMiddle(s string, maxLen int) string {
 	runes := []rune(s)

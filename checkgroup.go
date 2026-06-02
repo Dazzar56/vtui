@@ -36,15 +36,19 @@ func (cg *CheckGroup) SetData(val any) {
 func NewCheckGroup(x, y, cols int, items []string) *CheckGroup {
 	cg := &CheckGroup{Items: items, States: make([]bool, len(items))}
 	cg.canFocus = true
-	if cols < 1 { cols = 1 }
+	if cols < 1 {
+		cols = 1
+	}
 	cg.Columns = cols
-	
+
 	rows := (len(items) + cols - 1) / cols
 	cg.colWidths = calcGridColWidths(cols, items)
 
 	totalW := 0
-	for _, w := range cg.colWidths { totalW += w }
-	
+	for _, w := range cg.colWidths {
+		totalW += w
+	}
+
 	cg.SetPosition(x, y, x+totalW-1, y+rows-1)
 	return cg
 }
@@ -55,7 +59,9 @@ func (cg *CheckGroup) Show(scr *ScreenBuf) {
 }
 
 func (cg *CheckGroup) DisplayObject(scr *ScreenBuf) {
-	if !cg.IsVisible() { return }
+	if !cg.IsVisible() {
+		return
+	}
 
 	attr := Palette[ColDialogText]
 	highAttr := Palette[ColDialogHighlightText]
@@ -72,12 +78,16 @@ func (cg *CheckGroup) DisplayObject(scr *ScreenBuf) {
 		}
 
 		prefix := "[ ] "
-		if cg.States[i] { prefix = "[x] " }
+		if cg.States[i] {
+			prefix = "[x] "
+		}
 
 		row := i / cg.Columns
 		col := i % cg.Columns
 		cx := cg.X1
-		for c := 0; c < col; c++ { cx += cg.colWidths[c] }
+		for c := 0; c < col; c++ {
+			cx += cg.colWidths[c]
+		}
 
 		p := NewPainter(scr)
 		p.DrawStringHighlighted(cx, cg.Y1+row, prefix+itm, curAttr, curHigh)
@@ -88,7 +98,9 @@ func (cg *CheckGroup) ProcessKey(e *vtinput.InputEvent) bool {
 	if !e.KeyDown {
 		return false
 	}
-	if cg.IsDisabled() { return false }
+	if cg.IsDisabled() {
+		return false
+	}
 
 	newIdx, moved := gridNav(cg.focusIdx, len(cg.Items), cg.Columns, e.VirtualKeyCode)
 	if moved {
@@ -123,7 +135,9 @@ func (cg *CheckGroup) ProcessKey(e *vtinput.InputEvent) bool {
 }
 
 func (cg *CheckGroup) ProcessMouse(e *vtinput.InputEvent) bool {
-	if cg.IsDisabled() { return false }
+	if cg.IsDisabled() {
+		return false
+	}
 	if e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
 		mx, my := int(e.MouseX), int(e.MouseY)
 		if cg.HitTest(mx, my) {

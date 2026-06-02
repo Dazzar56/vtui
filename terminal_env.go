@@ -1,14 +1,14 @@
 package vtui
 
 import (
+	"github.com/unxed/vtinput"
 	"os"
 	"sync"
-	"github.com/unxed/vtinput"
 )
 
 const (
-	seqAltScreenOn      = "\x1b[?1049h"
-	seqAltScreenOff     = "\x1b[?1049l"
+	seqAltScreenOn       = "\x1b[?1049h"
+	seqAltScreenOff      = "\x1b[?1049l"
 	seqBlinkingUnderline = "\x1b[3 q"
 	seqDefaultCursor     = "\x1b[0 q"
 	seqResetPalette      = "\x1b]104\x07"
@@ -16,8 +16,8 @@ const (
 )
 
 var (
-	termMu       sync.Mutex
-	inputRestore func()
+	termMu            sync.Mutex
+	inputRestore      func()
 	isPrepared        bool
 	inAltScreen       bool
 	ManageCursorStyle bool = true

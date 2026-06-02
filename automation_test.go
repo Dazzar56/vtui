@@ -1,8 +1,8 @@
 package vtui
 
 import (
-	"testing"
 	"github.com/unxed/vtinput"
+	"testing"
 )
 
 func TestAutomation_EnableDisable(t *testing.T) {
@@ -70,7 +70,9 @@ func TestAutomation_InverseActions(t *testing.T) {
 	btn := NewButton(2, 4, "Action")
 	lbl := NewLabel(2, 6, "Notice", nil)
 
-	dlg.AddItem(chk); dlg.AddItem(btn); dlg.AddItem(lbl)
+	dlg.AddItem(chk)
+	dlg.AddItem(btn)
+	dlg.AddItem(lbl)
 
 	dlg.AddLink(chk, btn, LinkDisableIfChecked)
 	dlg.AddLink(chk, lbl, LinkHideIfChecked)
@@ -97,16 +99,21 @@ func TestAutomation_BitmaskHandling(t *testing.T) {
 	dlg := NewDialog(0, 0, 40, 10, "Bitmask Test")
 	cg := NewCheckGroup(2, 2, 1, []string{"Option 1"})
 	edit := NewEdit(2, 4, 10, "")
-	dlg.AddItem(cg); dlg.AddItem(edit)
+	dlg.AddItem(cg)
+	dlg.AddItem(edit)
 
 	dlg.AddLink(cg, edit, LinkEnableIfChecked)
 
 	// Initial: mask is 0 -> disabled
-	if !edit.IsDisabled() { t.Error("Should be disabled initially") }
+	if !edit.IsDisabled() {
+		t.Error("Should be disabled initially")
+	}
 
 	// Set first bit -> enabled
 	cg.SetData(uint32(1))
 	cg.NotifyChange()
 
-	if edit.IsDisabled() { t.Error("Should be enabled when bitmask is non-zero") }
+	if edit.IsDisabled() {
+		t.Error("Should be enabled when bitmask is non-zero")
+	}
 }

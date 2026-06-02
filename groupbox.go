@@ -29,7 +29,9 @@ func (gb *GroupBox) Show(scr *ScreenBuf) {
 }
 
 func (gb *GroupBox) DisplayObject(scr *ScreenBuf) {
-	if !gb.IsVisible() { return }
+	if !gb.IsVisible() {
+		return
+	}
 	p := NewPainter(scr)
 
 	p.DrawBox(gb.X1, gb.Y1, gb.X2, gb.Y2, Palette[gb.ColorBoxIdx], SingleBox)
@@ -38,6 +40,3 @@ func (gb *GroupBox) DisplayObject(scr *ScreenBuf) {
 
 	gb.Group.DisplayObject(scr)
 }
-
-
-

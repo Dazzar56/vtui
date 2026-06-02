@@ -29,7 +29,6 @@ type VMenu struct {
 	HideShadow bool
 }
 
-
 // NewVMenu creates a new vertical menu instance.
 func NewVMenu(title string) *VMenu {
 	clean, _, _ := ParseAmpersandString(title)
@@ -72,7 +71,9 @@ func (m *VMenu) GetItemCount() int { return len(m.Items) }
 
 // ProcessKey processes navigation keys.
 func (m *VMenu) ProcessKey(e *vtinput.InputEvent) bool {
-	if m.IsDisabled() || !e.KeyDown { return false }
+	if m.IsDisabled() || !e.KeyDown {
+		return false
+	}
 
 	if m.OnKeyDown != nil && m.OnKeyDown(e) {
 		return true
@@ -96,13 +97,19 @@ func (m *VMenu) ProcessKey(e *vtinput.InputEvent) bool {
 			return true
 		}
 		// If last item in standalone menu, let focus cycle (unless wrapping is on)
-		if m.SelectPos == m.ItemCount-1 && !m.Wrap { return false }
+		if m.SelectPos == m.ItemCount-1 && !m.Wrap {
+			return false
+		}
 		return m.HandleKey(e)
 	case vtinput.VK_UP:
-		if m.SelectPos == 0 && !isSubMenu && !m.Wrap { return false }
+		if m.SelectPos == 0 && !isSubMenu && !m.Wrap {
+			return false
+		}
 		return m.HandleKey(e)
 	case vtinput.VK_DOWN:
-		if m.SelectPos == m.ItemCount-1 && !isSubMenu && !m.Wrap { return false }
+		if m.SelectPos == m.ItemCount-1 && !isSubMenu && !m.Wrap {
+			return false
+		}
 		return m.HandleKey(e)
 	case vtinput.VK_PRIOR: // PgUp
 		m.SetSelectPos(0)
@@ -111,12 +118,17 @@ func (m *VMenu) ProcessKey(e *vtinput.InputEvent) bool {
 		m.SetSelectPos(m.ItemCount - 1)
 		return true
 	case vtinput.VK_ESCAPE, vtinput.VK_F10:
-		m.SetExitCode(-1); return FrameManager.GetTopFrame() == Frame(m)
+		m.SetExitCode(-1)
+		return FrameManager.GetTopFrame() == Frame(m)
 	case vtinput.VK_RETURN:
 		if m.SelectPos >= 0 && m.SelectPos < m.ItemCount {
 			item := m.Items[m.SelectPos]
-			if item.Separator { return true }
-			if FrameManager.DisabledCommands.IsDisabled(item.Command) { return true }
+			if item.Separator {
+				return true
+			}
+			if FrameManager.DisabledCommands.IsDisabled(item.Command) {
+				return true
+			}
 
 			// 1. Fire the actual action (bubbles through owner)
 			oldCmd := m.Command
@@ -125,7 +137,9 @@ func (m *VMenu) ProcessKey(e *vtinput.InputEvent) bool {
 			m.Command = oldCmd
 
 			// 2. Notify listener (may close the menu)
-			if m.OnAction != nil { m.OnAction(m.SelectPos) }
+			if m.OnAction != nil {
+				m.OnAction(m.SelectPos)
+			}
 
 			m.SetExitCode(m.SelectPos)
 			return true
@@ -137,7 +151,9 @@ func (m *VMenu) ProcessKey(e *vtinput.InputEvent) bool {
 		charLower := unicode.ToLower(e.Char)
 		xlatLower := unicode.ToLower(GlobalXlator.Translate(e.Char))
 		for i, item := range m.Items {
-			if item.Separator { continue }
+			if item.Separator {
+				continue
+			}
 			hk := ExtractHotkey(item.Text)
 			if hk != 0 && (hk == charLower || hk == xlatLower) {
 				if FrameManager.DisabledCommands.IsDisabled(item.Command) {
@@ -150,7 +166,9 @@ func (m *VMenu) ProcessKey(e *vtinput.InputEvent) bool {
 				m.FireAction(item.OnClick, item.UserData)
 				m.Command = oldCmd
 
-				if m.OnAction != nil { m.OnAction(i) }
+				if m.OnAction != nil {
+					m.OnAction(i)
+				}
 
 				m.SetExitCode(i)
 				return true
@@ -186,13 +204,14 @@ func (m *VMenu) SetExitCode(code int) {
 func (m *VMenu) IsDone() bool {
 	return m.done
 }
-func (m *VMenu) IsBusy() bool { return false }
-func (m *VMenu) IsModal() bool { return true }
-func (m *VMenu) GetWindowNumber() int { return 0 }
+func (m *VMenu) IsBusy() bool          { return false }
+func (m *VMenu) IsModal() bool         { return true }
+func (m *VMenu) GetWindowNumber() int  { return 0 }
 func (m *VMenu) SetWindowNumber(n int) {}
-func (m *VMenu) RequestFocus() bool { return true }
-func (m *VMenu) Close() { m.SetExitCode(-1) }
-func (m *VMenu) HasShadow() bool { return !m.HideShadow }
+func (m *VMenu) RequestFocus() bool    { return true }
+func (m *VMenu) Close()                { m.SetExitCode(-1) }
+func (m *VMenu) HasShadow() bool       { return !m.HideShadow }
+
 // ClearDone resets the menu state, allowing it to be shown again.
 func (m *VMenu) ClearDone() {
 	m.done = false
@@ -201,8 +220,12 @@ func (m *VMenu) ClearDone() {
 
 // ProcessMouse handles mouse wheel scrolling and menu item clicks.
 func (m *VMenu) ProcessMouse(e *vtinput.InputEvent) bool {
-	if m.IsDisabled() || e.Type != vtinput.MouseEventType { return false }
-	if m.HandleMouseScroll(e) { return true }
+	if m.IsDisabled() || e.Type != vtinput.MouseEventType {
+		return false
+	}
+	if m.HandleMouseScroll(e) {
+		return true
+	}
 
 	if e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
 		clickIdx := m.GetClickIndex(int(e.MouseY))
@@ -229,7 +252,6 @@ func (m *VMenu) ProcessMouse(e *vtinput.InputEvent) bool {
 	return false
 }
 
-
 // Show prepares the background and calls the render method.
 func (m *VMenu) Show(scr *ScreenBuf) {
 	m.ScreenObject.Show(scr)
@@ -238,7 +260,9 @@ func (m *VMenu) Show(scr *ScreenBuf) {
 
 // DisplayObject renders the frame and menu items.
 func (m *VMenu) DisplayObject(scr *ScreenBuf) {
-	if !m.IsVisible() { return }
+	if !m.IsVisible() {
+		return
+	}
 	p := NewPainter(scr)
 
 	// 1. Frame and Background
@@ -255,7 +279,9 @@ func (m *VMenu) DisplayObject(scr *ScreenBuf) {
 	colSel := Palette[ColMenuSelectedText]
 	colBox := Palette[ColMenuBox]
 	height := m.Y2 - m.Y1 - 1
-	if height < 0 { height = 0 }
+	if height < 0 {
+		height = 0
+	}
 
 	colHigh := Palette[ColMenuHighlight]
 	colSelHigh := Palette[ColMenuSelectedHighlight]
@@ -264,8 +290,12 @@ func (m *VMenu) DisplayObject(scr *ScreenBuf) {
 	for i := 0; i < height; i++ {
 		itemIdx := i + m.TopPos
 		currY := m.Y1 + 1 + i
-		if currY >= m.Y2 { break }
-		if itemIdx >= len(m.Items) { continue }
+		if currY >= m.Y2 {
+			break
+		}
+		if itemIdx >= len(m.Items) {
+			continue
+		}
 
 		item := m.Items[itemIdx]
 		isDisabled := !item.Separator && FrameManager.DisabledCommands.IsDisabled(item.Command)
@@ -316,4 +346,3 @@ func (m *VMenu) DisplayObject(scr *ScreenBuf) {
 	// 4. Scrollbar
 	m.DrawScrollBar(scr)
 }
-

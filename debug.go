@@ -48,6 +48,7 @@ func ConfigDiskLogging(enabled bool) {
 	}
 	logMu.Unlock()
 }
+
 // DebugLog writes a timestamped message to debug.log file.
 // If the file exists at the start of the session, it is rotated
 // (up to 3 files: debug.log, debug.1.log, debug.2.log).

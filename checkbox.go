@@ -1,8 +1,8 @@
 package vtui
 
 import (
-	"github.com/unxed/vtinput"
 	"github.com/mattn/go-runewidth"
+	"github.com/unxed/vtinput"
 )
 
 // Checkbox represents a flag with 2 or 3 states.
@@ -12,7 +12,6 @@ type Checkbox struct {
 	ThreeState bool // Enable support for the third state
 	OnChange   func(int)
 }
-
 
 func NewCheckbox(x, y int, text string, threeState bool) *Checkbox {
 	cb := &Checkbox{ThreeState: threeState}
@@ -31,11 +30,17 @@ func (cb *Checkbox) Show(scr *ScreenBuf) {
 }
 
 func (cb *Checkbox) DisplayObject(scr *ScreenBuf) {
-	if !cb.IsVisible() { return }
+	if !cb.IsVisible() {
+		return
+	}
 	n, h := cb.GetStateAttrs(ColDialogText, ColDialogSelectedButton, ColDialogHighlightText, ColDialogHighlightSelectedButton)
 
 	mark := " "
-	if cb.State == 1 { mark = "x" } else if cb.State == 2 { mark = "?" }
+	if cb.State == 1 {
+		mark = "x"
+	} else if cb.State == 2 {
+		mark = "?"
+	}
 	prefix := "[" + mark + "] "
 
 	p := NewPainter(scr)
@@ -44,8 +49,12 @@ func (cb *Checkbox) DisplayObject(scr *ScreenBuf) {
 }
 
 func (cb *Checkbox) ProcessKey(e *vtinput.InputEvent) bool {
-	if !e.KeyDown { return false }
-	if cb.IsDisabled() { return false }
+	if !e.KeyDown {
+		return false
+	}
+	if cb.IsDisabled() {
+		return false
+	}
 
 	if e.VirtualKeyCode == vtinput.VK_SPACE || e.Char == ' ' {
 		cb.Toggle()
@@ -55,7 +64,9 @@ func (cb *Checkbox) ProcessKey(e *vtinput.InputEvent) bool {
 }
 
 func (cb *Checkbox) ProcessMouse(e *vtinput.InputEvent) bool {
-	if cb.IsDisabled() { return false }
+	if cb.IsDisabled() {
+		return false
+	}
 	if e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
 		cb.Toggle()
 		return true

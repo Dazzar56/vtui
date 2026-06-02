@@ -11,7 +11,7 @@ type listRow struct {
 }
 
 func (r listRow) GetCellText(col int) string { return r.lb.Items[r.idx] }
-func (r listRow) IsSelected() bool { return r.lb.SelectedMap[r.idx] }
+func (r listRow) IsSelected() bool           { return r.lb.SelectedMap[r.idx] }
 
 // ListBox is a single-column Table for simple string selection.
 type ListBox struct {
@@ -50,10 +50,13 @@ func (lb *ListBox) UpdateRows() {
 func (lb *ListBox) GetSelectedIndices() []int {
 	var res []int
 	for i := range lb.Items {
-		if lb.SelectedMap[i] { res = append(res, i) }
+		if lb.SelectedMap[i] {
+			res = append(res, i)
+		}
 	}
 	return res
 }
+
 // SelectName searches for an item by its string value and moves the cursor to it.
 func (lb *ListBox) SelectName(name string) {
 	for i, item := range lb.Items {
@@ -72,12 +75,16 @@ func (lb *ListBox) SetPosition(x1, y1, x2, y2 int) {
 }
 
 func (lb *ListBox) ProcessKey(e *vtinput.InputEvent) bool {
-	if !e.KeyDown || lb.IsDisabled() { return false }
+	if !e.KeyDown || lb.IsDisabled() {
+		return false
+	}
 	switch e.VirtualKeyCode {
 	case vtinput.VK_SPACE, vtinput.VK_INSERT:
 		if lb.MultiSelect {
 			lb.SelectedMap[lb.SelectPos] = !lb.SelectedMap[lb.SelectPos]
-			if e.VirtualKeyCode == vtinput.VK_INSERT { lb.MoveRelative(1) }
+			if e.VirtualKeyCode == vtinput.VK_INSERT {
+				lb.MoveRelative(1)
+			}
 			return true
 		}
 	}

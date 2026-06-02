@@ -26,12 +26,18 @@ func (t *Text) Show(scr *ScreenBuf) {
 }
 
 func (t *Text) DisplayObject(scr *ScreenBuf) {
-	if !t.IsVisible() { return }
+	if !t.IsVisible() {
+		return
+	}
 	width := t.X2 - t.X1 + 1
-	if width <= 0 { return }
+	if width <= 0 {
+		return
+	}
 
 	attr, highAttr := t.GetStateAttrs(ColDialogText, ColDialogText, ColDialogHighlightText, ColDialogHighlightText)
-	if t.color != 0 && !t.IsDisabled() { attr = t.color }
+	if t.color != 0 && !t.IsDisabled() {
+		attr = t.color
+	}
 
 	// Systemic prevention: truncate text to component width
 	txt := runewidth.Truncate(t.cleanText, width, "")

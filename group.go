@@ -101,9 +101,12 @@ func (g *Group) syncLinks() {
 		if dc, ok := l.src.(DataControl); ok {
 			val := dc.GetData()
 			switch v := val.(type) {
-			case bool: isChecked = v
-			case int: isChecked = v != 0
-			case uint32: isChecked = v != 0
+			case bool:
+				isChecked = v
+			case int:
+				isChecked = v != 0
+			case uint32:
+				isChecked = v != 0
 			}
 		}
 
@@ -111,10 +114,14 @@ func (g *Group) syncLinks() {
 		visible := l.target.IsVisible()
 
 		switch l.action {
-		case LinkEnableIfChecked: enabled = isChecked
-		case LinkDisableIfChecked: enabled = !isChecked
-		case LinkShowIfChecked: visible = isChecked
-		case LinkHideIfChecked: visible = !isChecked
+		case LinkEnableIfChecked:
+			enabled = isChecked
+		case LinkDisableIfChecked:
+			enabled = !isChecked
+		case LinkShowIfChecked:
+			visible = isChecked
+		case LinkHideIfChecked:
+			visible = !isChecked
 		}
 
 		l.target.SetDisabled(!enabled)
@@ -170,7 +177,7 @@ func (g *Group) ProcessKey(e *vtinput.InputEvent) bool {
 	if e.Char != 0 {
 		charLower := unicode.ToLower(e.Char)
 		xlatLower := unicode.ToLower(GlobalXlator.Translate(e.Char))
-		alt := (e.ControlKeyState&(vtinput.LeftAltPressed|vtinput.RightAltPressed)) != 0
+		alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 		allowWithoutAlt := true
 		if g.focusIdx != -1 && g.items[g.focusIdx].WantsChars() {
 			allowWithoutAlt = false
@@ -280,6 +287,7 @@ func (g *Group) CanFocus() bool {
 	}
 	return false
 }
+
 // SetFocus handles focus delegation for the group.
 func (g *Group) SetFocus(f bool) {
 	g.ScreenObject.SetFocus(f)
@@ -295,6 +303,7 @@ func (g *Group) SetFocus(f bool) {
 		}
 	}
 }
+
 // ActivateHotkey finds and activates an element by its hotkey recursively.
 func (g *Group) ActivateHotkey(hk rune) bool {
 	for i, item := range g.items {
@@ -302,7 +311,9 @@ func (g *Group) ActivateHotkey(hk rune) bool {
 			target := item
 			visited := make(map[UIElement]bool)
 			for target.GetFocusLink() != nil {
-				if visited[target] { break }
+				if visited[target] {
+					break
+				}
 				visited[target] = true
 				target = target.GetFocusLink()
 			}
@@ -311,7 +322,10 @@ func (g *Group) ActivateHotkey(hk rune) bool {
 				// Search if the resolved target is a direct sibling in this group
 				foundIdx := -1
 				for j, itm := range g.items {
-					if itm == target { foundIdx = j; break }
+					if itm == target {
+						foundIdx = j
+						break
+					}
 				}
 				if foundIdx != -1 {
 					g.setFocus(foundIdx)

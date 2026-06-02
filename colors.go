@@ -2,14 +2,14 @@ package vtui
 
 // Basic color and attribute constants (matching WinCompat.h)
 const (
-	IsFgRGB             uint64 = 0x0100 // Flag: Foreground is 24-bit RGB. If false, it's an 8-bit index.
-	IsBgRGB             uint64 = 0x0200 // Flag: Background is 24-bit RGB. If false, it's an 8-bit index.
+	IsFgRGB uint64 = 0x0100 // Flag: Foreground is 24-bit RGB. If false, it's an 8-bit index.
+	IsBgRGB uint64 = 0x0200 // Flag: Background is 24-bit RGB. If false, it's an 8-bit index.
 
 	ForegroundIntensity uint64 = 0x0008 // Retained for SGR Bold style
 	BackgroundIntensity uint64 = 0x0080 // Retained for style flags
 
-	ExplicitLineBreak   uint64 = 0x0400 // Don't concatenate next line if this char is last
-	ImportantLineChar   uint64 = 0x0800 // Dont skip this character when recomposing
+	ExplicitLineBreak uint64 = 0x0400 // Don't concatenate next line if this char is last
+	ImportantLineChar uint64 = 0x0800 // Dont skip this character when recomposing
 
 	ForegroundDim       uint64 = 0x1000 // Extra flag for dim text
 	CommonLvbStrikeout  uint64 = 0x2000 // Strikeout.
@@ -45,7 +45,7 @@ func SetRGBBack(attr uint64, rgb uint32) uint64 {
 func SetRGBBoth(attr uint64, rgbFore uint32, rgbBack uint32) uint64 {
 	return (attr & 0xFFFF) | ForegroundTrueColor | BackgroundTrueColor |
 		((uint64(rgbFore) & 0xFFFFFF) << 16) | ((uint64(rgbBack) & 0xFFFFFF) << 40)
-}// GetIndexFore extracts the 8-bit foreground index from attributes.
+} // GetIndexFore extracts the 8-bit foreground index from attributes.
 func GetIndexFore(attr uint64) uint8 {
 	return uint8((attr >> 16) & 0xFF)
 }
@@ -57,18 +57,19 @@ func GetIndexBack(attr uint64) uint8 {
 
 // SetIndexFore sets the 8-bit foreground index, clearing the IsFgRGB flag.
 func SetIndexFore(attr uint64, idx uint8) uint64 {
-	return (attr & 0xFFFFFF000000FFFF) & ^IsFgRGB | (uint64(idx) << 16)
+	return (attr&0xFFFFFF000000FFFF) & ^IsFgRGB | (uint64(idx) << 16)
 }
 
 // SetIndexBack sets the 8-bit background index, clearing the IsBgRGB flag.
 func SetIndexBack(attr uint64, idx uint8) uint64 {
-	return (attr & 0x000000FFFFFFFFFF) & ^IsBgRGB | (uint64(idx) << 40)
+	return (attr&0x000000FFFFFFFFFF) & ^IsBgRGB | (uint64(idx) << 40)
 }
 
 // SetIndexBoth sets both foreground and background 8-bit indices at once.
 func SetIndexBoth(attr uint64, idxFore, idxBack uint8) uint64 {
 	return SetIndexBack(SetIndexFore(attr, idxFore), idxBack)
 }
+
 // DimColor reduces the brightness of the foreground color to visually indicate a disabled state.
 func DimColor(attr uint64) uint64 {
 	if attr&IsFgRGB != 0 {

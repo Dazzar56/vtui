@@ -1,19 +1,19 @@
 package vtui
 
 import (
+	"github.com/unxed/vtinput"
 	"io"
 	"os"
+	"strings"
 	"testing"
 	"time"
-	"strings"
-	"github.com/unxed/vtinput"
 )
 
 type mockFrame struct {
 	BaseFrame
-	onProcessMouse      func(e *vtinput.InputEvent) bool
-	onProcessKey        func(e *vtinput.InputEvent) bool
-	resizedW, resizedH  int
+	onProcessMouse     func(e *vtinput.InputEvent) bool
+	onProcessKey       func(e *vtinput.InputEvent) bool
+	resizedW, resizedH int
 }
 
 func (m *mockFrame) ResizeConsole(w, h int) {
@@ -91,6 +91,7 @@ type busyFrame struct {
 	mockFrame
 	Busy bool
 }
+
 func (b *busyFrame) IsBusy() bool { return b.Busy }
 
 func TestFrameManager_IsBusy_Suppress(t *testing.T) {
@@ -111,7 +112,7 @@ func TestFrameManager_OnRenderHook(t *testing.T) {
 	fm.OnRender = func(s *ScreenBuf) {
 		renderCalled = true
 	}
-	
+
 	// Manually trigger the hook to verify the mechanism works
 	if fm.OnRender != nil {
 		fm.OnRender(scr)
@@ -236,7 +237,7 @@ func TestFrameManager_SwitchScreen_MRU(t *testing.T) {
 	fm := &frameManager{}
 	fm.Init(NewSilentScreenBuf())
 	defer fm.Shutdown()
-	fm.Push(NewDesktop()) // Screen 0: Desktop
+	fm.Push(NewDesktop())                       // Screen 0: Desktop
 	fm.AddScreen(NewWindow(0, 0, 10, 10, "W1")) // Screen 1: W1
 	fm.AddScreen(NewWindow(0, 0, 10, 10, "W2")) // Screen 2: W2
 
@@ -455,11 +456,14 @@ type labelFrame struct {
 	mockFrame
 	labels *KeySet
 }
+
 func (l *labelFrame) GetKeyLabels() *KeySet { return l.labels }
+
 type menuFrame struct {
 	mockFrame
 	menu *MenuBar
 }
+
 func (m *menuFrame) GetMenuBar() *MenuBar { return m.menu }
 
 func TestFrameManager_ContextualMenuBar(t *testing.T) {
@@ -556,8 +560,8 @@ func TestFrameManager_Broadcast(t *testing.T) {
 	f2 := &cmdMockFrame{onCmd: func(cmd int, args any) bool { count2++; return true }}
 
 	// Помещаем фреймы в разные экраны
-	fm.Push(f1)           // Screen 0
-	fm.AddScreen(f2)      // Screen 1
+	fm.Push(f1)      // Screen 0
+	fm.AddScreen(f2) // Screen 1
 
 	// Посылаем бродкаст
 	fm.Broadcast(777, nil)
@@ -570,12 +574,15 @@ func TestFrameManager_Broadcast(t *testing.T) {
 func TestFrameManager_Broadcast_RedrawTrigger(t *testing.T) {
 	fm := &frameManager{}
 	fm.Init(NewSilentScreenBuf())
-	
+
 	f := &cmdMockFrame{onCmd: func(cmd int, args any) bool { return true }}
 	fm.Push(f)
 
 	// Clear redraw channel
-	select { case <-fm.RedrawChan: default: }
+	select {
+	case <-fm.RedrawChan:
+	default:
+	}
 
 	fm.Broadcast(123, nil)
 
@@ -590,7 +597,7 @@ func TestFrameManager_Broadcast_RedrawTrigger(t *testing.T) {
 func TestFrameManager_Broadcast_Shutdown(t *testing.T) {
 	fm := &frameManager{}
 	fm.Screens = nil // Simulate shutdown
-	
+
 	// Should not panic
 	res := fm.Broadcast(1, nil)
 	if res {
@@ -615,7 +622,9 @@ func TestFrameManager_CommandBubbling(t *testing.T) {
 
 	fBottom.onCmd = func(cmd int, args any) bool {
 		bottomCalled = true
-		if cmd == 999 { return true }
+		if cmd == 999 {
+			return true
+		}
 		return false
 	}
 
@@ -894,8 +903,8 @@ func TestFrameManager_ResizeAllScreens(t *testing.T) {
 	f2 := &mockFrame{}
 	f3 := &mockFrame{}
 
-	fm.Push(f1) // Screen 0 (Background)
-	fm.AddScreen(f2) // Screen 1 (Active)
+	fm.Push(f1)                // Screen 0 (Background)
+	fm.AddScreen(f2)           // Screen 1 (Active)
 	fm.AddScreenBackground(f3) // Screen 2 (Background added explicitly)
 
 	// Inject Resize Event
@@ -1147,9 +1156,9 @@ func TestFrameManager_CycleScreens(t *testing.T) {
 func TestFrameManager_CycleBackwards(t *testing.T) {
 	fm := &frameManager{}
 	fm.Init(NewSilentScreenBuf())
-	fm.Push(NewDesktop())           // Screen 0
-	fm.AddScreen(NewWindow(0,0,5,5, "W1")) // Screen 1
-	fm.AddScreen(NewWindow(0,0,5,5, "W2")) // Screen 2, ActiveIdx = 2
+	fm.Push(NewDesktop())                     // Screen 0
+	fm.AddScreen(NewWindow(0, 0, 5, 5, "W1")) // Screen 1
+	fm.AddScreen(NewWindow(0, 0, 5, 5, "W2")) // Screen 2, ActiveIdx = 2
 
 	// 1. Shift+Ctrl+Tab (forward=false)
 	fm.ctrlPressed = true
@@ -1177,7 +1186,7 @@ func TestFrameManager_ShortcutPriority(t *testing.T) {
 	ctrlWPressed := false
 	frame := &mockFrame{}
 	frame.onProcessKey = func(e *vtinput.InputEvent) bool {
-		if e.VirtualKeyCode == vtinput.VK_W && (e.ControlKeyState & vtinput.LeftCtrlPressed) != 0 {
+		if e.VirtualKeyCode == vtinput.VK_W && (e.ControlKeyState&vtinput.LeftCtrlPressed) != 0 {
 			ctrlWPressed = true
 			return true // Frame intercepts Ctrl+W
 		}
@@ -1265,7 +1274,7 @@ func TestAppScreen_AttentionState(t *testing.T) {
 	}
 
 	// 2. Add Modal Dialog
-	dlg := NewDialog(0,0,10,10, "Modal")
+	dlg := NewDialog(0, 0, 10, 10, "Modal")
 	s.Frames = append(s.Frames, dlg)
 	if !s.NeedsAttention() {
 		t.Error("Modal dialog should trigger attention flag")
@@ -1296,7 +1305,7 @@ func TestFrameManager_ScreenAutoClose(t *testing.T) {
 		t.Fatalf("Expected 2 screens, ActiveIdx 1. Got Screens=%d, ActiveIdx=%d", len(fm.Screens), fm.ActiveIdx)
 	}
 
-	w2.SetExitCode(0) // Mark W2 as done
+	w2.SetExitCode(0)      // Mark W2 as done
 	fm.cleanupDoneFrames() // This should remove W2. Screen 1 will have only Desktop and auto-close.
 
 	if len(fm.Screens) != 1 {
@@ -1315,6 +1324,7 @@ type titleFrame struct {
 	mockFrame
 	title string
 }
+
 func (t *titleFrame) GetTitle() string { return t.title }
 
 func TestFrameManager_F12ScreensMenu(t *testing.T) {
@@ -1325,12 +1335,12 @@ func TestFrameManager_F12ScreensMenu(t *testing.T) {
 	defer fm.Shutdown()
 
 	f1 := &titleFrame{title: "Panel A"}
-	f1.SetPosition(0,0,10,10)
+	f1.SetPosition(0, 0, 10, 10)
 	fm.Push(NewDesktop())
 	fm.Push(f1) // Screen 0
 
 	f2 := &titleFrame{title: "Editor B"}
-	f2.SetPosition(0,0,10,10)
+	f2.SetPosition(0, 0, 10, 10)
 	fm.AddScreen(f2) // Screen 1, becomes active
 
 	oldFm := FrameManager
@@ -1449,8 +1459,8 @@ func TestFrameManager_SwitcherLogic(t *testing.T) {
 	fm.Init(NewSilentScreenBuf())
 	defer fm.Shutdown()
 
-	fm.Push(NewDesktop()) // Screen 0: Desktop
-	fm.AddScreen(NewWindow(0,0,10,10, "W1")) // Screen 1: W1. ActiveIdx = 1.
+	fm.Push(NewDesktop())                       // Screen 0: Desktop
+	fm.AddScreen(NewWindow(0, 0, 10, 10, "W1")) // Screen 1: W1. ActiveIdx = 1.
 
 	// 1. Simulate Ctrl+Tab (KeyDown)
 	fm.ctrlPressed = true
@@ -1487,16 +1497,16 @@ func TestFrameManager_SwitcherRichContent(t *testing.T) {
 	fm.Init(NewSilentScreenBuf())
 	defer fm.Shutdown()
 	fm.Push(NewDesktop())
-	
+
 	// Screen 1: With progress
-	w1 := NewWindow(0,0,10,10, "TaskWin")
+	w1 := NewWindow(0, 0, 10, 10, "TaskWin")
 	w1.SetProgress(45)
 	fm.AddScreen(w1)
-	
+
 	// Screen 2: With attention
-	w2 := NewWindow(0,0,10,10, "AlertWin")
+	w2 := NewWindow(0, 0, 10, 10, "AlertWin")
 	fm.AddScreen(w2)
-	fm.Push(NewDialog(0,0,5,5, "Modal"))
+	fm.Push(NewDialog(0, 0, 5, 5, "Modal"))
 
 	_, title, suf, _ := fm.getScreenInfo(1, 20)
 	if !strings.Contains(suf, "####") {
@@ -1614,7 +1624,9 @@ func TestFrameManager_SwitchScreenFocus(t *testing.T) {
 	f1Focus := false
 	f1 := &mockFrame{}
 	f1.onProcessKey = func(e *vtinput.InputEvent) bool {
-		if e.Type == vtinput.FocusEventType { f1Focus = e.SetFocus }
+		if e.Type == vtinput.FocusEventType {
+			f1Focus = e.SetFocus
+		}
 		return true
 	}
 	fm.Push(f1) // Screen 0, f1Focus = true
@@ -1622,7 +1634,9 @@ func TestFrameManager_SwitchScreenFocus(t *testing.T) {
 	f2Focus := false
 	f2 := &mockFrame{}
 	f2.onProcessKey = func(e *vtinput.InputEvent) bool {
-		if e.Type == vtinput.FocusEventType { f2Focus = e.SetFocus }
+		if e.Type == vtinput.FocusEventType {
+			f2Focus = e.SetFocus
+		}
 		return true
 	}
 	fm.AddScreen(f2) // Screen 1, f2Focus = true, f1Focus = false
@@ -1648,15 +1662,15 @@ func TestFrameManager_TargetedNotificationFlow(t *testing.T) {
 	fm.Push(NewDesktop()) // Screen 0
 
 	// 1. Добавляем диалог задачи на Screen 0. Screen 0: [Desktop, Task]
-	taskDlg := NewDialog(0,0,10,10, "Task")
+	taskDlg := NewDialog(0, 0, 10, 10, "Task")
 	fm.Push(taskDlg)
 
 	// 2. Создаем Screen 1 для работы. [Screen 0, Screen 1:ActiveWork].
-	workWin := NewWindow(0,0,10,10, "ActiveWork")
+	workWin := NewWindow(0, 0, 10, 10, "ActiveWork")
 	fm.AddScreen(workWin)
 
 	// 3. Задача в фоне (Screen 0) завершается и шлет модальный диалог
-	doneMsg := NewDialog(0,0,5,5, "Finished") // NewDialog по умолчанию Modal = true
+	doneMsg := NewDialog(0, 0, 5, 5, "Finished") // NewDialog по умолчанию Modal = true
 	fm.PushToFrameScreen(taskDlg, doneMsg)
 
 	// 4. Assertions
@@ -1751,7 +1765,7 @@ func TestFrameManager_DoubleClickDetection(t *testing.T) {
 
 func TestFrameManager_CloseActiveScreen_Shifting(t *testing.T) {
 	fm := &frameManager{}
-	fm.Init(NewSilentScreenBuf()) 
+	fm.Init(NewSilentScreenBuf())
 	defer fm.Shutdown()
 	fm.Push(NewDesktop()) // Screen 0
 
@@ -1759,13 +1773,13 @@ func TestFrameManager_CloseActiveScreen_Shifting(t *testing.T) {
 	fm.AddScreen(NewWindow(0, 0, 10, 10, "W2")) // Screen 2
 
 	// Порядок в массиве: [S0, S1, S2]. Активен S2 (W2).
-	
-	// Переключаемся на S1 (W1). 
+
+	// Переключаемся на S1 (W1).
 	// Порядок становится: [S0, S2, S1]. Активен S1 (W1) на индексе 2.
 	fm.SwitchScreen(1)
-	
+
 	// Закрываем активный экран (W1).
-	fm.CloseActiveScreen() 
+	fm.CloseActiveScreen()
 
 	// Порядок должен стать: [S0, S2]. Активен S2 (W2) на индексе 1.
 	if len(fm.Screens) != 2 {
@@ -1807,6 +1821,7 @@ type progressFrame struct {
 	mockFrame
 	prog int
 }
+
 func (p *progressFrame) GetProgress() int { return p.prog }
 
 func TestAppScreen_GetProgress_DeepSearch(t *testing.T) {
@@ -1845,7 +1860,7 @@ func TestFrameManager_BackgroundScreenFallback_Fix(t *testing.T) {
 	fm := &frameManager{}
 	fm.Init(NewSilentScreenBuf())
 	defer fm.Shutdown()
-	
+
 	pFrame := &titleFrame{title: "Panels"}
 	fm.frames = append(fm.frames, pFrame)
 	fm.Screens[0].Frames = fm.frames // Initial Panels screen
@@ -1853,8 +1868,10 @@ func TestFrameManager_BackgroundScreenFallback_Fix(t *testing.T) {
 	// 1. Добавляем фон (Очередь)
 	qFrame := &titleFrame{title: "Queue"}
 	fm.AddScreenBackground(qFrame)
-	
-	if len(fm.Screens) != 2 { t.Fatal("Queue screen not added") }
+
+	if len(fm.Screens) != 2 {
+		t.Fatal("Queue screen not added")
+	}
 	if fm.Screens[fm.ActiveIdx].GetTitle() != "Panels" {
 		t.Errorf("Focus stolen by background screen. Current: %q", fm.Screens[fm.ActiveIdx].GetTitle())
 	}
@@ -1863,7 +1880,9 @@ func TestFrameManager_BackgroundScreenFallback_Fix(t *testing.T) {
 	eFrame := &titleFrame{title: "Editor"}
 	fm.AddScreen(eFrame)
 
-	if fm.Screens[fm.ActiveIdx].GetTitle() != "Editor" { t.Fatal("Editor not active") }
+	if fm.Screens[fm.ActiveIdx].GetTitle() != "Editor" {
+		t.Fatal("Editor not active")
+	}
 
 	// 3. Закрываем Редактор
 	eFrame.SetExitCode(0)
@@ -1875,4 +1894,3 @@ func TestFrameManager_BackgroundScreenFallback_Fix(t *testing.T) {
 		t.Errorf("FALLBACK BUG: Closed editor and landed in %q instead of Panels", currentTitle)
 	}
 }
-

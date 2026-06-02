@@ -33,9 +33,13 @@ func (vt *VText) Show(scr *ScreenBuf) {
 }
 
 func (vt *VText) DisplayObject(scr *ScreenBuf) {
-	if !vt.IsVisible() { return }
+	if !vt.IsVisible() {
+		return
+	}
 	attr := vt.GetStateAttr(ColDialogText, ColDialogText)
-	if vt.Color != 0 && !vt.IsDisabled() { attr = vt.Color }
+	if vt.Color != 0 && !vt.IsDisabled() {
+		attr = vt.Color
+	}
 
 	runes := []rune(vt.Content)
 	for i, r := range runes {

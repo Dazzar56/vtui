@@ -1,8 +1,8 @@
 package vtui
 
 import (
-	"testing"
 	"github.com/unxed/vtinput"
+	"testing"
 )
 
 func TestAutoComplete_Matching(t *testing.T) {

@@ -13,8 +13,12 @@ func NewProgressBar(x, y, w int) *ProgressBar {
 }
 
 func (pb *ProgressBar) SetPercent(p int) {
-	if p < 0 { p = 0 }
-	if p > 100 { p = 100 }
+	if p < 0 {
+		p = 0
+	}
+	if p > 100 {
+		p = 100
+	}
 	pb.Percent = p
 }
 
@@ -24,10 +28,14 @@ func (pb *ProgressBar) Show(scr *ScreenBuf) {
 }
 
 func (pb *ProgressBar) DisplayObject(scr *ScreenBuf) {
-	if !pb.IsVisible() { return }
+	if !pb.IsVisible() {
+		return
+	}
 
 	width := pb.X2 - pb.X1 + 1
-	if width <= 0 { return }
+	if width <= 0 {
+		return
+	}
 
 	fillW := (pb.Percent * width) / 100
 

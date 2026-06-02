@@ -6,8 +6,8 @@ import (
 	"os"
 	"runtime"
 	"strings"
-	"time"
 	"sync"
+	"time"
 )
 
 type ColorProfile int
@@ -80,10 +80,10 @@ type ScreenBuf struct {
 	dirty     bool // Flag indicating that a full rewrite is required during the next Flush.
 	clipStack []Rect
 
-	OverlayMode      bool
-	ThemePalette     *[256]uint32
-	ActivePalette    *[256]uint32
-	ColorProfile     ColorProfile
+	OverlayMode   bool
+	ThemePalette  *[256]uint32
+	ActivePalette *[256]uint32
+	ColorProfile  ColorProfile
 
 	HostPalette      [256]uint32
 	HostPaletteValid [256]bool
@@ -175,6 +175,7 @@ func (s *ScreenBuf) PushClipRect(x1, y1, x2, y2 int) {
 	nx2, ny2 := min(curr.X2, x2), min(curr.Y2, y2)
 	s.clipStack = append(s.clipStack, Rect{nx1, ny1, nx2, ny2})
 }
+
 // SetOverlayMode enables or disables Early Binding of indexed colors to RGB.
 func (s *ScreenBuf) SetOverlayMode(overlay bool) {
 	s.mu.Lock()
@@ -190,42 +191,63 @@ func (s *ScreenBuf) PopClipRect() {
 		s.clipStack = s.clipStack[:len(s.clipStack)-1]
 	}
 }
+
 // ApplyShadow applies a semi-transparent shadow effect to the specified area.
 func (s *ScreenBuf) ApplyShadow(x1, y1, x2, y2 int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.buf == nil || len(s.clipStack) == 0 { return }
+	if s.buf == nil || len(s.clipStack) == 0 {
+		return
+	}
 	clip := s.clipStack[len(s.clipStack)-1]
-	if x1 < clip.X1 { x1 = clip.X1 }
-	if y1 < clip.Y1 { y1 = clip.Y1 }
-	if x2 > clip.X2 { x2 = clip.X2 }
-	if y2 > clip.Y2 { y2 = clip.Y2 }
-	if x1 > x2 || y1 > y2 { return }
+	if x1 < clip.X1 {
+		x1 = clip.X1
+	}
+	if y1 < clip.Y1 {
+		y1 = clip.Y1
+	}
+	if x2 > clip.X2 {
+		x2 = clip.X2
+	}
+	if y2 > clip.Y2 {
+		y2 = clip.Y2
+	}
+	if x1 > x2 || y1 > y2 {
+		return
+	}
 
 	for y := y1; y <= y2; y++ {
 		offset := y*s.width + x1
 		for x := 0; x <= x2-x1; x++ {
 			attr := s.buf[offset+x].Attributes
-			
+
 			var bg uint32
 			if attr&IsBgRGB != 0 {
 				bg = GetRGBBack(attr)
 			} else {
 				idx := GetIndexBack(attr)
-				if s.ThemePalette != nil { bg = s.ThemePalette[idx] } else { bg = XTerm256Palette[idx] }
+				if s.ThemePalette != nil {
+					bg = s.ThemePalette[idx]
+				} else {
+					bg = XTerm256Palette[idx]
+				}
 			}
-			
+
 			var fg uint32
 			if attr&IsFgRGB != 0 {
 				fg = GetRGBFore(attr)
 			} else {
 				idx := GetIndexFore(attr)
-				if s.ThemePalette != nil { fg = s.ThemePalette[idx] } else { fg = XTerm256Palette[idx] }
+				if s.ThemePalette != nil {
+					fg = s.ThemePalette[idx]
+				} else {
+					fg = XTerm256Palette[idx]
+				}
 			}
-			
-			bg = ((bg>>16&0xFF)/2)<<16 | ((bg>>8&0xFF)/2)<<8 | ((bg&0xFF)/2)
-			fg = ((fg>>16&0xFF)/2)<<16 | ((fg>>8&0xFF)/2)<<8 | ((fg&0xFF)/2)
-			
+
+			bg = ((bg>>16&0xFF)/2)<<16 | ((bg>>8&0xFF)/2)<<8 | ((bg & 0xFF) / 2)
+			fg = ((fg>>16&0xFF)/2)<<16 | ((fg>>8&0xFF)/2)<<8 | ((fg & 0xFF) / 2)
+
 			s.buf[offset+x].Attributes = SetRGBBoth(attr, fg, bg)
 		}
 	}
@@ -288,6 +310,7 @@ func (s *ScreenBuf) resolveAttr(attr uint64) uint64 {
 	}
 	return attr
 }
+
 // ApplyColor applies specified attributes to a rectangular area.
 func (s *ScreenBuf) ApplyColor(x1, y1, x2, y2 int, attributes uint64) {
 	s.mu.Lock()
@@ -297,13 +320,25 @@ func (s *ScreenBuf) ApplyColor(x1, y1, x2, y2 int, attributes uint64) {
 		return
 	}
 
-	if len(s.clipStack) == 0 { return }
+	if len(s.clipStack) == 0 {
+		return
+	}
 	clip := s.clipStack[len(s.clipStack)-1]
-	if x1 < clip.X1 { x1 = clip.X1 }
-	if y1 < clip.Y1 { y1 = clip.Y1 }
-	if x2 > clip.X2 { x2 = clip.X2 }
-	if y2 > clip.Y2 { y2 = clip.Y2 }
-	if x1 > x2 || y1 > y2 { return }
+	if x1 < clip.X1 {
+		x1 = clip.X1
+	}
+	if y1 < clip.Y1 {
+		y1 = clip.Y1
+	}
+	if x2 > clip.X2 {
+		x2 = clip.X2
+	}
+	if y2 > clip.Y2 {
+		y2 = clip.Y2
+	}
+	if x1 > x2 || y1 > y2 {
+		return
+	}
 
 	attributes = s.resolveAttr(attributes)
 	for y := y1; y <= y2; y++ {
@@ -318,15 +353,29 @@ func (s *ScreenBuf) ApplyColor(x1, y1, x2, y2 int, attributes uint64) {
 func (s *ScreenBuf) FillRect(x1, y1, x2, y2 int, char rune, attributes uint64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.buf == nil || len(s.clipStack) == 0 { return }
-	if x1 > x2 || y1 > y2 { return }
+	if s.buf == nil || len(s.clipStack) == 0 {
+		return
+	}
+	if x1 > x2 || y1 > y2 {
+		return
+	}
 
 	clip := s.clipStack[len(s.clipStack)-1]
-	if x1 < clip.X1 { x1 = clip.X1 }
-	if y1 < clip.Y1 { y1 = clip.Y1 }
-	if x2 > clip.X2 { x2 = clip.X2 }
-	if y2 > clip.Y2 { y2 = clip.Y2 }
-	if x1 > x2 || y1 > y2 { return }
+	if x1 < clip.X1 {
+		x1 = clip.X1
+	}
+	if y1 < clip.Y1 {
+		y1 = clip.Y1
+	}
+	if x2 > clip.X2 {
+		x2 = clip.X2
+	}
+	if y2 > clip.Y2 {
+		y2 = clip.Y2
+	}
+	if x1 > x2 || y1 > y2 {
+		return
+	}
 
 	attributes = s.resolveAttr(attributes)
 	cell := CharInfo{Char: uint64(char), Attributes: attributes}
@@ -375,6 +424,7 @@ func (s *ScreenBuf) Height() int {
 	defer s.mu.Unlock()
 	return s.height
 }
+
 // GetCell returns the character and attributes at the specified coordinates.
 // Used primarily for unit tests.
 func (s *ScreenBuf) GetCell(x, y int) CharInfo {
@@ -385,6 +435,7 @@ func (s *ScreenBuf) GetCell(x, y int) CharInfo {
 	}
 	return s.buf[y*s.width+x]
 }
+
 // Dump записывает содержимое буфера в поток в формате, оптимизированном для нейросетей.
 // Сначала идет текстовое превью, затем детальные данные атрибутов с RLE-сжатием.
 func (s *ScreenBuf) Dump(w io.Writer) {
@@ -437,13 +488,11 @@ func (s *ScreenBuf) Dump(w io.Writer) {
 	}
 }
 
-
-
-
 // rgb extracts R, G, B components from 24-bit color (format 0xRRGGBB).
 func rgb(c uint32) (r, g, b byte) {
 	return byte((c >> 16) & 0xFF), byte((c >> 8) & 0xFF), byte(c & 0xFF)
 }
+
 // Flush синхронизирует состояние виртуального буфера с физическим экраном через Renderer.
 func (s *ScreenBuf) Flush() {
 	s.mu.Lock()
@@ -606,7 +655,9 @@ func (r *AnsiRenderer) Flush() {
 }
 
 func (r *AnsiRenderer) write(s string) {
-	if s == "" { return }
+	if s == "" {
+		return
+	}
 	if r.parent.Writer != nil {
 		io.WriteString(r.parent.Writer, s)
 	} else {

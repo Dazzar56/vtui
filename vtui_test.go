@@ -254,10 +254,10 @@ func TestMenuBar_ProcessMouse(t *testing.T) {
 	// Item 0 is "  Left  " -> 8 chars. Starts at 2. Ends at 9.
 	// Item 1 starts at 10.
 	handled := mb.ProcessMouse(&vtinput.InputEvent{
-		Type: vtinput.MouseEventType,
-		KeyDown: true,
+		Type:        vtinput.MouseEventType,
+		KeyDown:     true,
 		ButtonState: vtinput.FromLeft1stButtonPressed,
-		MouseX: 11, MouseY: 0,
+		MouseX:      11, MouseY: 0,
 	})
 
 	if !handled {
@@ -276,14 +276,18 @@ func TestMenuBar_MouseEdgeCases(t *testing.T) {
 		Type: vtinput.MouseEventType, KeyDown: true,
 		ButtonState: vtinput.FromLeft1stButtonPressed, MouseX: 0, MouseY: 1,
 	})
-	if handled { t.Error("MenuBar should ignore out of bounds Y clicks") }
+	if handled {
+		t.Error("MenuBar should ignore out of bounds Y clicks")
+	}
 
 	// Click outside on X axis (X=20)
 	handled = mb.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: true,
 		ButtonState: vtinput.FromLeft1stButtonPressed, MouseX: 20, MouseY: 0,
 	})
-	if handled { t.Error("MenuBar should ignore out of bounds X clicks") }
+	if handled {
+		t.Error("MenuBar should ignore out of bounds X clicks")
+	}
 }
 
 func TestVMenu_Callbacks(t *testing.T) {
@@ -345,8 +349,8 @@ func TestVMenu_F10_ClosesMenu(t *testing.T) {
 	if !m.IsDone() || m.exitCode != -1 {
 		t.Error("F10 should close the VMenu with exitCode -1")
 	}
-	
-	// In the test, FrameManager is empty, so GetTopFrame() != m. 
+
+	// In the test, FrameManager is empty, so GetTopFrame() != m.
 	// The key should NOT be swallowed.
 	if handled {
 		t.Error("VMenu widget should NOT swallow F10 (it should bubble up)")
@@ -719,13 +723,19 @@ func TestIntegration_HotkeyPriority(t *testing.T) {
 	process := func(e *vtinput.InputEvent) string {
 		// If menu active -> priority
 		if mb.Active {
-			if mb.ProcessKey(e) { return "menu" }
+			if mb.ProcessKey(e) {
+				return "menu"
+			}
 		}
 		// If inactive -> Dialog first
-		if dlg.ProcessKey(e) { return "dialog" }
+		if dlg.ProcessKey(e) {
+			return "dialog"
+		}
 		// Fallback to menu activation
-		if !mb.Active && (e.ControlKeyState & vtinput.LeftAltPressed) != 0 {
-			if mb.ProcessKey(e) { return "menu_activated" }
+		if !mb.Active && (e.ControlKeyState&vtinput.LeftAltPressed) != 0 {
+			if mb.ProcessKey(e) {
+				return "menu_activated"
+			}
 		}
 		return "none"
 	}
@@ -769,7 +779,9 @@ func TestVMenu_SeparatorNavigation(t *testing.T) {
 	m.AddItem(MenuItem{Text: "Two"})
 
 	// 1. Initial pos is 0
-	if m.SelectPos != 0 { t.Fatal("Start pos should be 0") }
+	if m.SelectPos != 0 {
+		t.Fatal("Start pos should be 0")
+	}
 
 	// 2. Down from 0 should land on 2 (skipping separator at 1)
 	m.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
@@ -988,7 +1000,7 @@ func TestVMenu_ShortcutRendering(t *testing.T) {
 	m.Show(scr)
 
 	// Interior string: " Copy" (5) + "     " (5) + "F5 " (3) = 13 chars
-	// Written to X=1..13. 
+	// Written to X=1..13.
 	// 'F' is at index 10 of the string -> X = 11
 	// '5' is at index 11 of the string -> X = 12
 	// Attributes: item is selected by default, so ColMenuSelectedText.
@@ -1016,7 +1028,7 @@ func TestMenuBar_DynamicSubMenuWidth(t *testing.T) {
 	}
 
 	mb.ActivateSubMenu(0)
-	
+
 	if fm.GetTopFrameType() != TypeMenu {
 		t.Fatal("Submenu not activated")
 	}
@@ -1036,27 +1048,27 @@ func TestVMenu_ActionOrdering_Integration(t *testing.T) {
 	// Integration test for the "disappearing menu action" bug.
 	// Scenario: VMenu is a child of MenuBar.
 	// Action: FireAction (must bubble to PanelsFrame) then OnAction (must deactivate MenuBar).
-	
+
 	panelsFrame := &mockOwner{}
 	mb := NewMenuBar([]string{"&File"})
 	mb.SetOwner(panelsFrame)
 	mb.Active = true
-	
+
 	vm := NewVMenu("Sub")
 	vm.SetOwner(mb)
 	vm.AddItem(MenuItem{Text: "Test", Command: 123})
 	vm.SetSelectPos(0)
-	
+
 	// MenuBar's activation logic usually sets this up:
 	vm.OnAction = func(idx int) { mb.Active = false }
-	
+
 	// Simulate Enter
 	vm.ProcessKey(&vtinput.InputEvent{
-		Type: vtinput.KeyEventType, 
-		KeyDown: true, 
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
 		VirtualKeyCode: vtinput.VK_RETURN,
 	})
-	
+
 	if !panelsFrame.commandHandled {
 		t.Error("Command did not reach PanelsFrame because MenuBar was deactivated too early")
 	}
@@ -1073,11 +1085,11 @@ func TestMenuBar_DisabledItemDimming(t *testing.T) {
 	mb := NewMenuBar(nil)
 	mb.Items = []MenuBarItem{
 		{
-			Label: "&Active",
+			Label:    "&Active",
 			SubItems: []MenuItem{{Text: "Cmd", Command: 100}},
 		},
 		{
-			Label: "&Disabled",
+			Label:    "&Disabled",
 			SubItems: []MenuItem{{Text: "Cmd", Command: 101}},
 		},
 	}
@@ -1105,7 +1117,7 @@ func TestMenuBar_ActiveHotkeys(t *testing.T) {
 	SetDefaultPalette()
 	fm := FrameManager
 	fm.Init(NewSilentScreenBuf())
-	
+
 	mb := NewMenuBar([]string{"&Files", "&Options"})
 	mb.Active = true
 	mb.SelectPos = 0 // On Files

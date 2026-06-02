@@ -65,12 +65,20 @@ func TestXlator_EdgeCases(t *testing.T) {
 
 	// 4. Смена контекста (Context Switching Stress)
 	x.Track('a') // Latin
-	if x.Translate('/') != '.' { t.Error("Context Latin failed") }
+	if x.Translate('/') != '.' {
+		t.Error("Context Latin failed")
+	}
 
 	x.Track('1') // Neutral - should NOT change context
-	if x.curLang != LangLatin { t.Error("Neutral char changed context") }
-	if x.Translate('/') != '.' { t.Error("Context Latin lost after neutral char") }
+	if x.curLang != LangLatin {
+		t.Error("Neutral char changed context")
+	}
+	if x.Translate('/') != '.' {
+		t.Error("Context Latin lost after neutral char")
+	}
 
 	x.Track('ф') // Local
-	if x.Translate('.') != '/' { t.Error("Context Local failed") }
+	if x.Translate('.') != '/' {
+		t.Error("Context Local failed")
+	}
 }

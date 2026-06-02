@@ -32,17 +32,17 @@ func init() {
 
 // Indices for common box drawing symbols
 const (
-	bsV             = 0 // │ or ║
-	bsH             = 1 // ─ or ═
-	bsTL            = 2 // ┌ or ╔
-	bsTR            = 3 // ┐ or ╗
-	bsBL            = 4 // └ or ╚
-	bsBR            = 5 // ┘ or ╝
-	bsHCrossLeft    = 6 // ├ or ╠ (for basic single/double box horizontal cross)
-	bsHCrossRight   = 7 // ┤ or ╣
-	bsVCrossTop     = 8 // ┬ or ╦
-	bsVCrossBottom  = 9 // ┴ or ╩
-	bsCross         = 10 // ┼ or ╬
+	bsV            = 0  // │ or ║
+	bsH            = 1  // ─ or ═
+	bsTL           = 2  // ┌ or ╔
+	bsTR           = 3  // ┐ or ╗
+	bsBL           = 4  // └ or ╚
+	bsBR           = 5  // ┘ or ╝
+	bsHCrossLeft   = 6  // ├ or ╠ (for basic single/double box horizontal cross)
+	bsHCrossRight  = 7  // ┤ or ╣
+	bsVCrossTop    = 8  // ┬ or ╦
+	bsVCrossBottom = 9  // ┴ or ╩
+	bsCross        = 10 // ┼ or ╬
 
 	// Specific VMenu separator symbols (indices after standard box symbols)
 	bsVMenuHCrossLeft  = 22 // ╟

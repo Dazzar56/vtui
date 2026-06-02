@@ -27,20 +27,28 @@ func TestDialog_GrowLogic_Complex(t *testing.T) {
 	// Checks:
 	// None: x1=1
 	nx1, _, _, _ := none.GetPosition()
-	if nx1 != 1 { t.Errorf("GrowNone moved! Got x1=%d", nx1) }
+	if nx1 != 1 {
+		t.Errorf("GrowNone moved! Got x1=%d", nx1)
+	}
 
 	// Stretch: x1=5, x2=9 + 20 = 29
 	sx1, _, sx2, _ := stretch.GetPosition()
-	if sx1 != 5 || sx2 != 29 { t.Errorf("Stretch failed: x1=%d, x2=%d", sx1, sx2) }
+	if sx1 != 5 || sx2 != 29 {
+		t.Errorf("Stretch failed: x1=%d, x2=%d", sx1, sx2)
+	}
 
 	// Move: x1=10 + 20 = 30
 	mx1, _, _, _ := move.GetPosition()
-	if mx1 != 30 { t.Errorf("Move failed: x1=%d", mx1) }
+	if mx1 != 30 {
+		t.Errorf("Move failed: x1=%d", mx1)
+	}
 
 	// 4. Compression test (Negative delta)
 	d.ChangeSize(20, 10) // Restore to 20
 	mx1, _, _, _ = move.GetPosition()
-	if mx1 != 10 { t.Errorf("Shrink failed: x1=%d", mx1) }
+	if mx1 != 10 {
+		t.Errorf("Shrink failed: x1=%d", mx1)
+	}
 }
 
 func TestDialog_ResizeConsole_Centering(t *testing.T) {

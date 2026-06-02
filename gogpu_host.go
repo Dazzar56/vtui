@@ -40,18 +40,36 @@ type GogpuHost struct {
 
 func (h *GogpuHost) syncMods(vk uint16, mods gpucontext.Modifiers, isDown bool) vtinput.ControlKeyState {
 	var sysMods vtinput.ControlKeyState
-	if mods.HasShift() { sysMods |= vtinput.ShiftPressed }
-	if mods.HasControl() { sysMods |= vtinput.LeftCtrlPressed }
-	if mods.HasAlt() { sysMods |= vtinput.LeftAltPressed }
+	if mods.HasShift() {
+		sysMods |= vtinput.ShiftPressed
+	}
+	if mods.HasControl() {
+		sysMods |= vtinput.LeftCtrlPressed
+	}
+	if mods.HasAlt() {
+		sysMods |= vtinput.LeftAltPressed
+	}
 
 	if isDown {
-		if vk == vtinput.VK_SHIFT { sysMods |= vtinput.ShiftPressed }
-		if vk == vtinput.VK_CONTROL { sysMods |= vtinput.LeftCtrlPressed }
-		if vk == vtinput.VK_MENU { sysMods |= vtinput.LeftAltPressed }
+		if vk == vtinput.VK_SHIFT {
+			sysMods |= vtinput.ShiftPressed
+		}
+		if vk == vtinput.VK_CONTROL {
+			sysMods |= vtinput.LeftCtrlPressed
+		}
+		if vk == vtinput.VK_MENU {
+			sysMods |= vtinput.LeftAltPressed
+		}
 	} else {
-		if vk == vtinput.VK_SHIFT { sysMods &^= vtinput.ShiftPressed }
-		if vk == vtinput.VK_CONTROL { sysMods &^= vtinput.LeftCtrlPressed }
-		if vk == vtinput.VK_MENU { sysMods &^= vtinput.LeftAltPressed }
+		if vk == vtinput.VK_SHIFT {
+			sysMods &^= vtinput.ShiftPressed
+		}
+		if vk == vtinput.VK_CONTROL {
+			sysMods &^= vtinput.LeftCtrlPressed
+		}
+		if vk == vtinput.VK_MENU {
+			sysMods &^= vtinput.LeftAltPressed
+		}
 	}
 
 	h.currentMods = sysMods
@@ -196,7 +214,9 @@ func RunGogpuHost(cols, rows int, setupApp func()) error {
 		}
 		host.mu.Unlock()
 
-		if vk == 0 { return }
+		if vk == 0 {
+			return
+		}
 		host.reader.NativeEventChan <- &vtinput.InputEvent{
 			Type:            vtinput.KeyEventType,
 			KeyDown:         false,
@@ -344,7 +364,7 @@ func RunGogpuHost(cols, rows int, setupApp func()) error {
 }
 
 func loadGogpuFont(size float64) (text.Face, int, int) {
-	candidates :=[]string{
+	candidates := []string{
 		"C:\\Windows\\Fonts\\consola.ttf",
 		"C:\\Windows\\Fonts\\arial.ttf",
 		"/usr/share/fonts/truetype/ubuntu/UbuntuMono-R.ttf",
@@ -362,8 +382,12 @@ func loadGogpuFont(size float64) (text.Face, int, int) {
 				adv := face.Advance("A")
 				cellH := int(metrics.Ascent + metrics.Descent + 0.5)
 				cellW := int(adv + 0.5)
-				if cellW == 0 { cellW = 8 }
-				if cellH == 0 { cellH = 16 }
+				if cellW == 0 {
+					cellW = 8
+				}
+				if cellH == 0 {
+					cellH = 16
+				}
 				DebugLog("GOGPU_DIAG_FONT: File=%s RequestSize=%.1f", p, size)
 				DebugLog("GOGPU_DIAG_FONT: Metrics: Ascent=%.2f Descent=%.2f LineGap=%.2f AdvanceA=%.2f",
 					float64(metrics.Ascent), float64(metrics.Descent), float64(metrics.LineGap), adv)
@@ -377,82 +401,158 @@ func loadGogpuFont(size float64) (text.Face, int, int) {
 
 func gogpuKeyToVK(k gpucontext.Key) uint16 {
 	switch k {
-	case gpucontext.KeyEscape: return vtinput.VK_ESCAPE
-	case gpucontext.KeyF1: return vtinput.VK_F1
-	case gpucontext.KeyF2: return vtinput.VK_F2
-	case gpucontext.KeyF3: return vtinput.VK_F3
-	case gpucontext.KeyF4: return vtinput.VK_F4
-	case gpucontext.KeyF5: return vtinput.VK_F5
-	case gpucontext.KeyF6: return vtinput.VK_F6
-	case gpucontext.KeyF7: return vtinput.VK_F7
-	case gpucontext.KeyF8: return vtinput.VK_F8
-	case gpucontext.KeyF9: return vtinput.VK_F9
-	case gpucontext.KeyF10: return vtinput.VK_F10
-	case gpucontext.KeyF11: return vtinput.VK_F11
-	case gpucontext.KeyF12: return vtinput.VK_F12
-	case gpucontext.KeyInsert: return vtinput.VK_INSERT
-	case gpucontext.KeyDelete: return vtinput.VK_DELETE
-	case gpucontext.KeyHome: return vtinput.VK_HOME
-	case gpucontext.KeyEnd: return vtinput.VK_END
-	case gpucontext.KeyPageUp: return vtinput.VK_PRIOR
-	case gpucontext.KeyPageDown: return vtinput.VK_NEXT
-	case gpucontext.KeyUp: return vtinput.VK_UP
-	case gpucontext.KeyDown: return vtinput.VK_DOWN
-	case gpucontext.KeyLeft: return vtinput.VK_LEFT
-	case gpucontext.KeyRight: return vtinput.VK_RIGHT
-	case gpucontext.KeyBackspace: return vtinput.VK_BACK
-	case gpucontext.KeyEnter: return vtinput.VK_RETURN
-	case gpucontext.KeyTab: return vtinput.VK_TAB
-	case gpucontext.KeySpace: return vtinput.VK_SPACE
-	case gpucontext.KeyLeftControl, gpucontext.KeyRightControl: return vtinput.VK_CONTROL
-	case gpucontext.KeyLeftShift, gpucontext.KeyRightShift: return vtinput.VK_SHIFT
-	case gpucontext.KeyLeftAlt, gpucontext.KeyRightAlt: return vtinput.VK_MENU
-	case gpucontext.KeyA: return vtinput.VK_A
-	case gpucontext.KeyB: return vtinput.VK_B
-	case gpucontext.KeyC: return vtinput.VK_C
-	case gpucontext.KeyD: return vtinput.VK_D
-	case gpucontext.KeyE: return vtinput.VK_E
-	case gpucontext.KeyF: return vtinput.VK_F
-	case gpucontext.KeyG: return vtinput.VK_G
-	case gpucontext.KeyH: return vtinput.VK_H
-	case gpucontext.KeyI: return vtinput.VK_I
-	case gpucontext.KeyJ: return vtinput.VK_J
-	case gpucontext.KeyK: return vtinput.VK_K
-	case gpucontext.KeyL: return vtinput.VK_L
-	case gpucontext.KeyM: return vtinput.VK_M
-	case gpucontext.KeyN: return vtinput.VK_N
-	case gpucontext.KeyO: return vtinput.VK_O
-	case gpucontext.KeyP: return vtinput.VK_P
-	case gpucontext.KeyQ: return vtinput.VK_Q
-	case gpucontext.KeyR: return vtinput.VK_R
-	case gpucontext.KeyS: return vtinput.VK_S
-	case gpucontext.KeyT: return vtinput.VK_T
-	case gpucontext.KeyU: return vtinput.VK_U
-	case gpucontext.KeyV: return vtinput.VK_V
-	case gpucontext.KeyW: return vtinput.VK_W
-	case gpucontext.KeyX: return vtinput.VK_X
-	case gpucontext.KeyY: return vtinput.VK_Y
-	case gpucontext.KeyZ: return vtinput.VK_Z
-	case gpucontext.Key0: return vtinput.VK_0
-	case gpucontext.Key1: return vtinput.VK_1
-	case gpucontext.Key2: return vtinput.VK_2
-	case gpucontext.Key3: return vtinput.VK_3
-	case gpucontext.Key4: return vtinput.VK_4
-	case gpucontext.Key5: return vtinput.VK_5
-	case gpucontext.Key6: return vtinput.VK_6
-	case gpucontext.Key7: return vtinput.VK_7
-	case gpucontext.Key8: return vtinput.VK_8
-	case gpucontext.Key9: return vtinput.VK_9
-	case gpucontext.KeyMinus: return vtinput.VK_OEM_MINUS
-	case gpucontext.KeyEqual: return vtinput.VK_OEM_PLUS
-	case gpucontext.KeyLeftBracket: return vtinput.VK_OEM_4
-	case gpucontext.KeyRightBracket: return vtinput.VK_OEM_6
-	case gpucontext.KeyBackslash: return vtinput.VK_OEM_5
-	case gpucontext.KeySemicolon: return vtinput.VK_OEM_1
-	case gpucontext.KeyApostrophe: return vtinput.VK_OEM_7
-	case gpucontext.KeyComma: return vtinput.VK_OEM_COMMA
-	case gpucontext.KeyPeriod: return vtinput.VK_OEM_PERIOD
-	case gpucontext.KeySlash: return vtinput.VK_OEM_2
+	case gpucontext.KeyEscape:
+		return vtinput.VK_ESCAPE
+	case gpucontext.KeyF1:
+		return vtinput.VK_F1
+	case gpucontext.KeyF2:
+		return vtinput.VK_F2
+	case gpucontext.KeyF3:
+		return vtinput.VK_F3
+	case gpucontext.KeyF4:
+		return vtinput.VK_F4
+	case gpucontext.KeyF5:
+		return vtinput.VK_F5
+	case gpucontext.KeyF6:
+		return vtinput.VK_F6
+	case gpucontext.KeyF7:
+		return vtinput.VK_F7
+	case gpucontext.KeyF8:
+		return vtinput.VK_F8
+	case gpucontext.KeyF9:
+		return vtinput.VK_F9
+	case gpucontext.KeyF10:
+		return vtinput.VK_F10
+	case gpucontext.KeyF11:
+		return vtinput.VK_F11
+	case gpucontext.KeyF12:
+		return vtinput.VK_F12
+	case gpucontext.KeyInsert:
+		return vtinput.VK_INSERT
+	case gpucontext.KeyDelete:
+		return vtinput.VK_DELETE
+	case gpucontext.KeyHome:
+		return vtinput.VK_HOME
+	case gpucontext.KeyEnd:
+		return vtinput.VK_END
+	case gpucontext.KeyPageUp:
+		return vtinput.VK_PRIOR
+	case gpucontext.KeyPageDown:
+		return vtinput.VK_NEXT
+	case gpucontext.KeyUp:
+		return vtinput.VK_UP
+	case gpucontext.KeyDown:
+		return vtinput.VK_DOWN
+	case gpucontext.KeyLeft:
+		return vtinput.VK_LEFT
+	case gpucontext.KeyRight:
+		return vtinput.VK_RIGHT
+	case gpucontext.KeyBackspace:
+		return vtinput.VK_BACK
+	case gpucontext.KeyEnter:
+		return vtinput.VK_RETURN
+	case gpucontext.KeyTab:
+		return vtinput.VK_TAB
+	case gpucontext.KeySpace:
+		return vtinput.VK_SPACE
+	case gpucontext.KeyLeftControl, gpucontext.KeyRightControl:
+		return vtinput.VK_CONTROL
+	case gpucontext.KeyLeftShift, gpucontext.KeyRightShift:
+		return vtinput.VK_SHIFT
+	case gpucontext.KeyLeftAlt, gpucontext.KeyRightAlt:
+		return vtinput.VK_MENU
+	case gpucontext.KeyA:
+		return vtinput.VK_A
+	case gpucontext.KeyB:
+		return vtinput.VK_B
+	case gpucontext.KeyC:
+		return vtinput.VK_C
+	case gpucontext.KeyD:
+		return vtinput.VK_D
+	case gpucontext.KeyE:
+		return vtinput.VK_E
+	case gpucontext.KeyF:
+		return vtinput.VK_F
+	case gpucontext.KeyG:
+		return vtinput.VK_G
+	case gpucontext.KeyH:
+		return vtinput.VK_H
+	case gpucontext.KeyI:
+		return vtinput.VK_I
+	case gpucontext.KeyJ:
+		return vtinput.VK_J
+	case gpucontext.KeyK:
+		return vtinput.VK_K
+	case gpucontext.KeyL:
+		return vtinput.VK_L
+	case gpucontext.KeyM:
+		return vtinput.VK_M
+	case gpucontext.KeyN:
+		return vtinput.VK_N
+	case gpucontext.KeyO:
+		return vtinput.VK_O
+	case gpucontext.KeyP:
+		return vtinput.VK_P
+	case gpucontext.KeyQ:
+		return vtinput.VK_Q
+	case gpucontext.KeyR:
+		return vtinput.VK_R
+	case gpucontext.KeyS:
+		return vtinput.VK_S
+	case gpucontext.KeyT:
+		return vtinput.VK_T
+	case gpucontext.KeyU:
+		return vtinput.VK_U
+	case gpucontext.KeyV:
+		return vtinput.VK_V
+	case gpucontext.KeyW:
+		return vtinput.VK_W
+	case gpucontext.KeyX:
+		return vtinput.VK_X
+	case gpucontext.KeyY:
+		return vtinput.VK_Y
+	case gpucontext.KeyZ:
+		return vtinput.VK_Z
+	case gpucontext.Key0:
+		return vtinput.VK_0
+	case gpucontext.Key1:
+		return vtinput.VK_1
+	case gpucontext.Key2:
+		return vtinput.VK_2
+	case gpucontext.Key3:
+		return vtinput.VK_3
+	case gpucontext.Key4:
+		return vtinput.VK_4
+	case gpucontext.Key5:
+		return vtinput.VK_5
+	case gpucontext.Key6:
+		return vtinput.VK_6
+	case gpucontext.Key7:
+		return vtinput.VK_7
+	case gpucontext.Key8:
+		return vtinput.VK_8
+	case gpucontext.Key9:
+		return vtinput.VK_9
+	case gpucontext.KeyMinus:
+		return vtinput.VK_OEM_MINUS
+	case gpucontext.KeyEqual:
+		return vtinput.VK_OEM_PLUS
+	case gpucontext.KeyLeftBracket:
+		return vtinput.VK_OEM_4
+	case gpucontext.KeyRightBracket:
+		return vtinput.VK_OEM_6
+	case gpucontext.KeyBackslash:
+		return vtinput.VK_OEM_5
+	case gpucontext.KeySemicolon:
+		return vtinput.VK_OEM_1
+	case gpucontext.KeyApostrophe:
+		return vtinput.VK_OEM_7
+	case gpucontext.KeyComma:
+		return vtinput.VK_OEM_COMMA
+	case gpucontext.KeyPeriod:
+		return vtinput.VK_OEM_PERIOD
+	case gpucontext.KeySlash:
+		return vtinput.VK_OEM_2
 	}
 	return 0
 }

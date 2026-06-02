@@ -21,8 +21,8 @@ type HelpView struct {
 
 func NewHelpView(engine *HelpEngine, startTopic string) *HelpView {
 	hv := &HelpView{
-		BaseWindow: *NewBaseWindow(0, 0, 60, 20, " Help "),
-		engine:     engine,
+		BaseWindow:  *NewBaseWindow(0, 0, 60, 20, " Help "),
+		engine:      engine,
 		selectedIdx: -1,
 	}
 	hv.rootGroup.SetOwner(hv)
@@ -87,7 +87,9 @@ func (hv *HelpView) PopTopic() {
 
 func (hv *HelpView) Show(scr *ScreenBuf) {
 	hv.BaseWindow.Show(scr)
-	if hv.current == nil { return }
+	if hv.current == nil {
+		return
+	}
 
 	x1, y1, x2, y2 := hv.X1+1, hv.Y1+1, hv.X2-1, hv.Y2-1
 	width := x2 - x1 + 1
@@ -110,7 +112,9 @@ func (hv *HelpView) Show(scr *ScreenBuf) {
 	contentH := height - hv.current.StickyRows
 	for i := 0; i < contentH; i++ {
 		lineIdx := i + hv.scrollTop + hv.current.StickyRows
-		if lineIdx >= len(hv.current.Lines) { break }
+		if lineIdx >= len(hv.current.Lines) {
+			break
+		}
 		hv.renderLine(scr, x1, contentY+i, hv.current.Lines[lineIdx], width, lineIdx)
 	}
 
@@ -126,7 +130,9 @@ func (hv *HelpView) Show(scr *ScreenBuf) {
 }
 func (hv *HelpView) renderLine(scr *ScreenBuf, x, y int, line string, width int, lineIdx int) {
 	isCentered := strings.HasPrefix(line, "^")
-	if isCentered { line = line[1:] }
+	if isCentered {
+		line = line[1:]
+	}
 
 	var cells []CharInfo
 	currAttr := Palette[ColHelpText]
@@ -136,7 +142,9 @@ func (hv *HelpView) renderLine(scr *ScreenBuf, x, y int, line string, width int,
 
 	var lineLinks []int
 	for i, l := range hv.current.Links {
-		if l.Line == lineIdx { lineLinks = append(lineLinks, i) }
+		if l.Line == lineIdx {
+			lineLinks = append(lineLinks, i)
+		}
 	}
 
 	runes := []rune(line)
@@ -147,7 +155,11 @@ func (hv *HelpView) renderLine(scr *ScreenBuf, x, y int, line string, width int,
 		switch r {
 		case '#':
 			inBold = !inBold
-			if inBold { currAttr = Palette[ColHelpBold] } else { currAttr = Palette[ColHelpText] }
+			if inBold {
+				currAttr = Palette[ColHelpBold]
+			} else {
+				currAttr = Palette[ColHelpText]
+			}
 			continue
 		case '~':
 			inLink = !inLink
@@ -178,7 +190,11 @@ func (hv *HelpView) renderLine(scr *ScreenBuf, x, y int, line string, width int,
 	offX := 0
 	if isCentered {
 		vLen := 0
-		for _, c := range cells { if c.Char != WideCharFiller { vLen++ } }
+		for _, c := range cells {
+			if c.Char != WideCharFiller {
+				vLen++
+			}
+		}
 		offX = (width - vLen) / 2
 	}
 	scr.Write(x+offX, y, cells)
@@ -261,12 +277,14 @@ func (hv *HelpView) ProcessKey(e *vtinput.InputEvent) bool {
 }
 
 func (hv *HelpView) ensureLinkVisible() {
-	if hv.selectedIdx == -1 { return }
+	if hv.selectedIdx == -1 {
+		return
+	}
 	link := hv.current.Links[hv.selectedIdx]
 	height := hv.Y2 - hv.Y1 - 1 - hv.current.StickyRows
-	if link.Line < hv.scrollTop + hv.current.StickyRows {
+	if link.Line < hv.scrollTop+hv.current.StickyRows {
 		hv.scrollTop = link.Line - hv.current.StickyRows
-	} else if link.Line >= hv.scrollTop + hv.current.StickyRows + height {
+	} else if link.Line >= hv.scrollTop+hv.current.StickyRows+height {
 		hv.scrollTop = link.Line - hv.current.StickyRows - height + 1
 	}
 }

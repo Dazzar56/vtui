@@ -88,8 +88,12 @@ func (cb *ComboBox) DisplayObject(scr *ScreenBuf) {
 
 func (cb *ComboBox) ProcessKey(e *vtinput.InputEvent) bool {
 
-	if !e.KeyDown { return false }
-	if cb.IsDisabled() { return false }
+	if !e.KeyDown {
+		return false
+	}
+	if cb.IsDisabled() {
+		return false
+	}
 
 	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
 
@@ -116,7 +120,9 @@ func (cb *ComboBox) ProcessKey(e *vtinput.InputEvent) bool {
 }
 
 func (cb *ComboBox) ProcessMouse(e *vtinput.InputEvent) bool {
-	if cb.IsDisabled() { return false }
+	if cb.IsDisabled() {
+		return false
+	}
 	if e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
 		mx := int(e.MouseX)
 		// If arrow clicked
@@ -146,7 +152,9 @@ func (cb *ComboBox) Open() {
 
 	// 2. Calculate height and vertical position
 	h := len(cb.Menu.Items) + 2
-	if h > 10 { h = 10 } // Limit height
+	if h > 10 {
+		h = 10
+	} // Limit height
 
 	y := cb.Y1 + 1
 	if FrameManager != nil && FrameManager.scr != nil {

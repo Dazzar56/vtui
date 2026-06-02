@@ -53,8 +53,12 @@ func (x *Xlator) LoadConfigs(configs []XLatLayoutConfig) {
 			x.localChars[loc[i]] = true
 		}
 
-		for k, v := range cfg.AfterLatin { x.afterLatin[k] = v }
-		for k, v := range cfg.AfterLocal { x.afterLocal[k] = v }
+		for k, v := range cfg.AfterLatin {
+			x.afterLatin[k] = v
+		}
+		for k, v := range cfg.AfterLocal {
+			x.afterLocal[k] = v
+		}
 	}
 }
 
@@ -73,16 +77,28 @@ func (x *Xlator) Translate(r rune) rune {
 	// 1. Применяем правила только если мы уверены в текущем языке.
 	// Приоритет отдается целевой таблице, чтобы предотвратить коллизии знаков препинания.
 	if x.curLang == LangLocal {
-		if val, ok := x.afterLocal[r]; ok { return val }
-		if val, ok := x.loc2lat[r]; ok { return val }
+		if val, ok := x.afterLocal[r]; ok {
+			return val
+		}
+		if val, ok := x.loc2lat[r]; ok {
+			return val
+		}
 	} else if x.curLang == LangLatin {
-		if val, ok := x.afterLatin[r]; ok { return val }
-		if val, ok := x.lat2loc[r]; ok { return val }
+		if val, ok := x.afterLatin[r]; ok {
+			return val
+		}
+		if val, ok := x.lat2loc[r]; ok {
+			return val
+		}
 	}
 
 	// 2. Фолбэк, если контекст неизвестен
-	if val, ok := x.loc2lat[r]; ok { return val }
-	if val, ok := x.lat2loc[r]; ok { return val }
+	if val, ok := x.loc2lat[r]; ok {
+		return val
+	}
+	if val, ok := x.lat2loc[r]; ok {
+		return val
+	}
 	return r
 }
 

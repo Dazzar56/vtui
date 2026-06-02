@@ -20,10 +20,10 @@ type WaylandRenderer struct {
 	w, h       int
 	glyphCache map[glyphKey]*image.RGBA
 
-	cursorX, cursorY   int
+	cursorX, cursorY       int
 	oldCursorX, oldCursorY int
-	cursorVis          bool
-	cursorShape        CursorShape
+	cursorVis              bool
+	cursorShape            CursorShape
 
 	stats renderStats
 }
@@ -148,7 +148,9 @@ func (r *WaylandRenderer) Render(buf, shadow []CharInfo, w, h int, forceRedraw b
 
 				char := rune(currCell.Char)
 				rw := runewidth.RuneWidth(char)
-				if rw < 1 { rw = 1 }
+				if rw < 1 {
+					rw = 1
+				}
 
 				cpx := currX * cw
 				cfg, cbg := r.getCellColors(currCell)
@@ -168,16 +170,22 @@ func (r *WaylandRenderer) Render(buf, shadow []CharInfo, w, h int, forceRedraw b
 						startY = 0
 					} else {
 						thickness := 2
-						if r.host.scale > 1 { thickness = 4 }
+						if r.host.scale > 1 {
+							thickness = 4
+						}
 						startY = ch - thickness
 					}
 					for iy := startY; iy < ch; iy++ {
 						pixelY := py + iy
-						if pixelY < 0 || pixelY >= img.Rect.Max.Y { continue }
+						if pixelY < 0 || pixelY >= img.Rect.Max.Y {
+							continue
+						}
 						rowStart := pixelY * img.Stride
 						for ix := 0; ix < cw; ix++ {
 							pixelX := cpx + ix
-							if pixelX < 0 || pixelX >= img.Rect.Max.X { continue }
+							if pixelX < 0 || pixelX >= img.Rect.Max.X {
+								continue
+							}
 							off := rowStart + pixelX*4
 							if off+2 < len(img.Pix) {
 								img.Pix[off] = 255 - img.Pix[off]
@@ -230,7 +238,9 @@ func (r *WaylandRenderer) drawCachedGlyph(img *image.RGBA, char rune, px, py, rw
 	}
 
 	for iy := 0; iy < ch; iy++ {
-		if py+iy >= img.Rect.Max.Y { break }
+		if py+iy >= img.Rect.Max.Y {
+			break
+		}
 		dstOff := (py+iy)*img.Stride + px*4
 		srcOff := iy * cached.Stride
 		if dstOff+drawW*4 <= len(img.Pix) {
@@ -247,9 +257,13 @@ func (r *WaylandRenderer) drawCustomChar(img *image.RGBA, char rune, px, py, cw,
 
 	drawHLine := func(x1, x2, y int) {
 		for x := x1; x <= x2; x++ {
-			if x < 0 || x >= img.Rect.Max.X { continue }
+			if x < 0 || x >= img.Rect.Max.X {
+				continue
+			}
 			for t := 0; t < thick; t++ {
-				if y+t < 0 || y+t >= img.Rect.Max.Y { continue }
+				if y+t < 0 || y+t >= img.Rect.Max.Y {
+					continue
+				}
 				off := (y+t)*img.Stride + x*4
 				if off+3 < len(img.Pix) {
 					img.Pix[off], img.Pix[off+1], img.Pix[off+2], img.Pix[off+3] = r8, g8, b8, 255
@@ -259,9 +273,13 @@ func (r *WaylandRenderer) drawCustomChar(img *image.RGBA, char rune, px, py, cw,
 	}
 	drawVLine := func(x, y1, y2 int) {
 		for y := y1; y <= y2; y++ {
-			if y < 0 || y >= img.Rect.Max.Y { continue }
+			if y < 0 || y >= img.Rect.Max.Y {
+				continue
+			}
 			for t := 0; t < thick; t++ {
-				if x+t < 0 || x+t >= img.Rect.Max.X { continue }
+				if x+t < 0 || x+t >= img.Rect.Max.X {
+					continue
+				}
 				off := y*img.Stride + (x+t)*4
 				if off+3 < len(img.Pix) {
 					img.Pix[off], img.Pix[off+1], img.Pix[off+2], img.Pix[off+3] = r8, g8, b8, 255
@@ -271,55 +289,110 @@ func (r *WaylandRenderer) drawCustomChar(img *image.RGBA, char rune, px, py, cw,
 	}
 
 	ofs := cw / 4
-	if ofs < 1 { ofs = 1 }
+	if ofs < 1 {
+		ofs = 1
+	}
 
 	switch char {
-	case '─': drawHLine(px, px+cw-1, my); return true
-	case '│': drawVLine(mx, py, py+ch-1); return true
-	case '┌': drawHLine(mx, px+cw-1, my); drawVLine(mx, my, py+ch-1); return true
-	case '┐': drawHLine(px, mx, my); drawVLine(mx, my, py+ch-1); return true
-	case '└': drawHLine(mx, px+cw-1, my); drawVLine(mx, py, my); return true
-	case '┘': drawHLine(px, mx, my); drawVLine(mx, py, my); return true
-	case '├': drawHLine(mx, px+cw-1, my); drawVLine(mx, py, py+ch-1); return true
-	case '┤': drawHLine(px, mx, my); drawVLine(mx, py, py+ch-1); return true
-	case '┬': drawHLine(px, px+cw-1, my); drawVLine(mx, my, py+ch-1); return true
-	case '┴': drawHLine(px, px+cw-1, my); drawVLine(mx, py, my); return true
-	case '┼': drawHLine(px, px+cw-1, my); drawVLine(mx, py, py+ch-1); return true
-	case '═': drawHLine(px, px+cw-1, my-ofs); drawHLine(px, px+cw-1, my+ofs); return true
-	case '║': drawVLine(mx-ofs, py, py+ch-1); drawVLine(mx+ofs, py, py+ch-1); return true
+	case '─':
+		drawHLine(px, px+cw-1, my)
+		return true
+	case '│':
+		drawVLine(mx, py, py+ch-1)
+		return true
+	case '┌':
+		drawHLine(mx, px+cw-1, my)
+		drawVLine(mx, my, py+ch-1)
+		return true
+	case '┐':
+		drawHLine(px, mx, my)
+		drawVLine(mx, my, py+ch-1)
+		return true
+	case '└':
+		drawHLine(mx, px+cw-1, my)
+		drawVLine(mx, py, my)
+		return true
+	case '┘':
+		drawHLine(px, mx, my)
+		drawVLine(mx, py, my)
+		return true
+	case '├':
+		drawHLine(mx, px+cw-1, my)
+		drawVLine(mx, py, py+ch-1)
+		return true
+	case '┤':
+		drawHLine(px, mx, my)
+		drawVLine(mx, py, py+ch-1)
+		return true
+	case '┬':
+		drawHLine(px, px+cw-1, my)
+		drawVLine(mx, my, py+ch-1)
+		return true
+	case '┴':
+		drawHLine(px, px+cw-1, my)
+		drawVLine(mx, py, my)
+		return true
+	case '┼':
+		drawHLine(px, px+cw-1, my)
+		drawVLine(mx, py, py+ch-1)
+		return true
+	case '═':
+		drawHLine(px, px+cw-1, my-ofs)
+		drawHLine(px, px+cw-1, my+ofs)
+		return true
+	case '║':
+		drawVLine(mx-ofs, py, py+ch-1)
+		drawVLine(mx+ofs, py, py+ch-1)
+		return true
 	case '╔':
-		drawHLine(mx-ofs, px+cw-1, my-ofs); drawHLine(mx+ofs, px+cw-1, my+ofs)
-		drawVLine(mx-ofs, my-ofs, py+ch-1); drawVLine(mx+ofs, my+ofs, py+ch-1)
+		drawHLine(mx-ofs, px+cw-1, my-ofs)
+		drawHLine(mx+ofs, px+cw-1, my+ofs)
+		drawVLine(mx-ofs, my-ofs, py+ch-1)
+		drawVLine(mx+ofs, my+ofs, py+ch-1)
 		return true
 	case '╗':
-		drawHLine(px, mx+ofs, my-ofs); drawHLine(px, mx-ofs, my+ofs)
-		drawVLine(mx+ofs, my-ofs, py+ch-1); drawVLine(mx-ofs, my+ofs, py+ch-1)
+		drawHLine(px, mx+ofs, my-ofs)
+		drawHLine(px, mx-ofs, my+ofs)
+		drawVLine(mx+ofs, my-ofs, py+ch-1)
+		drawVLine(mx-ofs, my+ofs, py+ch-1)
 		return true
 	case '╚':
-		drawHLine(mx-ofs, px+cw-1, my-ofs); drawHLine(mx+ofs, px+cw-1, my+ofs)
-		drawVLine(mx-ofs, py, my-ofs); drawVLine(mx+ofs, py, my+ofs)
+		drawHLine(mx-ofs, px+cw-1, my-ofs)
+		drawHLine(mx+ofs, px+cw-1, my+ofs)
+		drawVLine(mx-ofs, py, my-ofs)
+		drawVLine(mx+ofs, py, my+ofs)
 		return true
 	case '╝':
-		drawHLine(px, mx+ofs, my-ofs); drawHLine(px, mx-ofs, my+ofs)
-		drawVLine(mx+ofs, py, my-ofs); drawVLine(mx-ofs, py, my+ofs)
+		drawHLine(px, mx+ofs, my-ofs)
+		drawHLine(px, mx-ofs, my+ofs)
+		drawVLine(mx+ofs, py, my-ofs)
+		drawVLine(mx-ofs, py, my+ofs)
 		return true
 	case '╠':
-		drawHLine(mx-ofs, px+cw-1, my-ofs); drawHLine(mx+ofs, px+cw-1, my+ofs)
-		drawVLine(mx-ofs, py, py+ch-1); drawVLine(mx+ofs, py, py+ch-1)
+		drawHLine(mx-ofs, px+cw-1, my-ofs)
+		drawHLine(mx+ofs, px+cw-1, my+ofs)
+		drawVLine(mx-ofs, py, py+ch-1)
+		drawVLine(mx+ofs, py, py+ch-1)
 		return true
 	case '╣':
-		drawHLine(px, mx+ofs, my-ofs); drawHLine(px, mx-ofs, my+ofs)
-		drawVLine(mx-ofs, py, py+ch-1); drawVLine(mx+ofs, py, py+ch-1)
+		drawHLine(px, mx+ofs, my-ofs)
+		drawHLine(px, mx-ofs, my+ofs)
+		drawVLine(mx-ofs, py, py+ch-1)
+		drawVLine(mx+ofs, py, py+ch-1)
 		return true
 	case '╩':
 		drawHLine(px, px+cw-1, my+ofs)
-		drawHLine(px, mx-ofs, my-ofs); drawHLine(mx+ofs, px+cw-1, my-ofs)
-		drawVLine(mx-ofs, py, my-ofs); drawVLine(mx+ofs, py, my-ofs)
+		drawHLine(px, mx-ofs, my-ofs)
+		drawHLine(mx+ofs, px+cw-1, my-ofs)
+		drawVLine(mx-ofs, py, my-ofs)
+		drawVLine(mx+ofs, py, my-ofs)
 		return true
 	case '╦':
 		drawHLine(px, px+cw-1, my-ofs)
-		drawHLine(px, mx-ofs, my+ofs); drawHLine(mx+ofs, px+cw-1, my+ofs)
-		drawVLine(mx-ofs, my+ofs, py+ch-1); drawVLine(mx+ofs, my+ofs, py+ch-1)
+		drawHLine(px, mx-ofs, my+ofs)
+		drawHLine(mx+ofs, px+cw-1, my+ofs)
+		drawVLine(mx-ofs, my+ofs, py+ch-1)
+		drawVLine(mx+ofs, my+ofs, py+ch-1)
 		return true
 	case '█':
 		baseOff := py*img.Stride + px*4

@@ -192,30 +192,44 @@ func TestTreeView_FullCoverage(t *testing.T) {
 	tvNav := NewTreeView(0, 0, 20, 3, root)
 
 	tvNav.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_END})
-	if tvNav.SelectPos != 3 { t.Errorf("End navigation failed, got %d", tvNav.SelectPos) }
+	if tvNav.SelectPos != 3 {
+		t.Errorf("End navigation failed, got %d", tvNav.SelectPos)
+	}
 
 	tvNav.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_HOME})
-	if tvNav.SelectPos != 0 { t.Error("Home navigation failed") }
+	if tvNav.SelectPos != 0 {
+		t.Error("Home navigation failed")
+	}
 
 	tvNav.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_NEXT}) // PgDn
-	if tvNav.SelectPos != 3 { t.Errorf("PgDn failed, got %d", tvNav.SelectPos) }
+	if tvNav.SelectPos != 3 {
+		t.Errorf("PgDn failed, got %d", tvNav.SelectPos)
+	}
 
 	tvNav.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_PRIOR}) // PgUp
-	if tvNav.SelectPos != 0 { t.Errorf("PgUp failed, got %d", tvNav.SelectPos) }
+	if tvNav.SelectPos != 0 {
+		t.Errorf("PgUp failed, got %d", tvNav.SelectPos)
+	}
 
 	// 6. Action (Enter/Space) on a leaf node
 	actionCalled := false
 	tvNav.OnAction = func(idx int) { actionCalled = true }
 	tvNav.SelectPos = 3 // Node 3 is Leaf 2.1
 	tvNav.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_SPACE})
-	if !actionCalled { t.Error("OnAction failed to trigger on leaf via Space") }
+	if !actionCalled {
+		t.Error("OnAction failed to trigger on leaf via Space")
+	}
 
 	// 7. Mouse: Wheel scrolling
 	tvNav.TopPos = 0
 	tvNav.ProcessMouse(&vtinput.InputEvent{Type: vtinput.MouseEventType, WheelDirection: -1}) // Down
-	if tvNav.TopPos != 1 { t.Errorf("Mouse wheel down failed, got %d", tvNav.TopPos) }
+	if tvNav.TopPos != 1 {
+		t.Errorf("Mouse wheel down failed, got %d", tvNav.TopPos)
+	}
 	tvNav.ProcessMouse(&vtinput.InputEvent{Type: vtinput.MouseEventType, WheelDirection: 1}) // Up
-	if tvNav.TopPos != 0 { t.Errorf("Mouse wheel up failed, got %d", tvNav.TopPos) }
+	if tvNav.TopPos != 0 {
+		t.Errorf("Mouse wheel up failed, got %d", tvNav.TopPos)
+	}
 
 	// 8. Mouse: Scrollbar click bounds
 	// Width 20 -> X2=19. Y1=0. Height is 3. len(flatNodes) is 4.
@@ -223,7 +237,9 @@ func TestTreeView_FullCoverage(t *testing.T) {
 		Type: vtinput.MouseEventType, KeyDown: true,
 		ButtonState: vtinput.FromLeft1stButtonPressed, MouseX: 19, MouseY: 0,
 	})
-	if !handled { t.Error("Scrollbar click area was not handled") }
+	if !handled {
+		t.Error("Scrollbar click area was not handled")
+	}
 
 	// 9. EnsureVisible edge case (height <= 0)
 	tvZero := NewTreeView(0, 0, 10, -1, root)

@@ -8,14 +8,15 @@ import (
 var (
 	stringsMu  sync.RWMutex
 	stringsMap = map[string]string{
-	"vtui.Ok":      "&Ok",
-	"vtui.Cancel":  "Cancel",
-	"vtui.Save":    "&Save",
-	"vtui.Delete":  "&Delete",
-	"vtui.Path":    "Path:",
-	"vtui.File":    "&File:",
-	"vtui.History": "History",
-})
+		"vtui.Ok":      "&Ok",
+		"vtui.Cancel":  "Cancel",
+		"vtui.Save":    "&Save",
+		"vtui.Delete":  "&Delete",
+		"vtui.Path":    "Path:",
+		"vtui.File":    "&File:",
+		"vtui.History": "History",
+	}
+)
 
 // Msg retrieves a localized string by key.
 // It looks into the global vtui strings map.

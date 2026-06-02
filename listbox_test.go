@@ -1,8 +1,8 @@
 package vtui
 
 import (
-	"testing"
 	"github.com/unxed/vtinput"
+	"testing"
 )
 
 func TestListBox_Scrolling(t *testing.T) {
@@ -74,7 +74,7 @@ func TestListBox_OnChange(t *testing.T) {
 }
 
 func TestListBox_PageNavigation(t *testing.T) {
-	items := make([]string, 20) // 20 items
+	items := make([]string, 20)          // 20 items
 	lb := NewListBox(0, 0, 10, 5, items) // Height 5
 
 	// 1. End
@@ -109,9 +109,9 @@ func TestListBox_MouseClickItem(t *testing.T) {
 	// Click at Y=2 (this is the second row of content since Y1=0 and MarginTop=0)
 	// Selected index should be TopPos (1) + 2 = 3.
 	lb.ProcessMouse(&vtinput.InputEvent{
-		Type: vtinput.MouseEventType,
+		Type:    vtinput.MouseEventType,
 		KeyDown: true,
-		MouseX: 2, MouseY: 2,
+		MouseX:  2, MouseY: 2,
 		ButtonState: vtinput.FromLeft1stButtonPressed,
 	})
 

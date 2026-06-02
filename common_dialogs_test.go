@@ -1,29 +1,34 @@
 package vtui
 
 import (
-	"os"
-	"strings"
-	"path/filepath"
-	"testing"
 	"context"
-	"time"
 	"github.com/unxed/vtinput"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
 )
 
 // testVFS implements VFSMinimal for testing
-type testVFS struct { currentPath string }
-func (v *testVFS) GetPath() string { return v.currentPath }
+type testVFS struct{ currentPath string }
+
+func (v *testVFS) GetPath() string        { return v.currentPath }
 func (v *testVFS) SetPath(p string) error { v.currentPath = p; return nil }
 func (v *testVFS) ReadDir(ctx context.Context, p string, onChunk func([]FSItem)) error {
 	entries, _ := os.ReadDir(p)
 	items := make([]FSItem, 0)
-	for _, e := range entries { items = append(items, FSItem{Name: e.Name(), IsDir: e.IsDir()}) }
-	if len(items) > 0 && onChunk != nil { onChunk(items) }
+	for _, e := range entries {
+		items = append(items, FSItem{Name: e.Name(), IsDir: e.IsDir()})
+	}
+	if len(items) > 0 && onChunk != nil {
+		onChunk(items)
+	}
 	return nil
 }
 func (v *testVFS) Join(elem ...string) string { return filepath.Join(elem...) }
-func (v *testVFS) Dir(p string) string { return filepath.Dir(p) }
-func (v *testVFS) Base(p string) string { return filepath.Base(p) }
+func (v *testVFS) Dir(p string) string        { return filepath.Dir(p) }
+func (v *testVFS) Base(p string) string       { return filepath.Base(p) }
 
 // pumpTasks executes all pending tasks in the FrameManager queue.
 func pumpTasks() {
@@ -59,7 +64,10 @@ func TestSelectDirDialog_ArrowVsEnter(t *testing.T) {
 
 	var lb *ListBox
 	for _, item := range dlg.rootGroup.items {
-		if l, ok := item.(*ListBox); ok { lb = l; break }
+		if l, ok := item.(*ListBox); ok {
+			lb = l
+			break
+		}
 	}
 
 	initialPath := vfs.GetPath()
@@ -93,11 +101,17 @@ func TestInputBox_OkCallback(t *testing.T) {
 	var edit *Edit
 	var okBtn *Button
 	for _, item := range dlg.rootGroup.items {
-		if e, ok := item.(*Edit); ok { edit = e }
-		if b, ok := item.(*Button); ok && b.hotkey == 'o' { okBtn = b }
+		if e, ok := item.(*Edit); ok {
+			edit = e
+		}
+		if b, ok := item.(*Button); ok && b.hotkey == 'o' {
+			okBtn = b
+		}
 	}
 
-	if edit == nil || okBtn == nil { t.Fatal("Dialog structure missing components") }
+	if edit == nil || okBtn == nil {
+		t.Fatal("Dialog structure missing components")
+	}
 
 	edit.SetText("NewValue")
 	if okBtn.OnClick != nil {
@@ -122,22 +136,32 @@ func TestSelectFileDialog_Selection(t *testing.T) {
 	var lb *ListBox
 	var fileEdit *Edit
 	walk(dlg.rootGroup, func(el UIElement) bool {
-		if l, ok := el.(*ListBox); ok { lb = l }
+		if l, ok := el.(*ListBox); ok {
+			lb = l
+		}
 		if t, ok := el.(*Text); ok && el.GetHotkey() == 'f' {
-			if e, ok := t.FocusLink.(*Edit); ok { fileEdit = e }
+			if e, ok := t.FocusLink.(*Edit); ok {
+				fileEdit = e
+			}
 		}
 		return true
 	})
 
 	// Wait for async loading
 	waitForCondition(t, time.Second, func() bool {
-		for _, item := range lb.Items { if item == "dummy.txt" { return true } }
+		for _, item := range lb.Items {
+			if item == "dummy.txt" {
+				return true
+			}
+		}
 		return false
 	})
 
 	// Change selection and check if Edit field updates
 	lb.SelectName("dummy.txt")
-	if lb.OnSelect != nil { lb.OnSelect(lb.SelectPos) }
+	if lb.OnSelect != nil {
+		lb.OnSelect(lb.SelectPos)
+	}
 
 	if fileEdit.GetText() != "dummy.txt" {
 		t.Errorf("File Edit not updated. Got %q", fileEdit.GetText())
@@ -155,7 +179,11 @@ func TestSelectDirDialog_Filtering(t *testing.T) {
 
 	var lb *ListBox
 	walk(dlg.rootGroup, func(el UIElement) bool {
-		if l, ok := el.(*ListBox); ok { lb = l; return false }; return true
+		if l, ok := el.(*ListBox); ok {
+			lb = l
+			return false
+		}
+		return true
 	})
 
 	waitForCondition(t, time.Second, func() bool {
@@ -180,12 +208,20 @@ func TestDialogNavigation_UX(t *testing.T) {
 
 	var lb *ListBox
 	walk(dlg.rootGroup, func(el UIElement) bool {
-		if l, ok := el.(*ListBox); ok { lb = l; return false }; return true
+		if l, ok := el.(*ListBox); ok {
+			lb = l
+			return false
+		}
+		return true
 	})
 
 	// 1. Enter into "my_work_folder"
 	waitForCondition(t, time.Second, func() bool {
-		for _, item := range lb.Items { if item == "my_work_folder" { return true } }
+		for _, item := range lb.Items {
+			if item == "my_work_folder" {
+				return true
+			}
+		}
 		return false
 	})
 	lb.SelectName("my_work_folder")
@@ -222,10 +258,16 @@ func TestSelectFileDialog_LayoutBestPractice(t *testing.T) {
 
 	walk(dlg.rootGroup, func(el UIElement) bool {
 		if t, ok := el.(*Text); ok && el.GetHotkey() == 'f' {
-			if e, ok := t.FocusLink.(*Edit); ok { fileEdit = e }
+			if e, ok := t.FocusLink.(*Edit); ok {
+				fileEdit = e
+			}
 		}
-		if b, ok := el.(*Button); ok && b.GetHotkey() == 'o' { btnOk = b }
-		if l, ok := el.(*ListBox); ok { lb = l }
+		if b, ok := el.(*Button); ok && b.GetHotkey() == 'o' {
+			btnOk = b
+		}
+		if l, ok := el.(*ListBox); ok {
+			lb = l
+		}
 		return true
 	})
 

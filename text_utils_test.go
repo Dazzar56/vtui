@@ -1,9 +1,9 @@
 package vtui
 
 import (
+	"path/filepath"
 	"reflect"
 	"testing"
-	"path/filepath"
 )
 
 func TestWrapText_Simple(t *testing.T) {
@@ -60,9 +60,9 @@ func TestTruncateMiddle(t *testing.T) {
 		expect string
 	}{
 		{"1234567890", 10, "1234567890"}, // No change
-		{"1234567890", 7, "12...90"},    // Middle cut
-		{"1234567890", 5, "1...0"},      // Minimal cut
-		{"12345", 2, "12345"},           // Stability check (max too small)
+		{"1234567890", 7, "12...90"},     // Middle cut
+		{"1234567890", 5, "1...0"},       // Minimal cut
+		{"12345", 2, "12345"},            // Stability check (max too small)
 		{filepath.FromSlash("/home/user/project/file.txt"), 15, filepath.FromSlash("/home/...le.txt")},
 	}
 

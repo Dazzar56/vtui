@@ -1,40 +1,40 @@
 package vtui
 
 import (
-	"unicode"
 	"strings"
+	"unicode"
 
-	"github.com/unxed/vtinput"
 	"github.com/mattn/go-runewidth"
+	"github.com/unxed/vtinput"
 )
 
 type Edit struct {
 	ScreenObject
-	text           []rune
-	curPos         int  // Logical position in the runes string
-	leftPos        int  // Visual offset (scrolling)
-	selStart       int  // -1 if no selection
-	selEnd         int
-	selAnchor      int  // Position where selection started
-	overtype       bool
-	clearFlag         bool // If true, first input will clear the text
-	pasting           bool
-	pasteBuffer       []rune
-	PasswordMode      bool // Mask text with '*'
-	HideCursor        bool // If true, suppress blinking cursor even when focused
-	ShowHistoryButton bool // Show a clickable [v] button
+	text               []rune
+	curPos             int // Logical position in the runes string
+	leftPos            int // Visual offset (scrolling)
+	selStart           int // -1 if no selection
+	selEnd             int
+	selAnchor          int // Position where selection started
+	overtype           bool
+	clearFlag          bool // If true, first input will clear the text
+	pasting            bool
+	pasteBuffer        []rune
+	PasswordMode       bool // Mask text with '*'
+	HideCursor         bool // If true, suppress blinking cursor even when focused
+	ShowHistoryButton  bool // Show a clickable [v] button
 	History            []string
 	HistoryPos         int
 	HistoryLimit       int
 	DeduplicateHistory bool
 	Command            int
 	OnAction           func()
-	ColorTextIdx      int
-	Validator         Validator
-	ColorUnchangedIdx int
-	ColorSelectedIdx  int
-	HistoryID         string
-	OnTextChange      func(string)
+	ColorTextIdx       int
+	Validator          Validator
+	ColorUnchangedIdx  int
+	ColorSelectedIdx   int
+	HistoryID          string
+	OnTextChange       func(string)
 }
 
 // HistoryProvider is an interface for external history persistence (e.g. from f4).
@@ -66,6 +66,7 @@ func NewEdit(x, y, width int, defaultText string) *Edit {
 	}
 	return e
 }
+
 // NewPasswordEdit creates an Edit control that masks input with asterisks.
 func NewPasswordEdit(x, y, width int, defaultText string) *Edit {
 	e := NewEdit(x, y, width, defaultText)
@@ -73,13 +74,14 @@ func NewPasswordEdit(x, y, width int, defaultText string) *Edit {
 	return e
 }
 
-
 func (e *Edit) Show(scr *ScreenBuf) {
 	e.ScreenObject.Show(scr)
 
 	// Ensure cursor is visible before display
 	visibleWidth := e.X2 - e.X1 + 1
-	if visibleWidth < 1 { visibleWidth = 1 } // Safety: handle zero-width windows
+	if visibleWidth < 1 {
+		visibleWidth = 1
+	} // Safety: handle zero-width windows
 
 	if e.curPos < e.leftPos {
 		e.leftPos = e.curPos
@@ -120,7 +122,9 @@ func (e *Edit) Show(scr *ScreenBuf) {
 }
 
 func (e *Edit) DisplayObject(scr *ScreenBuf) {
-	if !e.IsVisible() { return }
+	if !e.IsVisible() {
+		return
+	}
 	fullWidth := e.X2 - e.X1 + 1
 	visibleWidth := fullWidth
 
@@ -144,7 +148,7 @@ func (e *Edit) DisplayObject(scr *ScreenBuf) {
 		w := runewidth.RuneWidth(r)
 
 		// Stop if next character doesn't fit visually
-		if currX + w > visibleWidth {
+		if currX+w > visibleWidth {
 			break
 		}
 
@@ -158,7 +162,7 @@ func (e *Edit) DisplayObject(scr *ScreenBuf) {
 
 		// Write rune (handles WideCharFiller automatically)
 		cells := StringToCharInfo(string(r), attr)
-		scr.Write(e.X1 + currX, e.Y1, cells)
+		scr.Write(e.X1+currX, e.Y1, cells)
 		currX += w
 	}
 	// Draw history button if needed
@@ -175,6 +179,7 @@ func (e *Edit) DisplayObject(scr *ScreenBuf) {
 func (e *Edit) GetText() string {
 	return string(e.text)
 }
+
 // SetText replaces the content of the edit control.
 func (e *Edit) SetText(text string) {
 	e.text = []rune(text)
@@ -183,6 +188,7 @@ func (e *Edit) SetText(text string) {
 	e.selStart = -1
 	e.selAnchor = -1
 }
+
 // SelectAll selects the entire text and sets the clear flag,
 // so the next character typed will replace the content.
 func (e *Edit) SelectAll() {
@@ -329,8 +335,12 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 		return true
 	}
 
-	if !event.KeyDown { return false }
-	if e.IsDisabled() { return false }
+	if !event.KeyDown {
+		return false
+	}
+	if e.IsDisabled() {
+		return false
+	}
 
 	// Navigation with selection reset or set
 	DebugLog("  Edit.ProcessKey: VK=%s Char=%d", vtinput.VKString(event.VirtualKeyCode), event.Char)
@@ -396,29 +406,44 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 		return e.FireAction(e.OnAction, nil)
 
 	case vtinput.VK_LEFT:
-		if e.curPos == 0 && !shift && !ctrl { return false } // Escape focus to previous
-		if shift { e.beginSelection() } else { e.selStart = -1; e.selAnchor = -1 }
+		if e.curPos == 0 && !shift && !ctrl {
+			return false
+		} // Escape focus to previous
+		if shift {
+			e.beginSelection()
+		} else {
+			e.selStart = -1
+			e.selAnchor = -1
+		}
 		if ctrl {
 			if e.curPos > 0 {
 				e.curPos--
-				if shift { e.endSelection() }
+				if shift {
+					e.endSelection()
+				}
 				for e.curPos > 0 {
 					prev, curr := e.text[e.curPos-1], e.text[e.curPos]
 					pCat, cCat := getCharCategory(prev), getCharCategory(curr)
-				if (shift && pCat != catSpace && cCat == catSpace) ||
-					(pCat == catSpace && cCat == catWord) ||
-					(pCat == catSpace && cCat == catDivider) ||
-					(pCat == catDivider && cCat == catWord) {
-					break
-				}
+					if (shift && pCat != catSpace && cCat == catSpace) ||
+						(pCat == catSpace && cCat == catWord) ||
+						(pCat == catSpace && cCat == catDivider) ||
+						(pCat == catDivider && cCat == catWord) {
+						break
+					}
 					e.curPos--
-					if shift { e.endSelection() }
+					if shift {
+						e.endSelection()
+					}
 				}
 			}
 		} else {
-			if e.curPos > 0 { e.curPos-- }
+			if e.curPos > 0 {
+				e.curPos--
+			}
 		}
-		if shift { e.endSelection() }
+		if shift {
+			e.endSelection()
+		}
 		e.clearFlag = false
 		return true
 
@@ -434,11 +459,18 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 			}
 			return false // Escape focus to next
 		}
-		if shift { e.beginSelection() } else { e.selStart = -1; e.selAnchor = -1 }
+		if shift {
+			e.beginSelection()
+		} else {
+			e.selStart = -1
+			e.selAnchor = -1
+		}
 		if ctrl {
 			if e.curPos < len(e.text) {
 				e.curPos++
-				if shift { e.endSelection() }
+				if shift {
+					e.endSelection()
+				}
 				for e.curPos < len(e.text) {
 					prev, curr := e.text[e.curPos-1], e.text[e.curPos]
 					pCat, cCat := getCharCategory(prev), getCharCategory(curr)
@@ -465,27 +497,47 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 						break
 					}
 					e.curPos++
-					if shift { e.endSelection() }
+					if shift {
+						e.endSelection()
+					}
 				}
 			}
 		} else {
-			if e.curPos < len(e.text) { e.curPos++ }
+			if e.curPos < len(e.text) {
+				e.curPos++
+			}
 		}
-		if shift { e.endSelection() }
+		if shift {
+			e.endSelection()
+		}
 		e.clearFlag = false
 		return true
 
 	case vtinput.VK_HOME:
-		if shift { e.beginSelection() } else { e.selStart = -1; e.selAnchor = -1 }
+		if shift {
+			e.beginSelection()
+		} else {
+			e.selStart = -1
+			e.selAnchor = -1
+		}
 		e.curPos = 0
-		if shift { e.endSelection() }
+		if shift {
+			e.endSelection()
+		}
 		e.clearFlag = false
 		return true
 
 	case vtinput.VK_END:
-		if shift { e.beginSelection() } else { e.selStart = -1; e.selAnchor = -1 }
+		if shift {
+			e.beginSelection()
+		} else {
+			e.selStart = -1
+			e.selAnchor = -1
+		}
 		e.curPos = len(e.text)
-		if shift { e.endSelection() }
+		if shift {
+			e.endSelection()
+		}
 		e.clearFlag = false
 		return true
 
@@ -500,7 +552,9 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 			e.curPos--
 		}
 		e.clearFlag = false
-		if e.OnTextChange != nil { e.OnTextChange(string(e.text)) }
+		if e.OnTextChange != nil {
+			e.OnTextChange(string(e.text))
+		}
 		return true
 
 	case vtinput.VK_DELETE:
@@ -513,7 +567,9 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 			e.text = append(e.text[:e.curPos], e.text[e.curPos+1:]...)
 		}
 		e.clearFlag = false
-		if e.OnTextChange != nil { e.OnTextChange(string(e.text)) }
+		if e.OnTextChange != nil {
+			e.OnTextChange(string(e.text))
+		}
 		return true
 
 	case vtinput.VK_INSERT:
@@ -589,12 +645,14 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 		e.ClearSelection()
 
 		DebugLog("EDIT_DEBUG: Character ACCEPTED. New text len: %d", len(e.text))
-		if e.OnTextChange != nil { e.OnTextChange(string(e.text)) }
+		if e.OnTextChange != nil {
+			e.OnTextChange(string(e.text))
+		}
 		return true
 	}
 
 	DebugLog("EDIT_DEBUG: Key REJECTED or not handled as text.")
-	return false;
+	return false
 }
 
 func (e *Edit) beginSelection() {
@@ -634,9 +692,15 @@ func (e *Edit) ClearSelection() {
 func (e *Edit) DeleteBlock() {
 	if e.selStart != -1 {
 		// Bounds check to prevent panics from stale selection state
-		if e.selStart < 0 { e.selStart = 0 }
-		if e.selEnd > len(e.text) { e.selEnd = len(e.text) }
-		if e.selStart > e.selEnd { e.selStart, e.selEnd = e.selEnd, e.selStart }
+		if e.selStart < 0 {
+			e.selStart = 0
+		}
+		if e.selEnd > len(e.text) {
+			e.selEnd = len(e.text)
+		}
+		if e.selStart > e.selEnd {
+			e.selStart, e.selEnd = e.selEnd, e.selStart
+		}
 
 		e.text = append(e.text[:e.selStart], e.text[e.selEnd:]...)
 		e.curPos = e.selStart
@@ -663,19 +727,27 @@ func (e *Edit) OpenHistory() {
 	}
 
 	h := len(e.History) + 2
-	if h > 10 { h = 10 }
+	if h > 10 {
+		h = 10
+	}
 
 	// Calculate width: at least the width of the input field, but max 50
 	w := e.X2 - e.X1 + 1
-	if w < 20 { w = 20 }
-	if w > 50 { w = 50 }
+	if w < 20 {
+		w = 20
+	}
+	if w > 50 {
+		w = 50
+	}
 
 	// Positioning logic
 	scrH := 25
-	if FrameManager.scr != nil { scrH = FrameManager.scr.height }
+	if FrameManager.scr != nil {
+		scrH = FrameManager.scr.height
+	}
 
 	y := e.Y1 + 1
-	if y + h > scrH {
+	if y+h > scrH {
 		y = e.Y1 - h // Flip upwards if no space below
 	}
 
@@ -781,7 +853,9 @@ func (e *Edit) AddHistory(text string) {
 	}
 }
 func (e *Edit) HistoryUp() {
-	if len(e.History) == 0 { return }
+	if len(e.History) == 0 {
+		return
+	}
 	if e.HistoryPos < len(e.History)-1 {
 		e.HistoryPos++
 		e.SetText(e.History[e.HistoryPos])
@@ -799,7 +873,9 @@ func (e *Edit) HistoryDown() {
 }
 
 func (e *Edit) ProcessMouse(ev *vtinput.InputEvent) bool {
-	if e.IsDisabled() { return false }
+	if e.IsDisabled() {
+		return false
+	}
 	if ev.KeyDown {
 		if ev.ButtonState == vtinput.FromLeft1stButtonPressed {
 			if e.ShowHistoryButton && int(ev.MouseX) == e.X2 && int(ev.MouseY) == e.Y1 {

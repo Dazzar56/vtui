@@ -24,6 +24,7 @@ func NewDialog(x1, y1, x2, y2 int, title string) *Window {
 	w.ShowClose = false // Dialogs don't have a close button by default unless specified
 	return w
 }
+
 // NewCenteredDialog creates a modal dialog automatically centered on the screen.
 func NewCenteredDialog(width, height int, title string) *Window {
 	scrW, scrH := 80, 25
@@ -45,5 +46,5 @@ func (w *Window) GetType() FrameType {
 	return TypeUser
 }
 
-func (w *Window) GetProgress() int { return w.progress }
+func (w *Window) GetProgress() int  { return w.progress }
 func (w *Window) SetProgress(p int) { w.progress = p }

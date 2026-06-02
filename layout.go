@@ -7,7 +7,7 @@ const (
 	AlignLeft Alignment = iota
 	AlignCenter
 	AlignRight
-	AlignFill   // Stretches the element to fill the available space
+	AlignFill // Stretches the element to fill the available space
 	AlignTop
 	AlignBottom
 )
@@ -67,7 +67,7 @@ func (v *VBoxLayout) Apply() {
 			finalW = v.W - itm.Margins.Left - itm.Margins.Right
 		case AlignCenter:
 			finalW = iw
-			finalX = v.X + (v.W - finalW) / 2
+			finalX = v.X + (v.W-finalW)/2
 		case AlignRight:
 			finalW = iw
 			finalX = v.X + v.W - itm.Margins.Right - finalW
@@ -132,7 +132,7 @@ func (h *HBoxLayout) Apply() {
 	currX := h.X
 	switch h.HorizontalAlign {
 	case AlignCenter:
-		currX = h.X + (h.W - totalW) / 2
+		currX = h.X + (h.W-totalW)/2
 	case AlignRight:
 		currX = h.X + h.W - totalW
 	}
@@ -150,7 +150,7 @@ func (h *HBoxLayout) Apply() {
 			finalH = h.H - itm.Margins.Top - itm.Margins.Bottom
 		case AlignCenter:
 			finalH = ih
-			finalY = h.Y + (h.H - finalH) / 2
+			finalY = h.Y + (h.H-finalH)/2
 		case AlignBottom:
 			finalH = ih
 			finalY = h.Y + h.H - itm.Margins.Bottom - finalH

@@ -3,8 +3,8 @@
 package vtui
 
 import (
-	"os"
 	"fmt"
+	"os"
 
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/basicfont"

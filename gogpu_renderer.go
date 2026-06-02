@@ -6,13 +6,13 @@ import (
 	"image/color"
 	"math"
 	"strings"
-	"time"
 	"sync"
+	"time"
 
 	"github.com/gogpu/gg"
+	_ "github.com/gogpu/gg/gpu" // Включаем аппаратное ускорение рендеринга
 	"github.com/gogpu/gg/integration/ggcanvas"
 	"github.com/gogpu/gg/text"
-	_ "github.com/gogpu/gg/gpu" // Включаем аппаратное ускорение рендеринга
 )
 
 type GogpuRenderer struct {
@@ -316,7 +316,9 @@ func (r *GogpuRenderer) Flush() {
 
 	if r.canvas == nil {
 		provider := app.GPUContextProvider()
-		if provider == nil { return }
+		if provider == nil {
+			return
+		}
 		r.canvas, _ = ggcanvas.New(provider, w, h)
 	}
 

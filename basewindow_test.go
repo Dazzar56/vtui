@@ -1,8 +1,8 @@
 package vtui
 
 import (
-	"testing"
 	"github.com/unxed/vtinput"
+	"testing"
 )
 
 func TestBaseWindow_ShadowFlag(t *testing.T) {
@@ -27,7 +27,7 @@ func TestBaseWindow_HandleCommand(t *testing.T) {
 func TestBaseWindow_AddItem(t *testing.T) {
 	// Создаем окно 10x5. С учетом рамок, контент занимает 8x3.
 	bw := NewBaseWindow(0, 0, 10, 5, "Test MinSize")
-	
+
 	// Начальный MinW должен быть равен переданному размеру (11 символов: 0..10)
 	if bw.MinW != 11 {
 		t.Errorf("Initial MinW is wrong, got %d, want 11", bw.MinW)
@@ -133,7 +133,6 @@ func (m *broadcastMockElement) HandleBroadcast(cmd int, args any) bool {
 	return false
 }
 
-
 func TestBaseWindow_HandleBroadcast_Propagation(t *testing.T) {
 	bw := NewBaseWindow(0, 0, 10, 10, "Test")
 	el1 := &broadcastMockElement{}
@@ -180,7 +179,6 @@ func TestBaseWindow_Validation_CmDefault(t *testing.T) {
 	}
 }
 
-
 func TestBaseWindow_NoDownwardCommandRouting(t *testing.T) {
 	bw := NewBaseWindow(0, 0, 10, 10, "Recursion Test")
 
@@ -213,7 +211,9 @@ func TestBaseWindow_PgDnFocus(t *testing.T) {
 
 	// Ensure initial focus is on edit
 	bw.rootGroup.setFocus(0)
-	if !edit.IsFocused() { t.Fatal("Setup failed: edit not focused") }
+	if !edit.IsFocused() {
+		t.Fatal("Setup failed: edit not focused")
+	}
 
 	// Press PgDn
 	bw.ProcessKey(&vtinput.InputEvent{

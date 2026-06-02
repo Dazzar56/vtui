@@ -19,10 +19,11 @@ func (s *Separator) Show(scr *ScreenBuf) {
 }
 
 func (s *Separator) DisplayObject(scr *ScreenBuf) {
-	if !s.IsVisible() { return }
+	if !s.IsVisible() {
+		return
+	}
 	p := NewPainter(scr)
 	attr := Palette[ColDialogBox]
 
 	p.DrawLine(s.X1, s.Y1, s.X2, s.Y1, boxSymbols[bsH], attr, s.ConnectLeft, s.ConnectRight)
 }
-

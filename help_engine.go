@@ -49,6 +49,7 @@ func (cr *ctxReader) Read(p []byte) (int, error) {
 		return cr.r.Read(p)
 	}
 }
+
 // GlobalHelpEngine is the default engine used by the framework for F1 lookups.
 var GlobalHelpEngine *HelpEngine
 

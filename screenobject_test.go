@@ -1,8 +1,8 @@
 package vtui
 
 import (
-	"testing"
 	"github.com/unxed/vtinput"
+	"testing"
 )
 
 type mockOwner struct {
@@ -74,24 +74,24 @@ func TestScreenObject_FireAction(t *testing.T) {
 func TestCommandBubbling_MultiLevel(t *testing.T) {
 	// Regression test for "broken menu" bug.
 	// Flow: VMenu (item clicked) -> MenuBar (owner) -> PanelsFrame (owner)
-	
+
 	finalTarget := &mockOwner{}
-	
+
 	mb := NewMenuBar([]string{"File"})
 	mb.SetOwner(finalTarget)
-	
+
 	vm := NewVMenu("Sub")
 	vm.SetOwner(mb)
 	vm.AddItem(MenuItem{Text: "Action", Command: 777})
 	vm.SetSelectPos(0)
-	
+
 	// Simulate Enter on menu item
 	vm.ProcessKey(&vtinput.InputEvent{
-		Type: vtinput.KeyEventType, 
-		KeyDown: true, 
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
 		VirtualKeyCode: vtinput.VK_RETURN,
 	})
-	
+
 	if !finalTarget.commandHandled {
 		t.Error("Multi-level bubbling failed: Command did not reach the final owner")
 	}

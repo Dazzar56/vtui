@@ -87,4 +87,3 @@ func TestVMenu_OnKeyDownHook(t *testing.T) {
 		t.Error("Standard navigation should still work if hook returns false")
 	}
 }
-

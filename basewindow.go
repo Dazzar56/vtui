@@ -9,20 +9,20 @@ import (
 // BaseWindow provides generic windowing logic (moving, resizing, focus cycle).
 type BaseWindow struct {
 	BaseFrame
-	rootGroup  *Group
-	frame      *BorderedFrame
-	isDragging bool
-	isResizing bool
-	dragOffX   int
-	dragOffY   int
-	lastW      int
-	lastH      int
-	MinW       int
-	MinH       int
-	ShowClose  bool
-	ShowZoom   bool
+	rootGroup   *Group
+	frame       *BorderedFrame
+	isDragging  bool
+	isResizing  bool
+	dragOffX    int
+	dragOffY    int
+	lastW       int
+	lastH       int
+	MinW        int
+	MinH        int
+	ShowClose   bool
+	ShowZoom    bool
 	SavedBounds *Rect
-	progress   int
+	progress    int
 }
 
 func (bw *BaseWindow) GetFocusedItem() UIElement {
@@ -70,6 +70,7 @@ func (bw *BaseWindow) AddItem(item UIElement) {
 		bw.MinH = reqH
 	}
 }
+
 // AddLink delegates the automation link to the root group.
 func (bw *BaseWindow) AddLink(src, target UIElement, action LinkAction) {
 	bw.rootGroup.AddLink(src, target, action)
@@ -245,8 +246,6 @@ func (bw *BaseWindow) handleWindowOperations(e *vtinput.InputEvent) bool {
 		return true
 	}
 
-
-
 	if e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
 		offset := bw.frame.getControlOffset()
 
@@ -316,6 +315,7 @@ func (bw *BaseWindow) Valid(cmd int) bool {
 }
 
 func (bw *BaseWindow) HasShadow() bool { return true }
+
 // SetData populates UI elements from a struct using field names or `vtui` tags.
 func (bw *BaseWindow) SetData(record any) {
 	bw.rootGroup.SetData(record)

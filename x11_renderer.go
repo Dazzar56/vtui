@@ -13,13 +13,13 @@ import (
 )
 
 type X11Renderer struct {
-	host       *X11Host
-	face       font.Face
-	w, h       int
-	glyphCache map[glyphKey]*image.RGBA
-	cursorX    int
-	cursorY    int
-	cursorVis  bool
+	host        *X11Host
+	face        font.Face
+	w, h        int
+	glyphCache  map[glyphKey]*image.RGBA
+	cursorX     int
+	cursorY     int
+	cursorVis   bool
 	cursorShape CursorShape
 
 	oldCursorX int
@@ -154,7 +154,9 @@ func (r *X11Renderer) Render(buf, shadow []CharInfo, w, h int, forceRedraw bool)
 
 				char := rune(currCell.Char)
 				rw := runewidth.RuneWidth(char)
-				if rw < 1 { rw = 1 }
+				if rw < 1 {
+					rw = 1
+				}
 
 				cpx := currX * cw
 				cfg, cbg := r.getCellColors(currCell)
@@ -329,55 +331,110 @@ func (r *X11Renderer) drawCustomChar(img *image.RGBA, char rune, px, py, cw, ch 
 	}
 
 	ofs := cw / 4
-	if ofs < 1 { ofs = 1 }
+	if ofs < 1 {
+		ofs = 1
+	}
 
 	switch char {
-	case '─': drawHLine(px, px+cw-1, my); return true
-	case '│': drawVLine(mx, py, py+ch-1); return true
-	case '┌': drawHLine(mx, px+cw-1, my); drawVLine(mx, my, py+ch-1); return true
-	case '┐': drawHLine(px, mx, my); drawVLine(mx, my, py+ch-1); return true
-	case '└': drawHLine(mx, px+cw-1, my); drawVLine(mx, py, my); return true
-	case '┘': drawHLine(px, mx, my); drawVLine(mx, py, my); return true
-	case '├': drawHLine(mx, px+cw-1, my); drawVLine(mx, py, py+ch-1); return true
-	case '┤': drawHLine(px, mx, my); drawVLine(mx, py, py+ch-1); return true
-	case '┬': drawHLine(px, px+cw-1, my); drawVLine(mx, my, py+ch-1); return true
-	case '┴': drawHLine(px, px+cw-1, my); drawVLine(mx, py, my); return true
-	case '┼': drawHLine(px, px+cw-1, my); drawVLine(mx, py, py+ch-1); return true
-	case '═': drawHLine(px, px+cw-1, my-ofs); drawHLine(px, px+cw-1, my+ofs); return true
-	case '║': drawVLine(mx-ofs, py, py+ch-1); drawVLine(mx+ofs, py, py+ch-1); return true
+	case '─':
+		drawHLine(px, px+cw-1, my)
+		return true
+	case '│':
+		drawVLine(mx, py, py+ch-1)
+		return true
+	case '┌':
+		drawHLine(mx, px+cw-1, my)
+		drawVLine(mx, my, py+ch-1)
+		return true
+	case '┐':
+		drawHLine(px, mx, my)
+		drawVLine(mx, my, py+ch-1)
+		return true
+	case '└':
+		drawHLine(mx, px+cw-1, my)
+		drawVLine(mx, py, my)
+		return true
+	case '┘':
+		drawHLine(px, mx, my)
+		drawVLine(mx, py, my)
+		return true
+	case '├':
+		drawHLine(mx, px+cw-1, my)
+		drawVLine(mx, py, py+ch-1)
+		return true
+	case '┤':
+		drawHLine(px, mx, my)
+		drawVLine(mx, py, py+ch-1)
+		return true
+	case '┬':
+		drawHLine(px, px+cw-1, my)
+		drawVLine(mx, my, py+ch-1)
+		return true
+	case '┴':
+		drawHLine(px, px+cw-1, my)
+		drawVLine(mx, py, my)
+		return true
+	case '┼':
+		drawHLine(px, px+cw-1, my)
+		drawVLine(mx, py, py+ch-1)
+		return true
+	case '═':
+		drawHLine(px, px+cw-1, my-ofs)
+		drawHLine(px, px+cw-1, my+ofs)
+		return true
+	case '║':
+		drawVLine(mx-ofs, py, py+ch-1)
+		drawVLine(mx+ofs, py, py+ch-1)
+		return true
 	case '╔':
-		drawHLine(mx-ofs, px+cw-1, my-ofs); drawHLine(mx+ofs, px+cw-1, my+ofs)
-		drawVLine(mx-ofs, my-ofs, py+ch-1); drawVLine(mx+ofs, my+ofs, py+ch-1)
+		drawHLine(mx-ofs, px+cw-1, my-ofs)
+		drawHLine(mx+ofs, px+cw-1, my+ofs)
+		drawVLine(mx-ofs, my-ofs, py+ch-1)
+		drawVLine(mx+ofs, my+ofs, py+ch-1)
 		return true
 	case '╗':
-		drawHLine(px, mx+ofs, my-ofs); drawHLine(px, mx-ofs, my+ofs)
-		drawVLine(mx+ofs, my-ofs, py+ch-1); drawVLine(mx-ofs, my+ofs, py+ch-1)
+		drawHLine(px, mx+ofs, my-ofs)
+		drawHLine(px, mx-ofs, my+ofs)
+		drawVLine(mx+ofs, my-ofs, py+ch-1)
+		drawVLine(mx-ofs, my+ofs, py+ch-1)
 		return true
 	case '╚':
-		drawHLine(mx-ofs, px+cw-1, my-ofs); drawHLine(mx+ofs, px+cw-1, my+ofs)
-		drawVLine(mx-ofs, py, my-ofs); drawVLine(mx+ofs, py, my+ofs)
+		drawHLine(mx-ofs, px+cw-1, my-ofs)
+		drawHLine(mx+ofs, px+cw-1, my+ofs)
+		drawVLine(mx-ofs, py, my-ofs)
+		drawVLine(mx+ofs, py, my+ofs)
 		return true
 	case '╝':
-		drawHLine(px, mx+ofs, my-ofs); drawHLine(px, mx-ofs, my+ofs)
-		drawVLine(mx+ofs, py, my-ofs); drawVLine(mx-ofs, py, my+ofs)
+		drawHLine(px, mx+ofs, my-ofs)
+		drawHLine(px, mx-ofs, my+ofs)
+		drawVLine(mx+ofs, py, my-ofs)
+		drawVLine(mx-ofs, py, my+ofs)
 		return true
 	case '╠':
-		drawHLine(mx-ofs, px+cw-1, my-ofs); drawHLine(mx+ofs, px+cw-1, my+ofs)
-		drawVLine(mx-ofs, py, py+ch-1); drawVLine(mx+ofs, py, py+ch-1)
+		drawHLine(mx-ofs, px+cw-1, my-ofs)
+		drawHLine(mx+ofs, px+cw-1, my+ofs)
+		drawVLine(mx-ofs, py, py+ch-1)
+		drawVLine(mx+ofs, py, py+ch-1)
 		return true
 	case '╣':
-		drawHLine(px, mx+ofs, my-ofs); drawHLine(px, mx-ofs, my+ofs)
-		drawVLine(mx-ofs, py, py+ch-1); drawVLine(mx+ofs, py, py+ch-1)
+		drawHLine(px, mx+ofs, my-ofs)
+		drawHLine(px, mx-ofs, my+ofs)
+		drawVLine(mx-ofs, py, py+ch-1)
+		drawVLine(mx+ofs, py, py+ch-1)
 		return true
 	case '╩':
 		drawHLine(px, px+cw-1, my+ofs)
-		drawHLine(px, mx-ofs, my-ofs); drawHLine(mx+ofs, px+cw-1, my-ofs)
-		drawVLine(mx-ofs, py, my-ofs); drawVLine(mx+ofs, py, my-ofs)
+		drawHLine(px, mx-ofs, my-ofs)
+		drawHLine(mx+ofs, px+cw-1, my-ofs)
+		drawVLine(mx-ofs, py, my-ofs)
+		drawVLine(mx+ofs, py, my-ofs)
 		return true
 	case '╦':
 		drawHLine(px, px+cw-1, my-ofs)
-		drawHLine(px, mx-ofs, my+ofs); drawHLine(mx+ofs, px+cw-1, my+ofs)
-		drawVLine(mx-ofs, my+ofs, py+ch-1); drawVLine(mx+ofs, my+ofs, py+ch-1)
+		drawHLine(px, mx-ofs, my+ofs)
+		drawHLine(mx+ofs, px+cw-1, my+ofs)
+		drawVLine(mx-ofs, my+ofs, py+ch-1)
+		drawVLine(mx+ofs, my+ofs, py+ch-1)
 		return true
 	case '█':
 		baseOff := py*img.Stride + px*4

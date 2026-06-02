@@ -1,14 +1,15 @@
 package vtui
 
 import (
-	"testing"
 	"strings"
+	"testing"
 )
 
 // mockT is a simple spy for testing AssertLayout without failing the real test
 type mockT struct {
 	failed bool
 }
+
 func (m *mockT) Errorf(format string, args ...any) { m.failed = true }
 
 func TestLayoutValidator_Logic(t *testing.T) {
@@ -20,13 +21,17 @@ func TestLayoutValidator_Logic(t *testing.T) {
 		b2 := NewButton(6, 2, "B2") // Overlaps
 		dlg.AddItem(b1)
 		dlg.AddItem(b2)
-		
+
 		errs := ValidateLayout(dlg)
 		foundOverlap := false
 		for _, e := range errs {
-			if strings.Contains(e.Error(), "overlap") { foundOverlap = true }
+			if strings.Contains(e.Error(), "overlap") {
+				foundOverlap = true
+			}
 		}
-		if !foundOverlap { t.Error("Failed to detect overlapping buttons") }
+		if !foundOverlap {
+			t.Error("Failed to detect overlapping buttons")
+		}
 	})
 
 	t.Run("Padding violation", func(t *testing.T) {
@@ -35,7 +40,9 @@ func TestLayoutValidator_Logic(t *testing.T) {
 		dlg.AddItem(btn)
 
 		errs := ValidateLayout(dlg)
-		if len(errs) == 0 { t.Error("Failed to detect padding violation") }
+		if len(errs) == 0 {
+			t.Error("Failed to detect padding violation")
+		}
 	})
 
 	t.Run("Glued elements (horizontal air required)", func(t *testing.T) {
@@ -48,9 +55,13 @@ func TestLayoutValidator_Logic(t *testing.T) {
 		errs := ValidateLayout(dlg)
 		found := false
 		for _, e := range errs {
-			if strings.Contains(e.Error(), "horizontally") { found = true }
+			if strings.Contains(e.Error(), "horizontally") {
+				found = true
+			}
 		}
-		if !found { t.Error("Failed to detect horizontal air violation") }
+		if !found {
+			t.Error("Failed to detect horizontal air violation")
+		}
 	})
 
 	t.Run("Compact TUI (vertical touch allowed for labels)", func(t *testing.T) {
@@ -76,9 +87,13 @@ func TestLayoutValidator_Logic(t *testing.T) {
 		errs := ValidateLayout(dlg)
 		found := false
 		for _, e := range errs {
-			if strings.Contains(e.Error(), "vertical air") { found = true }
+			if strings.Contains(e.Error(), "vertical air") {
+				found = true
+			}
 		}
-		if !found { t.Error("Failed to detect button lacking vertical air") }
+		if !found {
+			t.Error("Failed to detect button lacking vertical air")
+		}
 	})
 
 	t.Run("Correct layout", func(t *testing.T) {
@@ -90,7 +105,9 @@ func TestLayoutValidator_Logic(t *testing.T) {
 
 		mt := &mockT{}
 		AssertLayout(mt, dlg)
-		if mt.failed { t.Error("Valid layout reported as invalid") }
+		if mt.failed {
+			t.Error("Valid layout reported as invalid")
+		}
 	})
 	t.Run("Recursive nested layout", func(t *testing.T) {
 		// We use GroupBox because it is a real Container that the validator recurses into.

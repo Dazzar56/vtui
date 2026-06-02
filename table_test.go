@@ -31,6 +31,7 @@ func (m mockSelectableRow) GetCellText(col int) string {
 func (m mockSelectableRow) IsSelected() bool {
 	return m.selected
 }
+
 type mockMultiColSelectableRow struct {
 	col1     string
 	col2     string
@@ -38,14 +39,19 @@ type mockMultiColSelectableRow struct {
 }
 
 func (m mockMultiColSelectableRow) GetCellText(col int) string {
-	if col == 0 { return m.col1 }
+	if col == 0 {
+		return m.col1
+	}
 	return m.col2
 }
 
 func (m mockMultiColSelectableRow) IsColSelected(col int) bool {
-	if col >= 0 && col < 2 { return m.selected[col] }
+	if col >= 0 && col < 2 {
+		return m.selected[col]
+	}
 	return false
 }
+
 type mockColorableRow struct {
 	col1 string
 	attr uint64

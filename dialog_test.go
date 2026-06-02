@@ -1,8 +1,8 @@
 package vtui
 
 import (
-	"testing"
 	"github.com/unxed/vtinput"
+	"testing"
 )
 
 func TestDialog_HotkeyCaseInsensitivity(t *testing.T) {
@@ -30,10 +30,10 @@ func TestDialog_DraggingLogic(t *testing.T) {
 
 	// 1. Press left mouse button on border (0,0)
 	d.ProcessMouse(&vtinput.InputEvent{
-		Type: vtinput.MouseEventType,
-		KeyDown: true,
+		Type:        vtinput.MouseEventType,
+		KeyDown:     true,
 		ButtonState: vtinput.FromLeft1stButtonPressed,
-		MouseX: 0, MouseY: 0,
+		MouseX:      0, MouseY: 0,
 	})
 
 	if !d.isDragging {
@@ -43,10 +43,10 @@ func TestDialog_DraggingLogic(t *testing.T) {
 	// 2. Move mouse to (5,5)
 	// Emulate move event (in vtinput usually KeyDown: false with button pressed)
 	d.ProcessMouse(&vtinput.InputEvent{
-		Type: vtinput.MouseEventType,
-		KeyDown: false,
+		Type:        vtinput.MouseEventType,
+		KeyDown:     false,
 		ButtonState: vtinput.FromLeft1stButtonPressed,
-		MouseX: 5, MouseY: 5,
+		MouseX:      5, MouseY: 5,
 	})
 
 	// Dialog should shift by +5, +5
@@ -62,10 +62,10 @@ func TestDialog_DraggingLogic(t *testing.T) {
 
 	// 3. Release mouse
 	d.ProcessMouse(&vtinput.InputEvent{
-		Type: vtinput.MouseEventType,
-		KeyDown: false,
+		Type:        vtinput.MouseEventType,
+		KeyDown:     false,
 		ButtonState: 0,
-		MouseX: 5, MouseY: 5,
+		MouseX:      5, MouseY: 5,
 	})
 
 	if d.isDragging {
@@ -82,10 +82,10 @@ func TestDialog_NoDragWhenClickingElement(t *testing.T) {
 
 	// Click button at (1, 1)
 	d.ProcessMouse(&vtinput.InputEvent{
-		Type: vtinput.MouseEventType,
-		KeyDown: true,
+		Type:        vtinput.MouseEventType,
+		KeyDown:     true,
 		ButtonState: vtinput.FromLeft1stButtonPressed,
-		MouseX: 1, MouseY: 1,
+		MouseX:      1, MouseY: 1,
 	})
 
 	if d.isDragging {
@@ -104,7 +104,7 @@ func TestDialog_DragRelativeConsistency(t *testing.T) {
 	d.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: true,
 		ButtonState: vtinput.FromLeft1stButtonPressed,
-		MouseX: 0, MouseY: 0,
+		MouseX:      0, MouseY: 0,
 	})
 
 	// Series of small moves
@@ -112,7 +112,7 @@ func TestDialog_DragRelativeConsistency(t *testing.T) {
 		d.ProcessMouse(&vtinput.InputEvent{
 			Type: vtinput.MouseEventType, KeyDown: false,
 			ButtonState: vtinput.FromLeft1stButtonPressed,
-			MouseX: uint16(i), MouseY: uint16(i),
+			MouseX:      uint16(i), MouseY: uint16(i),
 		})
 	}
 
@@ -128,14 +128,14 @@ func TestDialog_DraggingOffscreen(t *testing.T) {
 	d.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: true,
 		ButtonState: vtinput.FromLeft1stButtonPressed,
-		MouseX: 10, MouseY: 10,
+		MouseX:      10, MouseY: 10,
 	})
 
 	// Drag mouse into "negative"
 	d.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: false,
 		ButtonState: vtinput.FromLeft1stButtonPressed,
-		MouseX: 0, MouseY: 0,
+		MouseX:      0, MouseY: 0,
 	})
 
 	// Dialog should allow moving to negative coordinates (like in Far)
@@ -153,7 +153,7 @@ func TestDialog_ResizingLogic(t *testing.T) {
 	d.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: true,
 		ButtonState: vtinput.FromLeft1stButtonPressed,
-		MouseX: 9, MouseY: 9,
+		MouseX:      9, MouseY: 9,
 	})
 
 	if !d.isResizing {
@@ -164,7 +164,7 @@ func TestDialog_ResizingLogic(t *testing.T) {
 	d.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: false,
 		ButtonState: vtinput.FromLeft1stButtonPressed,
-		MouseX: 14, MouseY: 14,
+		MouseX:      14, MouseY: 14,
 	})
 
 	if d.X2 != 14 || d.Y2 != 14 {
@@ -175,7 +175,7 @@ func TestDialog_ResizingLogic(t *testing.T) {
 	d.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: false,
 		ButtonState: vtinput.FromLeft1stButtonPressed,
-		MouseX: 2, MouseY: 2,
+		MouseX:      2, MouseY: 2,
 	})
 
 	if d.X2 != 4 || d.Y2 != 4 {
@@ -186,7 +186,7 @@ func TestDialog_ResizingLogic(t *testing.T) {
 	d.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: false,
 		ButtonState: 0,
-		MouseX: 4, MouseY: 4,
+		MouseX:      4, MouseY: 4,
 	})
 
 	if d.isResizing {
@@ -202,14 +202,14 @@ func TestDialog_ResizingConstraints(t *testing.T) {
 	d.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: true,
 		ButtonState: vtinput.FromLeft1stButtonPressed,
-		MouseX: 20, MouseY: 20,
+		MouseX:      20, MouseY: 20,
 	})
 
 	// Drag mouse far to the top-left (e.g., coordinate 0,0)
 	d.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: false,
 		ButtonState: vtinput.FromLeft1stButtonPressed,
-		MouseX: 0, MouseY: 0,
+		MouseX:      0, MouseY: 0,
 	})
 
 	width := d.X2 - d.X1 + 1
@@ -232,14 +232,14 @@ func TestDialog_ResizeGrowMode(t *testing.T) {
 	d.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: true,
 		ButtonState: vtinput.FromLeft1stButtonPressed,
-		MouseX: 9, MouseY: 9,
+		MouseX:      9, MouseY: 9,
 	})
 
 	// Drag mouse to (19, 19) -> Dialog size becomes 20x20 (Delta +10, +10)
 	d.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: false,
 		ButtonState: vtinput.FromLeft1stButtonPressed,
-		MouseX: 19, MouseY: 19,
+		MouseX:      19, MouseY: 19,
 	})
 
 	bx1, by1, _, _ := btn.GetPosition()
@@ -255,7 +255,7 @@ func TestDialog_RightClickNoDrag(t *testing.T) {
 	d.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: true,
 		ButtonState: vtinput.RightmostButtonPressed,
-		MouseX: 0, MouseY: 0,
+		MouseX:      0, MouseY: 0,
 	})
 
 	if d.isDragging {
@@ -543,7 +543,7 @@ func TestDialog_EnterTriggersFirstButton(t *testing.T) {
 	btnCancel := NewButton(10, 3, "&Cancel")
 	btnCancel.OnClick = func() { cancelClicked = true }
 	d.AddItem(btnCancel)
-	
+
 	// Ensure focus is on the edit field
 	d.rootGroup.focusIdx = 0
 	edit.SetFocus(true)

@@ -1,11 +1,10 @@
 package vtui
 
 import (
-	"github.com/unxed/vtinput"
 	"github.com/mattn/go-runewidth"
+	"github.com/unxed/vtinput"
 	"strings"
 )
-
 
 // TableColumn defines the properties of a single table column.
 type TableColumn struct {
@@ -24,10 +23,12 @@ type TableRow interface {
 type SelectableRow interface {
 	IsSelected() bool
 }
+
 // MultiColSelectableRow is an interface for multi-column rows where selection is cell-specific.
 type MultiColSelectableRow interface {
 	IsColSelected(col int) bool
 }
+
 // CellColorableRow is an optional interface allowing rows to define custom colors per cell.
 type CellColorableRow interface {
 	GetCellAttr(col int, defaultAttr uint64) uint64
@@ -36,13 +37,13 @@ type CellColorableRow interface {
 // Table is a generic control for displaying tabular data.
 type Table struct {
 	ScrollView
-	Columns        []TableColumn
-	Rows           []TableRow
+	Columns []TableColumn
+	Rows    []TableRow
 
-	SelectCol      int
-	CellSelection  bool
-	ShowHeader     bool
-	ShowSeparators bool
+	SelectCol        int
+	CellSelection    bool
+	ShowHeader       bool
+	ShowSeparators   bool
 	AlwaysShowCursor bool
 
 	ColorTextIdx             int
@@ -142,7 +143,6 @@ func (t *Table) DisplayObject(scr *ScreenBuf) {
 	// 4. Draw Scrollbar
 	t.DrawScrollBar(scr)
 }
-
 
 func (t *Table) drawRow(scr *ScreenBuf, y int, rowIdx int, attr uint64) {
 	endX := t.X1 + t.GetContentWidth() - 1
@@ -263,25 +263,47 @@ func (t *Table) formatCell(text string, width int, align Alignment) string {
 }
 
 func (t *Table) ProcessKey(e *vtinput.InputEvent) bool {
-	if !e.KeyDown || t.IsDisabled() { return false }
+	if !e.KeyDown || t.IsDisabled() {
+		return false
+	}
 
 	switch e.VirtualKeyCode {
 	case vtinput.VK_UP:
-		if t.SelectPos == 0 { return false }
+		if t.SelectPos == 0 {
+			return false
+		}
 	case vtinput.VK_DOWN:
-		if t.SelectPos == t.ItemCount-1 { return false }
+		if t.SelectPos == t.ItemCount-1 {
+			return false
+		}
 	}
 
 	if t.CellSelection {
 		switch e.VirtualKeyCode {
 		case vtinput.VK_LEFT:
-			if t.SelectCol > 0 { t.SelectCol--; return true }
-			if t.SelectPos == 0 { return false }
-			if t.MoveRelative(-1) { t.SelectCol = len(t.Columns) - 1; return true }
+			if t.SelectCol > 0 {
+				t.SelectCol--
+				return true
+			}
+			if t.SelectPos == 0 {
+				return false
+			}
+			if t.MoveRelative(-1) {
+				t.SelectCol = len(t.Columns) - 1
+				return true
+			}
 		case vtinput.VK_RIGHT:
-			if t.SelectCol < len(t.Columns)-1 { t.SelectCol++; return true }
-			if t.SelectPos == t.ItemCount-1 { return false }
-			if t.MoveRelative(1) { t.SelectCol = 0; return true }
+			if t.SelectCol < len(t.Columns)-1 {
+				t.SelectCol++
+				return true
+			}
+			if t.SelectPos == t.ItemCount-1 {
+				return false
+			}
+			if t.MoveRelative(1) {
+				t.SelectCol = 0
+				return true
+			}
 		}
 	}
 
@@ -289,7 +311,9 @@ func (t *Table) ProcessKey(e *vtinput.InputEvent) bool {
 }
 
 func (t *Table) ProcessMouse(e *vtinput.InputEvent) bool {
-	if t.IsDisabled() { return false }
+	if t.IsDisabled() {
+		return false
+	}
 
 	// Pre-process for CellSelection before generic HandleMouse
 	originalCol := t.SelectCol
@@ -307,7 +331,9 @@ func (t *Table) ProcessMouse(e *vtinput.InputEvent) bool {
 					break
 				}
 				currX += col.Width
-				if i < len(t.Columns)-1 { currX++ }
+				if i < len(t.Columns)-1 {
+					currX++
+				}
 			}
 		}
 	}

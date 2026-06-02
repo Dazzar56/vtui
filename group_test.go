@@ -99,9 +99,9 @@ func TestGroup_Nested(t *testing.T) {
 	// 4. Test XLat hotkey: press 'т' (Russian 't' -> QWERTY 'n') to trigger Alt+N for innerBtn2
 	GlobalXlator.Track('т') // Устанавливаем русский контекст
 	dlg.rootGroup.ProcessKey(&vtinput.InputEvent{
-		Type: vtinput.KeyEventType,
-		KeyDown: true,
-		Char: 'т',
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		Char:            'т',
 		ControlKeyState: vtinput.LeftAltPressed,
 	})
 	if gb.focusIdx != 1 || !innerBtn2.IsFocused() {
@@ -172,7 +172,9 @@ func TestGroup_SetFocusedItem(t *testing.T) {
 	g.AddItem(b2)
 
 	// Initial focus is on b1
-	if g.GetFocusedItem() != b1 { t.Fatal("Initial focus fail") }
+	if g.GetFocusedItem() != b1 {
+		t.Fatal("Initial focus fail")
+	}
 
 	// Set focus to b2
 	g.SetFocusedItem(b2)

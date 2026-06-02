@@ -47,7 +47,6 @@ type TreeView struct {
 	flatNodes []flatNode
 }
 
-
 func NewTreeView(x, y, w, h int, root *TreeNode) *TreeView {
 	tv := &TreeView{
 		Root:                 root,
@@ -64,7 +63,9 @@ func NewTreeView(x, y, w, h int, root *TreeNode) *TreeView {
 	// Define default action: toggle expansion for folders,
 	// or trigger user callback for leaves.
 	tv.OnAction = func(idx int) {
-		if idx < 0 || idx >= len(tv.flatNodes) { return }
+		if idx < 0 || idx >= len(tv.flatNodes) {
+			return
+		}
 		node := tv.flatNodes[idx].node
 
 		// 1. Fire the action first (Command bubbling)
@@ -115,8 +116,12 @@ func (t *TreeView) Flatten() {
 
 	t.ItemCount = len(t.flatNodes)
 	// Ensure ViewHeight is updated in case ItemCount relies on it, though SetPosition handles it.
-	if t.SelectPos >= t.ItemCount { t.SelectPos = t.ItemCount - 1 }
-	if t.SelectPos < 0 { t.SelectPos = 0 }
+	if t.SelectPos >= t.ItemCount {
+		t.SelectPos = t.ItemCount - 1
+	}
+	if t.SelectPos < 0 {
+		t.SelectPos = 0
+	}
 	t.EnsureVisible()
 }
 
@@ -169,10 +174,10 @@ func (t *TreeView) DisplayObject(scr *ScreenBuf) {
 
 			if fn.node != t.Root || !t.ShowRoot {
 				if fn.isLast[fn.level] {
-					sb.WriteRune(boxSymbols[4]) // '└'
+					sb.WriteRune(boxSymbols[4])   // '└'
 					sb.WriteRune(boxSymbols[bsH]) // '─'
 				} else {
-					sb.WriteRune(boxSymbols[6]) // '├'
+					sb.WriteRune(boxSymbols[6])   // '├'
 					sb.WriteRune(boxSymbols[bsH]) // '─'
 				}
 			}
@@ -193,8 +198,8 @@ func (t *TreeView) DisplayObject(scr *ScreenBuf) {
 			prefixWidth := runewidth.StringWidth(prefixStr)
 			textWidth := runewidth.StringWidth(textStr)
 
-			if prefixWidth + textWidth > width {
-				textStr = runewidth.Truncate(textStr, width - prefixWidth, "")
+			if prefixWidth+textWidth > width {
+				textStr = runewidth.Truncate(textStr, width-prefixWidth, "")
 				textWidth = runewidth.StringWidth(textStr)
 			}
 
@@ -216,26 +221,42 @@ func (t *TreeView) DisplayObject(scr *ScreenBuf) {
 }
 
 func (t *TreeView) ProcessKey(e *vtinput.InputEvent) bool {
-	if !e.KeyDown || t.IsDisabled() || len(t.flatNodes) == 0 { return false }
+	if !e.KeyDown || t.IsDisabled() || len(t.flatNodes) == 0 {
+		return false
+	}
 	fn := t.flatNodes[t.SelectPos]
 
 	switch e.VirtualKeyCode {
 	case vtinput.VK_LEFT:
 		if fn.node.Expanded && len(fn.node.Children) > 0 {
-			fn.node.Expanded = false; t.Flatten(); return true
+			fn.node.Expanded = false
+			t.Flatten()
+			return true
 		} else if fn.node.parent != nil {
 			for i := t.SelectPos - 1; i >= 0; i-- {
-				if t.flatNodes[i].node == fn.node.parent { t.SetSelectPos(i); break }
+				if t.flatNodes[i].node == fn.node.parent {
+					t.SetSelectPos(i)
+					break
+				}
 			}
 			return true
 		}
 	case vtinput.VK_RIGHT:
 		if len(fn.node.Children) > 0 {
-			if !fn.node.Expanded { fn.node.Expanded = true; t.Flatten(); return true }
-			if t.SelectPos < len(t.flatNodes)-1 { t.SetSelectPos(t.SelectPos + 1); return true }
+			if !fn.node.Expanded {
+				fn.node.Expanded = true
+				t.Flatten()
+				return true
+			}
+			if t.SelectPos < len(t.flatNodes)-1 {
+				t.SetSelectPos(t.SelectPos + 1)
+				return true
+			}
 		}
 	case vtinput.VK_SPACE:
-		if t.OnAction != nil { t.OnAction(t.SelectPos) }
+		if t.OnAction != nil {
+			t.OnAction(t.SelectPos)
+		}
 		return true
 	}
 
@@ -243,7 +264,9 @@ func (t *TreeView) ProcessKey(e *vtinput.InputEvent) bool {
 }
 
 func (t *TreeView) ProcessMouse(e *vtinput.InputEvent) bool {
-	if t.IsDisabled() { return false }
+	if t.IsDisabled() {
+		return false
+	}
 
 	// Custom handling for [+] [-] icon clicks before generic list selection
 	if e.Type == vtinput.MouseEventType && e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {

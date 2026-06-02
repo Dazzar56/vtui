@@ -1,8 +1,8 @@
 package vtui
 
 import (
-	"testing"
 	"github.com/unxed/vtinput"
+	"testing"
 )
 
 func TestEdit_PasswordMode(t *testing.T) {
@@ -192,10 +192,10 @@ func TestEdit_HistoryButtonClick(t *testing.T) {
 
 	// Click on the button at (9, 0)
 	handled := e.ProcessMouse(&vtinput.InputEvent{
-		Type: vtinput.MouseEventType,
-		KeyDown: true,
+		Type:        vtinput.MouseEventType,
+		KeyDown:     true,
 		ButtonState: vtinput.FromLeft1stButtonPressed,
-		MouseX: 9, MouseY: 0,
+		MouseX:      9, MouseY: 0,
 	})
 
 	if !handled {
@@ -257,8 +257,8 @@ func TestEdit_OnAction(t *testing.T) {
 
 	// Simulate Enter
 	handled := e.ProcessKey(&vtinput.InputEvent{
-		Type: vtinput.KeyEventType,
-		KeyDown: true,
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
 		VirtualKeyCode: vtinput.VK_RETURN,
 	})
 
@@ -269,7 +269,7 @@ func TestEdit_OnAction(t *testing.T) {
 
 func TestEdit_SelectAllAndClear(t *testing.T) {
 	e := NewEdit(0, 0, 20, "initial path")
-	
+
 	// 1. Trigger SelectAll
 	e.SelectAll()
 	if e.selStart != 0 || e.selEnd != 12 {
@@ -283,7 +283,7 @@ func TestEdit_SelectAllAndClear(t *testing.T) {
 	e.ProcessKey(&vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true, Char: 'C',
 	})
-	
+
 	if e.GetText() != "C" {
 		t.Errorf("Typing after SelectAll failed: expected 'C', got %q", e.GetText())
 	}
@@ -409,11 +409,15 @@ func TestEdit_Validation_RealTime(t *testing.T) {
 
 	// Try typing '1' - accepted
 	e.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: '1'})
-	if e.GetText() != "1" { t.Errorf("Expected '1', got %q", e.GetText()) }
+	if e.GetText() != "1" {
+		t.Errorf("Expected '1', got %q", e.GetText())
+	}
 
 	// Try typing 'A' - rejected
 	e.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'A'})
-	if e.GetText() != "1" { t.Errorf("Keystroke 'A' should have been blocked by FilterValidator, text is %q", e.GetText()) }
+	if e.GetText() != "1" {
+		t.Errorf("Keystroke 'A' should have been blocked by FilterValidator, text is %q", e.GetText())
+	}
 
 	// 2. Mask validation
 	e.SetText("")
@@ -424,15 +428,21 @@ func TestEdit_Validation_RealTime(t *testing.T) {
 	// Type 'X' - rejected
 	e.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'X'})
 
-	if e.GetText() != "1" { t.Errorf("Mask mismatch char should be blocked. Got %q", e.GetText()) }
+	if e.GetText() != "1" {
+		t.Errorf("Mask mismatch char should be blocked. Got %q", e.GetText())
+	}
 
 	// Type another valid digit to reach the separator naturally
 	e.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: '2'})
-	if e.GetText() != "12" { t.Errorf("Expected '12', got %q", e.GetText()) }
+	if e.GetText() != "12" {
+		t.Errorf("Expected '12', got %q", e.GetText())
+	}
 
 	// Type '-' at correct position (index 2)
 	e.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: '-'})
-	if e.GetText() != "12-" { t.Errorf("Valid mask character should be accepted. Got %q", e.GetText()) }
+	if e.GetText() != "12-" {
+		t.Errorf("Valid mask character should be accepted. Got %q", e.GetText())
+	}
 }
 
 func TestEdit_Validation_FinalTrigger(t *testing.T) {
@@ -470,31 +480,43 @@ func TestEdit_WordJumps_FarSpec(t *testing.T) {
 
 	// 1. Ctrl+Right: [W] -> [D] (остановка на первой точке)
 	e.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT, ControlKeyState: vtinput.LeftCtrlPressed})
-	if e.curPos != 4 { t.Errorf("Stop W->D fail: expected 4, got %d", e.curPos) }
+	if e.curPos != 4 {
+		t.Errorf("Stop W->D fail: expected 4, got %d", e.curPos)
+	}
 
 	// 2. Ctrl+Right: [D1] -> [D2] (смена разделителя с точки на слэш)
 	e.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT, ControlKeyState: vtinput.LeftCtrlPressed})
-	if e.curPos != 7 { t.Errorf("Stop D1->D2 fail: expected 7, got %d", e.curPos) }
+	if e.curPos != 7 {
+		t.Errorf("Stop D1->D2 fail: expected 7, got %d", e.curPos)
+	}
 
 	// 3. Ctrl+Right: [D] -> [W] (прыжок к началу 'next')
 	e.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT, ControlKeyState: vtinput.LeftCtrlPressed})
-	if e.curPos != 10 { t.Errorf("Stop D->W fail: expected 10, got %d", e.curPos) }
+	if e.curPos != 10 {
+		t.Errorf("Stop D->W fail: expected 10, got %d", e.curPos)
+	}
 
 	// 4. Ctrl+Right: [S] -> [D] (прыжок через пробелы к блоку точек)
 	e.curPos = 14 // сразу после 'next'
 	e.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT, ControlKeyState: vtinput.LeftCtrlPressed})
-	if e.curPos != 17 { t.Errorf("Stop S->D fail: expected 17, got %d", e.curPos) }
+	if e.curPos != 17 {
+		t.Errorf("Stop S->D fail: expected 17, got %d", e.curPos)
+	}
 
 	// 5. Ctrl+Left: [S] -> [W] (прыжок назад к 'spaces')
 	e.curPos = 26 // пробел после 'spaces'
 	e.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_LEFT, ControlKeyState: vtinput.LeftCtrlPressed})
-	if e.curPos != 20 { t.Errorf("Stop S->W fail: expected 20, got %d", e.curPos) }
+	if e.curPos != 20 {
+		t.Errorf("Stop S->W fail: expected 20, got %d", e.curPos)
+	}
 
 	// 6. Ctrl+Left: [D] -> [W] (прыжок назад от начала "apple" к Эмодзи)
 	// apple начинается на 29. Перед ним точка на 28. Перед ней яблоко на 27.
 	e.curPos = 29
 	e.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_LEFT, ControlKeyState: vtinput.LeftCtrlPressed})
-	if e.curPos != 27 { t.Errorf("Stop D->W fail (Unicode): expected 27, got %d", e.curPos) }
+	if e.curPos != 27 {
+		t.Errorf("Stop D->W fail (Unicode): expected 27, got %d", e.curPos)
+	}
 }
 func TestEdit_WordJumps_Left_FarSpec(t *testing.T) {
 	// Проверяем специфичные правила для движения ВЛЕВО
@@ -506,18 +528,24 @@ func TestEdit_WordJumps_Left_FarSpec(t *testing.T) {
 	e.curPos = 17
 	e.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_LEFT, ControlKeyState: vtinput.LeftCtrlPressed})
 	// prev='.', curr='n' ([D]->[W]). Остановка на 'n' (13)
-	if e.curPos != 13 { t.Errorf("Stop D->W fail: expected 13, got %d", e.curPos) }
+	if e.curPos != 13 {
+		t.Errorf("Stop D->W fail: expected 13, got %d", e.curPos)
+	}
 
 	// 2. Проверка игнорирования [D1] -> [D2] и остановки на [S] -> [D]
 	// Стартуем с 'n' (13), прыгаем влево.
 	// Должен проскочить '.' и '/', так как смена разделителей при движении влево игнорируется.
 	// Должен остановиться на первом слэше (7), так как слева от него пробел ([S]->[D]).
 	e.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_LEFT, ControlKeyState: vtinput.LeftCtrlPressed})
-	if e.curPos != 7 { t.Errorf("Stop S->D fail (and ignore D1->D2): expected 7, got %d", e.curPos) }
+	if e.curPos != 7 {
+		t.Errorf("Stop S->D fail (and ignore D1->D2): expected 7, got %d", e.curPos)
+	}
 
 	// 3. Проверка [S] -> [W]: от начала разделителей (7) к началу слова 'word'
 	e.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_LEFT, ControlKeyState: vtinput.LeftCtrlPressed})
-	if e.curPos != 0 { t.Errorf("Stop S->W fail: expected 0, got %d", e.curPos) }
+	if e.curPos != 0 {
+		t.Errorf("Stop S->W fail: expected 0, got %d", e.curPos)
+	}
 }
 
 func TestEdit_WordSelection_FarSpec(t *testing.T) {
@@ -526,11 +554,13 @@ func TestEdit_WordSelection_FarSpec(t *testing.T) {
 
 	e.ProcessKey(&vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
-		VirtualKeyCode: vtinput.VK_LEFT,
+		VirtualKeyCode:  vtinput.VK_LEFT,
 		ControlKeyState: vtinput.LeftCtrlPressed | vtinput.ShiftPressed,
 	})
 
-	if e.clearFlag { t.Error("Shift+Ctrl navigation must reset clearFlag") }
+	if e.clearFlag {
+		t.Error("Shift+Ctrl navigation must reset clearFlag")
+	}
 
 	// Якорь в 0, курсор прыгнул к началу "word" (индекс руны 12).
 	// Выделение охватывает [0:12].
