@@ -722,7 +722,7 @@ func TestFrameManager_ModalPriorityOverMenu(t *testing.T) {
 
 	pr, pw := io.Pipe()
 	fm.PostTask(func() { pw.Close() })
-	fm.Run(vtinput.NewReader(pr))
+	fm.Run(vtinput.NewReader(pr, false))
 
 	if !okClicked {
 		t.Error("Modal dialog should have priority over active MenuBar for Enter key")
@@ -756,7 +756,7 @@ func TestFrameManager_MenuAccessibleDuringNonModal(t *testing.T) {
 
 	pr, pw := io.Pipe()
 	fm.PostTask(func() { pw.Close() })
-	fm.Run(vtinput.NewReader(pr))
+	fm.Run(vtinput.NewReader(pr, false))
 
 	if !mb.Active {
 		t.Error("MenuBar should be activatable when the top frame is non-modal (e.g. Progress window)")
@@ -822,7 +822,7 @@ func TestFrameManager_MenuBarNavigabilityWithSubMenu(t *testing.T) {
 		{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F10},
 	})
 
-	fm.Run(vtinput.NewReader(os.Stdin))
+	fm.Run(vtinput.NewReader(os.Stdin, false))
 
 	// Check if we are now on the "Edit" menu
 	if fm.GetTopFrameType() != TypeMenu {
@@ -930,7 +930,7 @@ func TestFrameManager_ResizeAllScreens(t *testing.T) {
 		pw.Close()
 	}()
 
-	reader := vtinput.NewReader(pr)
+	reader := vtinput.NewReader(pr, false)
 	fm.Run(reader)
 
 	if f1.resizedW != 120 || f1.resizedH != 40 {
@@ -968,7 +968,7 @@ func TestFrameManager_SizePolling(t *testing.T) {
 	pr, pw := io.Pipe()
 
 	go func() {
-		reader := vtinput.NewReader(pr)
+		reader := vtinput.NewReader(pr, false)
 		fm.Run(reader)
 		close(done)
 	}()
@@ -1013,7 +1013,7 @@ func TestFrameManager_ResizeRobustness(t *testing.T) {
 	// Start a short-lived loop to process the event
 	pr, pw := io.Pipe()
 	go func() { time.Sleep(50 * time.Millisecond); fm.Stop(); pw.Close() }()
-	fm.Run(vtinput.NewReader(pr))
+	fm.Run(vtinput.NewReader(pr, false))
 
 	if scr.Width() != 80 || scr.Height() != 24 {
 		t.Error("Resize handled an error size incorrectly")
@@ -1027,7 +1027,7 @@ func TestFrameManager_ResizeRobustness(t *testing.T) {
 
 	pr2, pw2 := io.Pipe()
 	go func() { time.Sleep(50 * time.Millisecond); fm.Stop(); pw2.Close() }()
-	fm.Run(vtinput.NewReader(pr2))
+	fm.Run(vtinput.NewReader(pr2, false))
 
 	if scr.Width() != 80 || scr.Height() != 24 {
 		t.Error("Resize handled non-positive size incorrectly")
@@ -1093,7 +1093,7 @@ func TestFrameManager_F9WorksForMenuOwningModal(t *testing.T) {
 
 	pr, pw := io.Pipe()
 	fm.PostTask(func() { pw.Close() })
-	fm.Run(vtinput.NewReader(pr))
+	fm.Run(vtinput.NewReader(pr, false))
 
 	if !myMenu.Active {
 		t.Error("F9 should activate the menu because the modal frame owns it")
@@ -1354,7 +1354,7 @@ func TestFrameManager_F12ScreensMenu(t *testing.T) {
 
 	pr, pw := io.Pipe()
 	fm.PostTask(func() { pw.Close() })
-	fm.Run(vtinput.NewReader(pr))
+	fm.Run(vtinput.NewReader(pr, false))
 
 	if fm.GetTopFrameType() != TypeMenu {
 		t.Fatalf("F12 did not open a menu. Top type: %d", fm.GetTopFrameType())
@@ -1541,7 +1541,7 @@ func TestFrameManager_ModalDialogBlocksF9(t *testing.T) {
 		{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F10}, // Quit loop
 	})
 
-	fm.Run(vtinput.NewReader(os.Stdin))
+	fm.Run(vtinput.NewReader(os.Stdin, false))
 
 	if mb.Active {
 		t.Error("MenuBar should NOT be activated via F9 when a modal dialog is open")

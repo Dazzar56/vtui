@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -852,30 +851,8 @@ func (fm *frameManager) Run(reader *vtinput.Reader) {
 		CleanupStderrLog()
 	}()
 
-	ch := make(chan *vtinput.InputEvent, 1024)
-	fm.EventChan = ch
-	stopChan := make(chan struct{})
-	var once sync.Once
-	go func() {
-		for {
-			select {
-			case <-stopChan:
-				return
-			default:
-				e, err := reader.ReadEvent()
-				if err != nil {
-					once.Do(func() { close(ch) })
-					return
-				}
-				select {
-				case ch <- e:
-				case <-stopChan:
-					return
-				}
-			}
-		}
-	}()
-	defer close(stopChan)
+	fm.EventChan = reader.GetEventChan()
+	defer reader.Close()
 
 	// Configure channel for tracking window resizing
 	sigChan := make(chan os.Signal, 1)
