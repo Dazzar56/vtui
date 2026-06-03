@@ -109,10 +109,7 @@ func RunGogpuHost(cols, rows int, setupApp func()) error {
 	FrameManager.Init(scr)
 
 	pr, _ := io.Pipe()
-	reader := vtinput.NewReader(pr)
-	if reader.NativeEventChan == nil {
-		reader.NativeEventChan = make(chan *vtinput.InputEvent, 1024)
-	}
+	reader := vtinput.NewReader(pr, true)
 	host.reader = reader
 
 	app.OnClose(func() {
@@ -133,7 +130,7 @@ func RunGogpuHost(cols, rows int, setupApp func()) error {
 			if host.pendingKeyTimer != nil {
 				host.pendingKeyTimer.Stop()
 			}
-			host.reader.NativeEventChan <- host.pendingKeyEvent
+			host.reader.EventChan <- host.pendingKeyEvent
 			host.pendingKeyEvent = nil
 		}
 
@@ -149,7 +146,7 @@ func RunGogpuHost(cols, rows int, setupApp func()) error {
 				host.mu.Lock()
 				defer host.mu.Unlock()
 				if host.pendingKeyEvent != nil {
-					host.reader.NativeEventChan <- host.pendingKeyEvent
+					host.reader.EventChan <- host.pendingKeyEvent
 					host.pendingKeyEvent = nil
 				}
 			})
@@ -173,12 +170,12 @@ func RunGogpuHost(cols, rows int, setupApp func()) error {
 			}
 			// Сливаем первый символ с ожидающим событием OnKeyPress
 			host.pendingKeyEvent.Char = runes[0]
-			host.reader.NativeEventChan <- host.pendingKeyEvent
+			host.reader.EventChan <- host.pendingKeyEvent
 			host.pendingKeyEvent = nil
 
 			// Остальные символы отправляем отдельными событиями
 			for i := 1; i < len(runes); i++ {
-				host.reader.NativeEventChan <- &vtinput.InputEvent{
+				host.reader.EventChan <- &vtinput.InputEvent{
 					Type:            vtinput.KeyEventType,
 					KeyDown:         true,
 					Char:            runes[i],
@@ -188,7 +185,7 @@ func RunGogpuHost(cols, rows int, setupApp func()) error {
 		} else {
 			// Если OnText пришел без OnKeyPress, просто отправляем текст
 			for _, r := range runes {
-				host.reader.NativeEventChan <- &vtinput.InputEvent{
+				host.reader.EventChan <- &vtinput.InputEvent{
 					Type:            vtinput.KeyEventType,
 					KeyDown:         true,
 					Char:            r,
@@ -209,7 +206,7 @@ func RunGogpuHost(cols, rows int, setupApp func()) error {
 			if host.pendingKeyTimer != nil {
 				host.pendingKeyTimer.Stop()
 			}
-			host.reader.NativeEventChan <- host.pendingKeyEvent
+			host.reader.EventChan <- host.pendingKeyEvent
 			host.pendingKeyEvent = nil
 		}
 		host.mu.Unlock()
@@ -217,7 +214,7 @@ func RunGogpuHost(cols, rows int, setupApp func()) error {
 		if vk == 0 {
 			return
 		}
-		host.reader.NativeEventChan <- &vtinput.InputEvent{
+		host.reader.EventChan <- &vtinput.InputEvent{
 			Type:            vtinput.KeyEventType,
 			KeyDown:         false,
 			VirtualKeyCode:  vk,
@@ -244,7 +241,7 @@ func RunGogpuHost(cols, rows int, setupApp func()) error {
 		cH := host.cellH
 		host.mu.Unlock()
 
-		host.reader.NativeEventChan <- &vtinput.InputEvent{
+		host.reader.EventChan <- &vtinput.InputEvent{
 			Type:        vtinput.MouseEventType,
 			MouseX:      uint16(int(x) / cW),
 			MouseY:      uint16(int(y) / cH),
@@ -260,7 +257,7 @@ func RunGogpuHost(cols, rows int, setupApp func()) error {
 		cH := host.cellH
 		host.mu.Unlock()
 
-		host.reader.NativeEventChan <- &vtinput.InputEvent{
+		host.reader.EventChan <- &vtinput.InputEvent{
 			Type:        vtinput.MouseEventType,
 			MouseX:      uint16(int(x) / cW),
 			MouseY:      uint16(int(y) / cH),
@@ -284,7 +281,7 @@ func RunGogpuHost(cols, rows int, setupApp func()) error {
 		}
 
 		if dir != 0 {
-			host.reader.NativeEventChan <- &vtinput.InputEvent{
+			host.reader.EventChan <- &vtinput.InputEvent{
 				Type:           vtinput.MouseEventType,
 				MouseX:         uint16(int(mx) / cW),
 				MouseY:         uint16(int(my) / cH),
@@ -306,8 +303,8 @@ func RunGogpuHost(cols, rows int, setupApp func()) error {
 		}
 		host.mu.Unlock()
 
-		if sizeChanged && host.reader != nil && host.reader.NativeEventChan != nil {
-			host.reader.NativeEventChan <- &vtinput.InputEvent{Type: vtinput.ResizeEventType}
+		if sizeChanged && host.reader != nil && host.reader.EventChan != nil {
+			host.reader.EventChan <- &vtinput.InputEvent{Type: vtinput.ResizeEventType}
 		}
 
 		infoLogged.Do(func() {

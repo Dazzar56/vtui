@@ -239,7 +239,7 @@ func (h *X11Host) RunEventLoop() {
 				}
 				h.mu.Unlock()
 				if h.reader != nil {
-					h.reader.NativeEventChan <- &vtinput.InputEvent{Type: vtinput.ResizeEventType}
+					h.reader.EventChan <- &vtinput.InputEvent{Type: vtinput.ResizeEventType}
 				}
 			}
 
@@ -271,7 +271,7 @@ func (h *X11Host) RunEventLoop() {
 
 		case xproto.MotionNotifyEvent:
 			if h.reader != nil {
-				h.reader.NativeEventChan <- &vtinput.InputEvent{
+				h.reader.EventChan <- &vtinput.InputEvent{
 					Type:            vtinput.MouseEventType,
 					MouseX:          uint16(int(e.EventX) / h.cellW),
 					MouseY:          uint16(int(e.EventY) / h.cellH),
@@ -302,7 +302,7 @@ func (h *X11Host) handleKeyEvent(detail xproto.Keycode, state uint16, isDown boo
 			InputSource:     wev.InputSource,
 		}
 		if h.reader != nil {
-			h.reader.NativeEventChan <- event
+			h.reader.EventChan <- event
 		}
 	}
 }
@@ -337,7 +337,7 @@ func (h *X11Host) handleButtonEvent(x, y int16, detail xproto.Button, state uint
 		}
 	}
 	if h.reader != nil {
-		h.reader.NativeEventChan <- event
+		h.reader.EventChan <- event
 	}
 }
 
@@ -445,10 +445,7 @@ func runInX11Window(cols, rows int, setupApp func()) error {
 	FrameManager.Init(scr)
 
 	pr, _ := io.Pipe()
-	reader := vtinput.NewReader(pr)
-	if reader.NativeEventChan == nil {
-		reader.NativeEventChan = make(chan *vtinput.InputEvent, 1024)
-	}
+	reader := vtinput.NewReader(pr, true)
 	host.reader = reader
 
 	GetTerminalSize = func() (int, int, error) {

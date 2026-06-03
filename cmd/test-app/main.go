@@ -326,7 +326,7 @@ func main() {
 
 		setup()
 
-		reader := vtinput.NewReader(os.Stdin)
+		reader := vtinput.NewReader(os.Stdin, false)
 		vtui.FrameManager.Run(reader)
 	}
 
