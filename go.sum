@@ -7,8 +7,8 @@ github.com/go-text/typesetting v0.3.4 h1:YYurUOtEb9kGSOz4uE3k4OpBGsp1dDL8+fjCeaF
 github.com/go-text/typesetting v0.3.4/go.mod h1:4qZCQphq4KSgGTAeI0uMEkVbROgfah8BuyF5LRYr7XY=
 github.com/go-text/typesetting-utils v0.0.0-20260223113751-2d88ac90dae3 h1:drBZzMgdYPbmyXqOto4YhhJGrFIQCX94FpR4MzTCsos=
 github.com/go-text/typesetting-utils v0.0.0-20260223113751-2d88ac90dae3/go.mod h1:3/62I4La/HBRX9TcTpBj4eipLiwzf+vhI+7whTc9V7o=
-github.com/go-webgpu/goffi v0.5.3 h1:Ckc94SdHO42bIb0oEapRIcv+jKjhjGJfb9zPEvNKC7U=
-github.com/go-webgpu/goffi v0.5.3/go.mod h1:wfoxNsJkU+5RFbV1kNN1kunhc1lFHuJKK3zpgx08/uM=
+github.com/go-webgpu/goffi v0.5.5 h1:xLWMhnJq+GrejlhTC3iVt3q8ozRbmYSq8kzuw6MKlgE=
+github.com/go-webgpu/goffi v0.5.5/go.mod h1:wfoxNsJkU+5RFbV1kNN1kunhc1lFHuJKK3zpgx08/uM=
 github.com/go-webgpu/webgpu v0.4.3 h1:dIBf7WgO/7VL2Cj7IFcq151rWqvSknsFe6k/+ZEEXEE=
 github.com/go-webgpu/webgpu v0.4.3/go.mod h1:HNIBiaMJNdPeQd6hmHdQsXg4t4R99xVQybnoDGOShe0=
 github.com/gogpu/gg v0.47.3 h1:UtsFtMhYTUGQ06SesFdjnvicvs1ceXecv+XUzyCU/Eo=
@@ -39,8 +39,8 @@ github.com/spaolacci/murmur3 v1.1.0 h1:7c1g84S4BPRrfL5Xrdp6fOJ206sU9y293DDHaoy0b
 github.com/spaolacci/murmur3 v1.1.0/go.mod h1:JwIasOWyU6f++ZhiEuf87xNszmSA2myDM2Kzu9HwQUA=
 github.com/unxed/keytrans v0.1.27 h1:6xFqm3l7wtvXMNKpG285XkcOUF5cwSANdR/1wFcTj4c=
 github.com/unxed/keytrans v0.1.27/go.mod h1:BLcCR4Z2hOFnL9F2yT6bvIsA1RyWLWogY7tx9JrvryI=
-github.com/unxed/pureffi v0.1.8 h1:gLhI2d4H1SRQ1TPXRGfEs2+Ef5zqDuVMN8jSG1B3DMM=
-github.com/unxed/pureffi v0.1.8/go.mod h1:CzJEr4SSVyDO6EpD+7VP4skxnNnxZyPSCqcbrTR2Ls4=
+github.com/unxed/pureffi v0.1.10 h1:T73f6iX5bJvhyCxJ++8BGXyTpkg/4gaNcF48Dilx2MQ=
+github.com/unxed/pureffi v0.1.10/go.mod h1:k3lL5B1v//CYZbzTzbCKhQ/xEFuW0qqKa8q64xiHmGg=
 github.com/unxed/winkeys v0.1.0 h1:5yTt0jgEgL2M/8U36xl3S3xh2NCKTDDWE4Q7qnHo8x8=
 github.com/unxed/winkeys v0.1.0/go.mod h1:eCDbEJFdYcii0Fd4O9u+CAqjJ4SkkhWDkhikNFwBCd4=
 github.com/unxed/xkb-go v0.1.8 h1:hqPI2wJw2LQ7YOqghNYat/TJF3pFamCCPjhxI5I3lhU=
