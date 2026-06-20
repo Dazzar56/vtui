@@ -420,7 +420,6 @@ func (r *GogpuRenderer) Flush() {
 				}
 			}
 
-
 			cursorVisible := r.cursorVis
 			if cursorVisible {
 				elapsed := time.Since(r.lastCursorReset)
