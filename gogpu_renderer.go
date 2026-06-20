@@ -25,6 +25,7 @@ type GogpuRenderer struct {
 	cursorX, cursorY int
 	cursorVis        bool
 	cursorShape      CursorShape
+	lastCursorReset  time.Time
 
 	canvas    *ggcanvas.Canvas
 	renderBuf []CharInfo
@@ -33,10 +34,11 @@ type GogpuRenderer struct {
 
 func NewGogpuRenderer(host *GogpuHost, face text.Face, cw, ch int) *GogpuRenderer {
 	return &GogpuRenderer{
-		host:  host,
-		face:  face,
-		cellW: cw,
-		cellH: ch,
+		host:            host,
+		face:            face,
+		cellW:           cw,
+		cellH:           ch,
+		lastCursorReset: time.Now(),
 	}
 }
 
@@ -71,6 +73,7 @@ func (r *GogpuRenderer) SetCursor(x, y int, visible bool, shape CursorShape) {
 	r.cursorX, r.cursorY = x, y
 	r.cursorVis = visible
 	r.cursorShape = shape
+	r.lastCursorReset = time.Now()
 }
 
 func (r *GogpuRenderer) SetPalette(pal *[256]uint32) {}
@@ -417,7 +420,20 @@ func (r *GogpuRenderer) Flush() {
 				}
 			}
 
-			if r.cursorVis && (time.Now().UnixMilli()/500)%2 == 0 {
+
+			cursorVisible := r.cursorVis
+			if cursorVisible {
+				elapsed := time.Since(r.lastCursorReset)
+				// В течение 500мс после ввода или перемещения курсор всегда горит ровно
+				if elapsed < 500*time.Millisecond {
+					cursorVisible = true
+				} else {
+					// Затем начинает плавно мигать каждые 500мс
+					cursorVisible = (int(elapsed.Milliseconds())/500)%2 == 0
+				}
+			}
+
+			if cursorVisible {
 				dc.SetColor(color.White)
 				cx := float64(r.cursorX * r.cellW)
 				cy := float64(r.cursorY * r.cellH)
