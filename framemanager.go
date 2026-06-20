@@ -2,13 +2,13 @@ package vtui
 
 import (
 	"fmt"
-	"sync"
 	"github.com/mattn/go-runewidth"
 	"github.com/unxed/vtinput"
 	"golang.org/x/term"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
