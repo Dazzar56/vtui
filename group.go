@@ -353,13 +353,9 @@ func (g *Group) ActivateHotkey(hk rune) bool {
 
 // MoveRelative moves the group and all its children.
 func (g *Group) MoveRelative(dx, dy int) {
-	g.X1 += dx
-	g.X2 += dx
-	g.Y1 += dy
-	g.Y2 += dy
+	g.ScreenObject.MoveRelative(dx, dy)
 	for _, item := range g.items {
-		ix1, iy1, ix2, iy2 := item.GetPosition()
-		item.SetPosition(ix1+dx, iy1+dy, ix2+dx, iy2+dy)
+		item.MoveRelative(dx, dy)
 	}
 }
 

@@ -44,6 +44,12 @@ func (v *VBoxLayout) SetPosition(x1, y1, x2, y2 int) {
 	v.W, v.H = x2-x1+1, y2-y1+1
 }
 
+func (v *VBoxLayout) MoveRelative(dx, dy int) {
+	v.ScreenObject.MoveRelative(dx, dy)
+	v.X += dx
+	v.Y += dy
+}
+
 func (v *VBoxLayout) Show(scr *ScreenBuf) {} // Invisible container
 
 // Add appends a UIElement to the vertical layout.
@@ -109,6 +115,12 @@ func (h *HBoxLayout) SetPosition(x1, y1, x2, y2 int) {
 	h.ScreenObject.SetPosition(x1, y1, x2, y2)
 	h.X, h.Y = x1, y1
 	h.W, h.H = x2-x1+1, y2-y1+1
+}
+
+func (h *HBoxLayout) MoveRelative(dx, dy int) {
+	h.ScreenObject.MoveRelative(dx, dy)
+	h.X += dx
+	h.Y += dy
 }
 
 func (h *HBoxLayout) Show(scr *ScreenBuf) {} // Invisible container

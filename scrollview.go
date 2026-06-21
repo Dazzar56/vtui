@@ -46,13 +46,20 @@ func (sv *ScrollView) ScrollBy(delta int) {
 
 	// Move the cursor by the requested delta to keep it physically stable on the screen,
 	// or to push it towards the boundary if the view itself cannot scroll further.
-	sv.MoveRelative(delta)
+	sv.MoveSelection(delta)
 
 	// Force the view to the calculated target
 	sv.TopPos = targetTop
 
-	// Safety check in case MoveRelative jumped out of bounds due to unselectable items
+	// Safety check in case MoveSelection jumped out of bounds due to unselectable items
 	sv.EnsureVisible()
+}
+
+func (sv *ScrollView) MoveRelative(dx, dy int) {
+	sv.ScreenObject.MoveRelative(dx, dy)
+	if sv.ScrollBar != nil {
+		sv.ScrollBar.MoveRelative(dx, dy)
+	}
 }
 
 func (sv *ScrollView) InitScrollBar(owner CommandHandler) {
@@ -138,8 +145,8 @@ func (sv *ScrollView) SetSelectPos(pos int) {
 	sv.EnsureVisible()
 }
 
-// MoveRelative shifts the selection by delta and updates TopPos.
-func (sv *ScrollView) MoveRelative(delta int) bool {
+// MoveSelection shifts the selection by delta and updates TopPos.
+func (sv *ScrollView) MoveSelection(delta int) bool {
 	if sv.ItemCount == 0 {
 		return false
 	}
@@ -199,13 +206,13 @@ func (sv *ScrollView) MoveRelative(delta int) bool {
 func (sv *ScrollView) HandleNavKey(vk uint16) bool {
 	switch vk {
 	case vtinput.VK_UP:
-		sv.MoveRelative(-1)
+		sv.MoveSelection(-1)
 	case vtinput.VK_DOWN:
-		sv.MoveRelative(1)
+		sv.MoveSelection(1)
 	case vtinput.VK_PRIOR:
-		sv.MoveRelative(-sv.ViewHeight)
+		sv.MoveSelection(-sv.ViewHeight)
 	case vtinput.VK_NEXT:
-		sv.MoveRelative(sv.ViewHeight)
+		sv.MoveSelection(sv.ViewHeight)
 	case vtinput.VK_HOME:
 		sv.SetSelectPos(0)
 	case vtinput.VK_END:

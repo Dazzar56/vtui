@@ -38,6 +38,11 @@ func (cb *ComboBox) SetPosition(x1, y1, x2, y2 int) {
 	cb.applyLayout()
 }
 
+func (cb *ComboBox) MoveRelative(dx, dy int) {
+	cb.ScreenObject.MoveRelative(dx, dy)
+	cb.applyLayout()
+}
+
 func (cb *ComboBox) applyLayout() {
 	hbox := NewHBoxLayout(cb.X1, cb.Y1, cb.X2-cb.X1+1, 1)
 	hbox.Spacing = 0

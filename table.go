@@ -288,7 +288,7 @@ func (t *Table) ProcessKey(e *vtinput.InputEvent) bool {
 			if t.SelectPos == 0 {
 				return false
 			}
-			if t.MoveRelative(-1) {
+			if t.MoveSelection(-1) {
 				t.SelectCol = len(t.Columns) - 1
 				return true
 			}
@@ -300,7 +300,7 @@ func (t *Table) ProcessKey(e *vtinput.InputEvent) bool {
 			if t.SelectPos == t.ItemCount-1 {
 				return false
 			}
-			if t.MoveRelative(1) {
+			if t.MoveSelection(1) {
 				t.SelectCol = 0
 				return true
 			}

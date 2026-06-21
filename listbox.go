@@ -83,7 +83,7 @@ func (lb *ListBox) ProcessKey(e *vtinput.InputEvent) bool {
 		if lb.MultiSelect {
 			lb.SelectedMap[lb.SelectPos] = !lb.SelectedMap[lb.SelectPos]
 			if e.VirtualKeyCode == vtinput.VK_INSERT {
-				lb.MoveRelative(1)
+				lb.MoveSelection(1)
 			}
 			return true
 		}

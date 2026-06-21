@@ -78,6 +78,7 @@ type UIElement interface {
 	HitTest(x, y int) bool
 	WantsChars() bool
 	GetFocusLink() UIElement
+	MoveRelative(dx, dy int)
 }
 
 // Container is an interface for elements that have child UI elements.
