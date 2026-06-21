@@ -106,6 +106,9 @@ type frameManager struct {
 	injectedMu     sync.Mutex
 	OnRender       func(scr *ScreenBuf)
 
+	pendingFar2l map[uint8]chan *vtinput.Far2lStack
+	far2lMu      sync.Mutex
+
 	// Global standard UI components
 	DisabledCommands CommandSet
 	MenuBar          *MenuBar
@@ -572,32 +575,23 @@ func (fm *frameManager) IsShutdown() bool {
 	return fm.Screens == nil
 }
 
-// WaitForFar2lReply safely blocks and waits for a specific Far2l reply from the event channel.
-// Any other events received during this time are stashed to be processed later.
-func (fm *frameManager) WaitForFar2lReply(expectedID uint8, timeout time.Duration) *vtinput.Far2lStack {
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		select {
-		case e, ok := <-fm.EventChan:
-			if !ok {
-				return nil
-			}
-			if e.Type == vtinput.Far2lEventType && e.Far2lCommand == "reply" {
-				stk := vtinput.Far2lStack(e.Far2lData)
-				id := stk.PopU8()
-				if id == expectedID {
-					return &stk
-				}
-			}
-			// Stash other events to be processed later by the main loop
-			fm.injectedMu.Lock()
-			fm.injectedEvents = append(fm.injectedEvents, e)
-			fm.injectedMu.Unlock()
-		case <-time.After(10 * time.Millisecond):
-			// Yield and check deadline
-		}
+func (fm *frameManager) RegisterFar2lWaiter(id uint8) chan *vtinput.Far2lStack {
+	ch := make(chan *vtinput.Far2lStack, 1)
+	fm.far2lMu.Lock()
+	if fm.pendingFar2l == nil {
+		fm.pendingFar2l = make(map[uint8]chan *vtinput.Far2lStack)
 	}
-	return nil
+	fm.pendingFar2l[id] = ch
+	fm.far2lMu.Unlock()
+	return ch
+}
+
+func (fm *frameManager) UnregisterFar2lWaiter(id uint8) {
+	fm.far2lMu.Lock()
+	if fm.pendingFar2l != nil {
+		delete(fm.pendingFar2l, id)
+	}
+	fm.far2lMu.Unlock()
 }
 
 // CycleWindows updates the selection in the switcher overlay
@@ -1197,10 +1191,18 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 			Far2lEnabled = true
 			return
 		}
-		// Protocol replies (from host to our requests) MUST NOT be swallowed here,
-		// because ExpectFar2lReply is waiting for them in a different thread/context.
 		if ev.Far2lCommand == "reply" {
-			DebugLog("FM_DISPATCH: Passing Far2l reply through...")
+			DebugLog("FM_DISPATCH: Processing Far2l reply...")
+			stk := vtinput.Far2lStack(ev.Far2lData)
+			id := stk.PopU8()
+			fm.far2lMu.Lock()
+			if fm.pendingFar2l != nil {
+				if ch, ok := fm.pendingFar2l[id]; ok {
+					ch <- &stk
+					delete(fm.pendingFar2l, id)
+				}
+			}
+			fm.far2lMu.Unlock()
 			return
 		}
 
