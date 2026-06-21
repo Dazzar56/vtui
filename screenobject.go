@@ -95,8 +95,6 @@ func (so *ScreenObject) MoveRelative(dx, dy int) {
 	so.Y2 += dy
 }
 
-f4/libs/vtui/framemanager.go
-
 // SetPosition sets the object's coordinates.
 // Important: this does not trigger a redraw.
 func (so *ScreenObject) SetPosition(x1, y1, x2, y2 int) {
