@@ -235,3 +235,69 @@ func TestGroup_FocusAllDisabled(t *testing.T) {
 		t.Errorf("focusIdx should be -1, got %d", g.focusIdx)
 	}
 }
+
+func TestNestedGroupFocusCycle(t *testing.T) {
+	SetDefaultPalette()
+
+	// 1. Create a parent group (like dialog root)
+	parent := NewGroup(0, 0, 40, 20)
+	parent.WrapFocus = true
+
+	// 2. Create nested group A
+	groupA := NewGroup(2, 2, 10, 5)
+	editA1 := NewEdit(0, 0, 5, "")
+	editA2 := NewEdit(0, 0, 5, "")
+	groupA.AddItem(editA1)
+	groupA.AddItem(editA2)
+
+	// 3. Create nested group B
+	groupB := NewGroup(15, 2, 10, 5)
+	editB1 := NewEdit(0, 0, 5, "")
+	editB2 := NewEdit(0, 0, 5, "")
+	groupB.AddItem(editB1)
+	groupB.AddItem(editB2)
+
+	parent.AddItem(groupA)
+	parent.AddItem(groupB)
+
+	// Set initial focus to parent
+	parent.SetFocus(true)
+
+	// Initially, editA1 should be focused
+	if !editA1.IsFocused() {
+		t.Errorf("Expected editA1 to be focused initially")
+	}
+
+	// Move forward with Tab
+	parent.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_TAB})
+	if !editA2.IsFocused() {
+		t.Errorf("Expected editA2 to be focused after first Tab")
+	}
+
+	// Move forward with Tab (enters groupB, should focus first element editB1)
+	parent.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_TAB})
+	if !editB1.IsFocused() {
+		t.Errorf("Expected editB1 to be focused after entering groupB")
+	}
+
+	// Move forward with Tab
+	parent.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_TAB})
+	if !editB2.IsFocused() {
+		t.Errorf("Expected editB2 to be focused inside groupB")
+	}
+
+	// Move forward with Tab (should wrap back to groupA, focusing editA1)
+	parent.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_TAB})
+	if !editA1.IsFocused() {
+		t.Errorf("Expected editA1 to be focused after wrapping back to groupA")
+	}
+
+	// Move backward with Shift+Tab (should wrap to groupB, focusing the last element editB2)
+	parent.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_TAB, ControlKeyState: vtinput.ShiftPressed,
+	})
+	if !editB2.IsFocused() {
+		t.Errorf("Expected editB2 to be focused after wrapping backward to groupB")
+	}
+}
+

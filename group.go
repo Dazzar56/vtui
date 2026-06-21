@@ -9,12 +9,22 @@ import (
 
 // Group is a container for UI elements, handling layout, focus, and event propagation.
 // It implements the UIElement interface, allowing groups to be nested.
+type FocusDirectionSetter interface {
+	SetFocusDirection(direction int)
+}
 type Group struct {
 	ScreenObject
 	items     []UIElement
 	focusIdx  int
 	WrapFocus bool
 	links     []autoLink
+}
+func (g *Group) SetFocusDirection(direction int) {
+	if direction > 0 {
+		g.focusIdx = -1
+	} else {
+		g.focusIdx = -2
+	}
 }
 
 type autoLink struct {
@@ -260,6 +270,9 @@ func (g *Group) changeFocus(direction int) bool {
 
 		item := g.items[nextIdx]
 		if item.CanFocus() && !item.IsDisabled() {
+			if fds, ok := item.(FocusDirectionSetter); ok {
+				fds.SetFocusDirection(direction)
+			}
 			g.setFocus(nextIdx)
 			return true
 		}
@@ -294,6 +307,9 @@ func (g *Group) SetFocus(f bool) {
 	if f {
 		if g.focusIdx == -1 {
 			g.changeFocus(1)
+		} else if g.focusIdx == -2 {
+			g.focusIdx = -1
+			g.changeFocus(-1)
 		} else if g.focusIdx < len(g.items) {
 			g.items[g.focusIdx].SetFocus(true)
 		}
