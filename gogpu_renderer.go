@@ -69,10 +69,12 @@ func (r *GogpuRenderer) Render(buf, shadow []CharInfo, w, h int, force bool) {
 }
 
 func (r *GogpuRenderer) SetCursor(x, y int, visible bool, shape CursorShape) {
+	r.mu.Lock()
 	r.cursorX, r.cursorY = x, y
 	r.cursorVis = visible
 	r.cursorShape = shape
 	r.lastCursorReset = time.Now()
+	r.mu.Unlock()
 }
 
 func (r *GogpuRenderer) SetPalette(pal *[256]uint32) {}
