@@ -5,7 +5,6 @@ package vtui
 import (
 	"image/color"
 	"math"
-	"strings"
 	"sync"
 	"time"
 
