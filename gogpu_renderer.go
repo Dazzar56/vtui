@@ -446,9 +446,13 @@ func (r *GogpuRenderer) Flush() {
 						currIdx := rowOff + wordStartX
 						prevIdx := currIdx - 1
 
-						char := rune(r.renderBuf[prevIdx].Char)
+						rawChar := r.renderBuf[prevIdx].Char
+						if rawChar == WideCharFiller {
+							break
+						}
+						char := rune(rawChar)
 						isBox := (char >= 0x2500 && char <= 0x259F) || (char >= 0x2190 && char <= 0x2193)
-						if char == 0 || char == ' ' || char == WideCharFiller || isBox {
+						if char == 0 || char == ' ' || isBox {
 							break
 						}
 
@@ -462,9 +466,12 @@ func (r *GogpuRenderer) Flush() {
 
 					var sb strings.Builder
 					for x := wordStartX; x < r.cursorX; x++ {
-						char := rune(r.renderBuf[rowOff+x].Char)
-						if char != WideCharFiller {
-							sb.WriteRune(char)
+						rawChar := r.renderBuf[rowOff+x].Char
+						if rawChar != WideCharFiller {
+							char := rune(rawChar)
+							if char != 0 {
+								sb.WriteRune(char)
+							}
 						}
 					}
 
