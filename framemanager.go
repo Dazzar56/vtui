@@ -594,6 +594,35 @@ func (fm *frameManager) UnregisterFar2lWaiter(id uint8) {
 	fm.far2lMu.Unlock()
 }
 
+// WaitFar2lResponse blocks until a response with the given ID is received,
+// while pumping the event and task queues to prevent deadlocks on the UI thread.
+func (fm *frameManager) WaitFar2lResponse(id uint8, timeout time.Duration) *vtinput.Far2lStack {
+	ch := fm.RegisterFar2lWaiter(id)
+	defer fm.UnregisterFar2lWaiter(id)
+
+	deadline := time.Now().Add(timeout)
+	for {
+		select {
+		case res := <-ch:
+			return res
+		case task := <-fm.TaskChan:
+			task()
+			fm.cleanupDoneFrames()
+			fm.Redraw()
+		case e, ok := <-fm.EventChan:
+			if !ok {
+				return nil
+			}
+			fm.dispatchEvent(e, false)
+		case <-time.After(10 * time.Millisecond):
+			if time.Now().After(deadline) {
+				DebugLog("FM: WaitFar2lResponse TIMEOUT for ID=%d", id)
+				return nil
+			}
+		}
+	}
+}
+
 // CycleWindows updates the selection in the switcher overlay
 func (fm *frameManager) CycleWindows(forward bool) bool {
 	if len(fm.Screens) < 2 {

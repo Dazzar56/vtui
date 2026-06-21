@@ -88,18 +88,10 @@ func TestFar2lInteract_Success(t *testing.T) {
 		}
 	}()
 
-	go func() {
-		for {
-			ev, ok := <-localFm.EventChan
-			if !ok {
-				return
-			}
-			localFm.dispatchEvent(ev, false)
-		}
-	}()
-
+	// The event loop pumping is now handled automatically by WaitFar2lResponse.
+	// We just call the interaction, and the background goroutine we started above
+	// will push the reply into the EventChan, which WaitFar2lResponse will dispatch.
 	reply := Far2lInteract(stk, true)
-	close(localFm.EventChan)
 
 	if reply == nil {
 		t.Fatal("Interaction failed to receive reply")
@@ -114,45 +106,53 @@ func TestFar2lInteract_NoEventStealing(t *testing.T) {
 	Far2lEnabled = true
 
 	localFm := &frameManager{}
+	localFm.Init(NewSilentScreenBuf())
 	localFm.EventChan = make(chan *vtinput.InputEvent, 10)
-	localFm.injectedEvents = make([]*vtinput.InputEvent, 0)
 	FrameManager = localFm
 
-	// 1. Push a standard keypress event into the queue
+	// 1. Prepare a standard keypress event
 	kp := &vtinput.InputEvent{
 		Type:           vtinput.KeyEventType,
 		KeyDown:        true,
 		VirtualKeyCode: vtinput.VK_A,
 		Char:           'a',
 	}
-	localFm.EventChan <- kp
+
+	// Track dispatching via a mock frame
+	received := false
+	frame := &mockFrame{
+		onProcessKey: func(e *vtinput.InputEvent) bool {
+			if e == kp {
+				received = true
+			}
+			return true
+		},
+	}
+	localFm.Push(frame)
 
 	stk := &vtinput.Far2lStack{}
 	stk.PushU8('w')
 
-	// 2. Start Far2lInteract (which will block waiting for a reply)
+	// 2. Start Far2lInteract (which will block in WaitFar2lResponse)
 	var reply *vtinput.Far2lStack
 	done := make(chan bool)
 	go func() {
+		// Put the event into the queue AFTER Far2lInteract starts waiting
+		time.Sleep(20 * time.Millisecond)
+		localFm.EventChan <- kp
+
 		reply = Far2lInteract(stk, true)
 		done <- true
 	}()
 
-	// Give it a brief moment to start waiting
-	time.Sleep(20 * time.Millisecond)
+	// 3. Now simulate the dispatcher receiving the reply
+	// We wait a bit to ensure WaitFar2lResponse has processed the kp event.
+	time.Sleep(100 * time.Millisecond)
 
-	// 3. Verify that the keypress event is STILL in the EventChan and has NOT been stolen!
-	select {
-	case ev := <-localFm.EventChan:
-		if ev != kp {
-			t.Errorf("Expected to read keypress event, got %v", ev)
-		}
-	default:
-		t.Error("KeyPress event was erroneously stolen or consumed by Far2lInteract wait mechanism!")
-	}
-
-	// 4. Now simulate the dispatcher receiving the reply
+	localFm.far2lMu.Lock()
 	idToWait := far2lIDCounter
+	localFm.far2lMu.Unlock()
+
 	resp := vtinput.Far2lStack{}
 	resp.PushU16(24) // height
 	resp.PushU16(80) // width
@@ -167,16 +167,88 @@ func TestFar2lInteract_NoEventStealing(t *testing.T) {
 	// Manually dispatch the reply to satisfy the waiter
 	localFm.dispatchEvent(replyEvent, false)
 
-	// 5. Wait for the interaction to complete
+	// 4. Wait for the interaction to complete
 	select {
 	case <-done:
 		if reply == nil {
 			t.Fatal("Interaction failed on valid reply")
 		}
-		if w := reply.PopU16(); w != 80 {
-			t.Errorf("Unexpected reply content: %d", w)
+		// Verify that the keypress event was DISPATCHED by the WaitFar2lResponse pump
+		if !received {
+			t.Error("KeyPress event was not dispatched during Far2lInteract wait!")
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(5 * time.Second):
 		t.Fatal("Interaction timed out / hung")
 	}
+}
+func TestIssue117_WaitFar2lResponse_TaskPumping(t *testing.T) {
+	fm := &frameManager{}
+	fm.Init(NewSilentScreenBuf())
+	FrameManager = fm
+
+	taskExecuted := false
+	fm.PostTask(func() {
+		taskExecuted = true
+	})
+
+	// Simulate the reply coming in asynchronously after some task pumping
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		resp := vtinput.Far2lStack{}
+		resp.PushU8(42) // ID
+		fm.dispatchEvent(&vtinput.InputEvent{
+			Type:         vtinput.Far2lEventType,
+			Far2lCommand: "reply",
+			Far2lData:    resp,
+		}, false)
+	}()
+
+	// Wait with a 2-second timeout
+	res := fm.WaitFar2lResponse(42, 2*time.Second)
+
+	if res == nil {
+		t.Fatal("Expected valid reply, got nil (timeout)")
+	}
+	if !taskExecuted {
+		t.Error("Issue #117: WaitFar2lResponse failed to pump and execute background UI tasks!")
+	}
+}
+
+func TestIssue117_WaitFar2lResponse_TimeoutCleanup(t *testing.T) {
+	fm := &frameManager{}
+	fm.Init(NewSilentScreenBuf())
+	FrameManager = fm
+
+	// Wait for a non-existent reply with a short 50ms timeout
+	res := fm.WaitFar2lResponse(99, 50*time.Millisecond)
+
+	if res != nil {
+		t.Fatalf("Expected nil reply on timeout, got %v", res)
+	}
+
+	// Verify that the waiter was safely cleaned up from the map
+	fm.far2lMu.Lock()
+	_, ok := fm.pendingFar2l[99]
+	fm.far2lMu.Unlock()
+
+	if ok {
+		t.Error("Issue #117: WaitFar2lResponse failed to unregister the waiter after a timeout!")
+	}
+
+	// Simulate a very late reply arriving after the timeout cleanup.
+	// It should be safely ignored and must NOT panic.
+	resp := vtinput.Far2lStack{}
+	resp.PushU8(99)
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("Late reply caused a panic after waiter cleanup: %v", r)
+		}
+	}()
+
+	fm.dispatchEvent(&vtinput.InputEvent{
+		Type:         vtinput.Far2lEventType,
+		Far2lCommand: "reply",
+		Far2lData:    resp,
+	}, false)
 }

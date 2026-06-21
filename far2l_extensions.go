@@ -38,23 +38,12 @@ func Far2lInteractTimeout(stk *vtinput.Far2lStack, wait bool, timeout time.Durat
 	id := far2lIDCounter
 	stk.PushU8(id)
 
-	var ch chan *vtinput.Far2lStack
-	if wait && FrameManager != nil {
-		ch = FrameManager.RegisterFar2lWaiter(id)
-		defer FrameManager.UnregisterFar2lWaiter(id)
-	}
-
 	b64 := base64.StdEncoding.EncodeToString(*stk)
 	DebugLog("VTUI_FAR2L_INTERACT: Sending ID=%d, payload_len=%d, wait=%v", id, len(b64), wait)
 	os.Stdout.WriteString("\x1b_far2l:" + b64 + "\x07")
 
-	if ch != nil {
-		select {
-		case res := <-ch:
-			return res
-		case <-time.After(timeout):
-			return nil
-		}
+	if wait && FrameManager != nil {
+		return FrameManager.WaitFar2lResponse(id, timeout)
 	}
 	DebugLog("VTUI_FAR2L: Processed without waiting for ID=%d", id)
 	return nil
