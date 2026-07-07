@@ -131,3 +131,26 @@ type SurfaceRenderer interface {
 	SetPalette(palette *[256]uint32)
 	Flush() // Combined atomic output
 }
+// SemanticContext содержит контекст для генерации семантического дерева.
+type SemanticContext struct {
+	Width        int
+	Height       int
+	ActiveScreen int
+}
+
+// SemanticProvider должен быть реализован UI элементами, которые хотят
+// экспортировать свое семантическое состояние для внешних GUI.
+type SemanticProvider interface {
+	SemanticNode(ctx *SemanticContext) map[string]any
+}
+
+// SemanticActionHandler обрабатывает действия, приходящие от внешнего GUI.
+type SemanticActionHandler interface {
+	HandleSemanticAction(action map[string]any) bool
+}
+
+// SemanticSceneRenderer расширяет SurfaceRenderer возможностью принимать семантическую сцену.
+type SemanticSceneRenderer interface {
+	SurfaceRenderer
+	SetSemanticScene(scene map[string]any)
+}
