@@ -3,7 +3,7 @@ module github.com/unxed/vtui
 go 1.25.5
 
 require (
-	github.com/gogpu/gg v0.50.2
+	github.com/gogpu/gg v0.50.4
 	github.com/gogpu/gogpu v0.44.0
 	github.com/gogpu/gpucontext v0.21.0
 	github.com/jezek/xgb v1.3.1
@@ -11,7 +11,7 @@ require (
 	github.com/neurlang/wayland v0.4.2
 	github.com/unxed/keytrans v0.1.27
 	github.com/unxed/vtinput v0.0.0
-	golang.org/x/image v0.43.0
+	golang.org/x/image v0.44.0
 	golang.org/x/sys v0.46.0
 	golang.org/x/term v0.40.0
 )
@@ -36,7 +36,7 @@ require (
 	golang.design/x/clipboard v0.7.0 // indirect
 	golang.org/x/exp v0.0.0-20190731235908-ec7cb31e5a56 // indirect
 	golang.org/x/mobile v0.0.0-20230301163155-e0f57694e12c // indirect
-	golang.org/x/text v0.38.0 // indirect
+	golang.org/x/text v0.40.0 // indirect
 )
 
 // This line tells Go to use a local copy of vtinput
