@@ -42,4 +42,4 @@ require (
 // This line tells Go to use a local copy of vtinput
 replace github.com/unxed/vtinput => ../vtinput
 
-replace github.com/ebitengine/purego => github.com/unxed/pureffi v0.1.10
+replace github.com/ebitengine/purego => github.com/unxed/pureffi v0.1.11
