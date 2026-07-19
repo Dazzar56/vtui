@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -79,6 +80,14 @@ func (h *GogpuHost) syncMods(vk uint16, mods gpucontext.Modifiers, isDown bool) 
 }
 
 func RunGogpuHost(cols, rows int, setupApp func()) error {
+	// DX12: use naga DXIL backend instead of HLSL->FXC
+	// to avoid 2-6s shader compilation via d3dcompiler_47.dll
+	if os.Getenv("GOGPU_DX12_DXIL") == "" {
+		api := os.Getenv("GOGPU_GRAPHICS_API")
+		if api == "" || strings.EqualFold(api, "dx12") || strings.EqualFold(api, "d3d12") || strings.EqualFold(api, "directx") {
+			os.Setenv("GOGPU_DX12_DXIL", "1")
+		}
+	}
 	baseFontSize := 18.0
 	face, cellW, cellH := loadGogpuFont(baseFontSize)
 
