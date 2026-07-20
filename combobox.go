@@ -130,8 +130,8 @@ func (cb *ComboBox) ProcessMouse(e *vtinput.InputEvent) bool {
 	}
 	if e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
 		mx := int(e.MouseX)
-		// If arrow clicked
-		if mx == cb.X2 {
+		// If arrow clicked or DropdownOnly is true and clicked anywhere within the bounds
+		if mx == cb.X2 || cb.DropdownOnly {
 			cb.Open()
 			return true
 		}
