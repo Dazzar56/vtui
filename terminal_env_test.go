@@ -119,3 +119,39 @@ func TestTerminalEnv_ManageCursorDisabled(t *testing.T) {
 	// Reset global state for other tests
 	ManageCursorStyle = true
 }
+func TestTerminalEnv_AutoWrap(t *testing.T) {
+	mock := &mockTermOut{}
+	oldGetTermOut := getTermOut
+	getTermOut = func() interface {
+		WriteString(string) (int, error)
+		Sync() error
+	} {
+		return mock
+	}
+	defer func() { getTermOut = oldGetTermOut }()
+
+	// 1. Test Suspend restores AutoWrap (safely without calling vtinput.Enable)
+	isPrepared = true
+	inAltScreen = true
+	inputRestore = func() {}
+
+	Suspend()
+
+	output := mock.builder.String()
+	if !strings.Contains(output, seqAutoWrapOn) {
+		t.Error("Suspend did not restore auto-wrap")
+	}
+
+	// 2. Test Resume writes AutoWrapOff (ignore ioctl error in headless test environment)
+	isPrepared = false
+	inAltScreen = false
+	inputRestore = nil
+	mock.builder.Reset()
+
+	_ = Resume()
+
+	output = mock.builder.String()
+	if !strings.Contains(output, seqAutoWrapOff) {
+		t.Error("Resume did not write seqAutoWrapOff")
+	}
+}

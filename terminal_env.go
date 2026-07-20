@@ -9,6 +9,8 @@ import (
 const (
 	seqAltScreenOn       = "\x1b[?1049h"
 	seqAltScreenOff      = "\x1b[?1049l"
+	seqAutoWrapOff       = "\x1b[?7l"
+	seqAutoWrapOn        = "\x1b[?7h"
 	seqBlinkingUnderline = "\x1b[3 q"
 	seqDefaultCursor     = "\x1b[0 q"
 	seqResetPalette      = "\x1b]104\x07"
@@ -48,6 +50,7 @@ func Suspend() {
 	defer termMu.Unlock()
 	if isPrepared {
 		out := getTermOut()
+		out.WriteString(seqAutoWrapOn) // Restore auto-wrap
 		if inAltScreen {
 			out.WriteString(seqAltScreenOff)
 			inAltScreen = false
@@ -78,6 +81,7 @@ func Resume() error {
 			out.WriteString(seqAltScreenOn)
 			inAltScreen = true
 		}
+		out.WriteString(seqAutoWrapOff) // Disable auto-wrap for exact rendering
 		out.Sync()
 
 		// 2. Enable advanced input protocols AFTER entering AltScreen.

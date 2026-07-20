@@ -1894,3 +1894,29 @@ func TestFrameManager_BackgroundScreenFallback_Fix(t *testing.T) {
 		t.Errorf("FALLBACK BUG: Closed editor and landed in %q instead of Panels", currentTitle)
 	}
 }
+func TestFrameManager_HideCursorWhenMenuIsActive(t *testing.T) {
+	fm := &frameManager{}
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	fm.Init(scr)
+	fm.Push(NewDesktop())
+
+	// Push a dummy focused User Frame that wants a cursor
+	frame := &mockFrame{}
+	frame.onProcessKey = func(e *vtinput.InputEvent) bool { return false }
+	fm.Push(frame)
+
+	// Set cursor position to simulate active cursor in the frame
+	scr.SetCursorVisible(true)
+
+	// Active menu bar
+	mb := NewMenuBar([]string{"Options"})
+	fm.MenuBar = mb
+	mb.Active = true // Open menu
+
+	fm.renderPhase()
+
+	if scr.cursorVisible {
+		t.Error("Cursor should be hidden when MenuBar is active")
+	}
+}

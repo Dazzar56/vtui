@@ -1189,6 +1189,7 @@ func (fm *frameManager) renderPhase() {
 		activeMenu := fm.GetActiveMenuBar()
 		if activeMenu != nil && activeMenu.Active {
 			activeMenu.Show(fm.scr)
+			fm.scr.SetCursorVisible(false) // Hide underlying cursor when menu is active
 		}
 		if fm.KeyBar != nil {
 			fm.KeyBar.Show(fm.scr)
