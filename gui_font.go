@@ -5,17 +5,49 @@ package vtui
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/basicfont"
 	"golang.org/x/image/font/opentype"
 )
 
-// loadBestFont attempts to find a suitable monospace TTF font on the system.
-// If none is found, it falls back to a built-in bitmap font.
-func loadBestFont(size float64, dpi float64) (font.Face, int, int) {
-	// Paths for common Linux distributions and Windows
-	fontPaths := []string{
+func getFontCandidates(fontName string) []string {
+	var candidates []string
+	if fontName != "" {
+		candidates = append(candidates, fontName)
+		if !strings.HasSuffix(strings.ToLower(fontName), ".ttf") {
+			candidates = append(candidates, fontName+".ttf")
+		}
+		dirs := []string{
+			`C:\Windows\Fonts`,
+			"/usr/share/fonts/truetype",
+			"/usr/share/fonts/TTF",
+			"/usr/local/share/fonts",
+			"/System/Library/Fonts/Supplemental",
+			"/System/Library/Fonts",
+		}
+		for _, dir := range dirs {
+			candidates = append(candidates, filepath.Join(dir, fontName))
+			if !strings.HasSuffix(strings.ToLower(fontName), ".ttf") {
+				candidates = append(candidates, filepath.Join(dir, fontName+".ttf"))
+			}
+			entries, err := os.ReadDir(dir)
+			if err == nil {
+				for _, e := range entries {
+					if e.IsDir() {
+						candidates = append(candidates, filepath.Join(dir, e.Name(), fontName))
+						if !strings.HasSuffix(strings.ToLower(fontName), ".ttf") {
+							candidates = append(candidates, filepath.Join(dir, e.Name(), fontName+".ttf"))
+						}
+					}
+				}
+			}
+		}
+	}
+
+	defaultPaths := []string{
 		`C:\Windows\Fonts\consola.ttf`,
 		`C:\Windows\Fonts\lucon.ttf`,
 		`C:\Windows\Fonts\cour.ttf`,
@@ -24,10 +56,21 @@ func loadBestFont(size float64, dpi float64) (font.Face, int, int) {
 		"/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
 		"/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
 		"/usr/share/fonts/TTF/DejaVuSansMono.ttf",
-		"/System/Library/Fonts/Supplemental/Courier New.ttf", // macOS path
+		"/System/Library/Fonts/Supplemental/Courier New.ttf",
+		"/System/Library/Fonts/Monaco.ttf",
+	}
+	candidates = append(candidates, defaultPaths...)
+	return candidates
+}
+
+// loadBestFont attempts to find a suitable monospace TTF font on the system.
+// If none is found, it falls back to a built-in bitmap font.
+func loadBestFont(fontName string, size float64, dpi float64) (font.Face, int, int) {
+	if size <= 0 {
+		size = 18.0
 	}
 
-	for _, path := range fontPaths {
+	for _, path := range getFontCandidates(fontName) {
 		data, err := os.ReadFile(path)
 		if err != nil {
 			continue

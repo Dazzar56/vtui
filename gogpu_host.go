@@ -79,7 +79,7 @@ func (h *GogpuHost) syncMods(vk uint16, mods gpucontext.Modifiers, isDown bool) 
 	return sysMods
 }
 
-func RunGogpuHost(cols, rows int, setupApp func()) error {
+func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp func()) error {
 	// DX12: use naga DXIL backend instead of HLSL->FXC
 	// to avoid 2-6s shader compilation via d3dcompiler_47.dll
 	if os.Getenv("GOGPU_DX12_DXIL") == "" {
@@ -88,8 +88,7 @@ func RunGogpuHost(cols, rows int, setupApp func()) error {
 			os.Setenv("GOGPU_DX12_DXIL", "1")
 		}
 	}
-	baseFontSize := 18.0
-	face, cellW, cellH := loadGogpuFont(baseFontSize)
+	face, cellW, cellH := loadGogpuFont(fontName, fontSize)
 
 	fmt.Fprintf(os.Stdout, "GOGPU_HOST: Starting RunGogpuHost %dx%d (Cell: %dx%d)\n", cols, rows, cellW, cellH)
 	DebugLog("GOGPU_HOST: Starting RunGogpuHost %dx%d (Cell: %dx%d)", cols, rows, cellW, cellH)
@@ -401,17 +400,11 @@ func RunGogpuHost(cols, rows int, setupApp func()) error {
 	return err
 }
 
-func loadGogpuFont(size float64) (text.Face, int, int) {
-	candidates := []string{
-		"C:\\Windows\\Fonts\\consola.ttf",
-		"C:\\Windows\\Fonts\\arial.ttf",
-		"/usr/share/fonts/truetype/ubuntu/UbuntuMono-R.ttf",
-		"/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
-		"/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
-		"/System/Library/Fonts/Supplemental/Courier New.ttf",
-		"/System/Library/Fonts/Monaco.ttf",
+func loadGogpuFont(fontName string, size float64) (text.Face, int, int) {
+	if size <= 0 {
+		size = 18.0
 	}
-	for _, p := range candidates {
+	for _, p := range getFontCandidates(fontName) {
 		if _, err := os.Stat(p); err == nil {
 			src, err := text.NewFontSourceFromFile(p)
 			if err == nil {

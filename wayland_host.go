@@ -31,15 +31,17 @@ type WaylandHost struct {
 	mouseBtn uint32
 }
 
-func runInWaylandWindow(cols, rows int, setupApp func()) error {
+func runInWaylandWindow(cols, rows int, fontName string, fontSize float64, setupApp func()) error {
 	d, err := window.DisplayCreate([]string{})
 	if err != nil {
 		return err
 	}
 
-	fontSize := 12.0
+	if fontSize <= 0 {
+		fontSize = 12.0
+	}
 	dpi := 96.0 // Wayland scaling is usually handled by the compositor buffers, assuming 96 base
-	face, cellW, cellH := loadBestFont(fontSize, dpi)
+	face, cellW, cellH := loadBestFont(fontName, fontSize, dpi)
 
 	host := &WaylandHost{
 		display: d,

@@ -15,6 +15,6 @@ func (r *GogpuRenderer) SetWindowTitle(title string)                            
 func (r *GogpuRenderer) Flush()                                                             {}
 
 // RunGogpuHost — заглушка функции запуска для BSD.
-func RunGogpuHost(cols, rows int, setupApp func()) error {
+func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp func()) error {
 	return fmt.Errorf("gogpu backend is not supported on BSDs")
 }

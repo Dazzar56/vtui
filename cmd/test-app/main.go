@@ -143,21 +143,48 @@ func main() {
 	guiMode := false
 	guiBackend := ""
 	ttyMode := false
-	for _, arg := range os.Args {
-		if arg == "--gui" {
+	fontName := ""
+	fontSize := 18.0
+
+	for i := 1; i < len(os.Args); i++ {
+		arg := os.Args[i]
+		flagName := arg
+		flagVal := ""
+		if eqIdx := strings.IndexByte(arg, '='); eqIdx != -1 {
+			flagName = arg[:eqIdx]
+			flagVal = arg[eqIdx+1:]
+		}
+
+		switch flagName {
+		case "--gui":
 			guiMode = true
-		} else if arg == "--gui=x11" {
-			guiMode = true
-			guiBackend = "x11"
-		} else if arg == "--gui=wayland" {
-			guiMode = true
-			guiBackend = "wayland"
-		} else if arg == "--gui=gogpu" {
-			guiMode = true
-			guiBackend = "gogpu"
-		} else if arg == "--tty" {
+			if flagVal != "" {
+				guiBackend = flagVal
+			} else if i+1 < len(os.Args) && !strings.HasPrefix(os.Args[i+1], "-") {
+				guiBackend = os.Args[i+1]
+				i++
+			}
+		case "--font":
+			if flagVal != "" {
+				fontName = flagVal
+			} else if i+1 < len(os.Args) {
+				fontName = os.Args[i+1]
+				i++
+			}
+		case "--size":
+			var val float64
+			if flagVal != "" {
+				fmt.Sscanf(flagVal, "%f", &val)
+			} else if i+1 < len(os.Args) {
+				fmt.Sscanf(os.Args[i+1], "%f", &val)
+				i++
+			}
+			if val > 0 {
+				fontSize = val
+			}
+		case "--tty":
 			ttyMode = true
-		} else if arg == "--debug" {
+		case "--debug":
 			os.Setenv("VTUI_DEBUG", "1")
 		}
 	}
@@ -342,7 +369,7 @@ func main() {
 	}
 
 	runGuiWithBackend := func(backend string) error {
-		return vtui.RunInGUIWindow(80, 30, backend, setup)
+		return vtui.RunInGUIWindow(80, 30, backend, fontName, fontSize, setup)
 	}
 
 	tryRunDefaultGui := func() error {

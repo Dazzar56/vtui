@@ -7,6 +7,6 @@ import (
 )
 
 // runInWaylandWindow is a stub for macOS where Wayland is not supported.
-func runInWaylandWindow(cols, rows int, setupApp func()) error {
+func runInWaylandWindow(cols, rows int, fontName string, fontSize float64, setupApp func()) error {
 	return errors.New("Wayland backend is not supported on macOS. Please use X11 or Terminal mode.")
 }

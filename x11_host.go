@@ -405,12 +405,14 @@ func (h *X11Host) flushImage() int {
 	return putCalls
 }
 
-func runInX11Window(cols, rows int, setupApp func()) error {
+func runInX11Window(cols, rows int, fontName string, fontSize float64, setupApp func()) error {
 	if runtime.GOOS == "windows" && os.Getenv("DISPLAY") == "" {
 		os.Setenv("DISPLAY", "127.0.0.1:0.0")
 	}
 
-	fontSize := 22.0
+	if fontSize <= 0 {
+		fontSize = 22.0
+	}
 	tempConn, _ := xgb.NewConn()
 	dpi := 96.0
 	if tempConn != nil {
@@ -422,7 +424,7 @@ func runInX11Window(cols, rows int, setupApp func()) error {
 		tempConn.Close()
 	}
 
-	face, cellW, cellH := loadBestFont(fontSize, dpi)
+	face, cellW, cellH := loadBestFont(fontName, fontSize, dpi)
 
 	host, err := NewX11Host(cols, rows, cellW, cellH)
 	if err != nil {
