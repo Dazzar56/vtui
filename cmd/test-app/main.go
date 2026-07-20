@@ -294,6 +294,15 @@ func main() {
 		btnInp.SetGrowMode(vtui.GrowLoY | vtui.GrowHiY)
 		dlg.AddItem(btnInp)
 
+		btnTitle := vtui.NewButton(x1+62, btnY, "&Title")
+		btnTitle.OnClick = func() {
+			vtui.InputBox(" Window Title ", "Enter new title:", "vtui showcase", func(s string) {
+				vtui.SetWindowTitle(s)
+			})
+		}
+		btnTitle.SetGrowMode(vtui.GrowLoY | vtui.GrowHiY)
+		dlg.AddItem(btnTitle)
+
 		vtui.FrameManager.MenuBar = topMenu
 
 		go func() {

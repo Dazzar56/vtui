@@ -129,6 +129,7 @@ type SurfaceRenderer interface {
 	Render(buf, shadow []CharInfo, width, height int, forceRedraw bool)
 	SetCursor(x, y int, visible bool, shape CursorShape)
 	SetPalette(palette *[256]uint32)
+	SetWindowTitle(title string)
 	Flush() // Combined atomic output
 }
 // SemanticContext содержит контекст для генерации семантического дерева.

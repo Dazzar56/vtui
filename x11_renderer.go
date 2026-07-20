@@ -7,6 +7,7 @@ import (
 	"image/color"
 	"time"
 
+	"github.com/jezek/xgb/xproto"
 	"github.com/mattn/go-runewidth"
 	"golang.org/x/image/font"
 	"golang.org/x/image/math/fixed"
@@ -50,6 +51,21 @@ func (r *X11Renderer) SetCursor(x, y int, visible bool, shape CursorShape) {
 	}
 }
 
+func (r *X11Renderer) SetWindowTitle(title string) {
+	r.host.mu.Lock()
+	defer r.host.mu.Unlock()
+
+	titleBytes := []byte(title)
+	xproto.ChangeProperty(r.host.conn, xproto.PropModeReplace, r.host.wid, xproto.AtomWmName, xproto.AtomString, 8, uint32(len(titleBytes)), titleBytes)
+
+	netWmName, err := xproto.InternAtom(r.host.conn, false, 12, "_NET_WM_NAME").Reply()
+	if err == nil && netWmName != nil {
+		utf8String, err2 := xproto.InternAtom(r.host.conn, false, 11, "UTF8_STRING").Reply()
+		if err2 == nil && utf8String != nil {
+			xproto.ChangeProperty(r.host.conn, xproto.PropModeReplace, r.host.wid, netWmName.Atom, utf8String.Atom, 8, uint32(len(titleBytes)), titleBytes)
+		}
+	}
+}
 func (r *X11Renderer) getCellColors(cell CharInfo) (uint32, uint32) {
 	bg := GetRGBBack(cell.Attributes)
 	if cell.Attributes&IsBgRGB == 0 {

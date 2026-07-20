@@ -2,6 +2,7 @@ package vtui
 
 import (
 	"os"
+    "strings"
 	"testing"
 )
 
@@ -58,6 +59,24 @@ func TestAttributesToANSI_FullSplitting(t *testing.T) {
 	want := "\x1b[1m\x1b[38;5;1m\x1b[48;5;2m"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
+	}
+}
+func TestAnsiRenderer_SetWindowTitle(t *testing.T) {
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(10, 10)
+	scr.Renderer = &AnsiRenderer{parent: scr}
+
+	ansiRenderer, ok := scr.Renderer.(*AnsiRenderer)
+	if !ok {
+		t.Fatal("Renderer is not AnsiRenderer")
+	}
+
+	ansiRenderer.SetWindowTitle("New Title")
+
+	out := ansiRenderer.frameOut.String()
+	expected := "\x1b]0;New Title\x07"
+	if !strings.Contains(out, expected) {
+		t.Errorf("Expected window title sequence %q in output, got %q", expected, out)
 	}
 }
 

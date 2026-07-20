@@ -620,6 +620,9 @@ func (r *AnsiRenderer) SetCursor(x, y int, vis bool, shape CursorShape) {
 	r.cursorShape = shape
 }
 
+func (r *AnsiRenderer) SetWindowTitle(title string) {
+	r.frameOut.WriteString(fmt.Sprintf("\x1b]0;%s\x07", title))
+}
 func (r *AnsiRenderer) Flush() {
 	if !r.firstInit || r.termCursorInvalid || r.cursorX != r.lastSentCursorX || r.cursorY != r.lastSentCursorY || r.cursorVis != r.lastSentCursorVis || r.cursorShape != r.lastSentCursorShape {
 		r.frameOut.WriteString(fmt.Sprintf("\x1b[%d;%dH", r.cursorY+1, r.cursorX+1))

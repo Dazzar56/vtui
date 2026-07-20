@@ -436,6 +436,9 @@ func (r *GogpuRenderer) Flush() {
 	r.canvas.Render(ctx.RenderTarget())
 }
 
+func (r *GogpuRenderer) SetWindowTitle(title string) {
+	// gogpu backend does not currently support dynamic title changes after initialization
+}
 func (r *GogpuRenderer) getCellColors(cell CharInfo) (color.Color, color.Color) {
 	bg := GetRGBBack(cell.Attributes)
 	if cell.Attributes&IsBgRGB == 0 {

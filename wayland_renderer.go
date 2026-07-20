@@ -51,6 +51,13 @@ func (r *WaylandRenderer) SetCursor(x, y int, visible bool, shape CursorShape) {
 	}
 }
 
+func (r *WaylandRenderer) SetWindowTitle(title string) {
+	r.host.mu.Lock()
+	defer r.host.mu.Unlock()
+	if r.host.win != nil {
+		r.host.win.SetTitle(title)
+	}
+}
 func (r *WaylandRenderer) getCellColors(cell CharInfo) (uint32, uint32) {
 	bg := GetRGBBack(cell.Attributes)
 	if cell.Attributes&IsBgRGB == 0 {

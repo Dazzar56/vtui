@@ -795,6 +795,20 @@ func (fm *frameManager) cleanupOrphanedMenus() {
 	}
 }
 
+// SetWindowTitle updates the terminal or application window title.
+func (fm *frameManager) SetWindowTitle(title string) {
+	if fm.scr != nil && fm.scr.Renderer != nil {
+		fm.scr.Renderer.SetWindowTitle(title)
+		fm.scr.Renderer.Flush()
+	}
+}
+
+// SetWindowTitle changes the terminal or GUI window title globally.
+func SetWindowTitle(title string) {
+	if FrameManager != nil {
+		FrameManager.SetWindowTitle(title)
+	}
+}
 // GetTopFrameType returns the type of the topmost frame or -1 if empty.
 func (fm *frameManager) GetTopFrameType() FrameType {
 	if len(fm.frames) == 0 {
