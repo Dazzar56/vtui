@@ -836,6 +836,24 @@ func (fm *frameManager) GetScreenHeight() int {
 	}
 	return fm.scr.height
 }
+
+// GetBackendName returns the name of the active rendering backend.
+func (fm *frameManager) GetBackendName() string {
+	if fm.scr == nil || fm.scr.Renderer == nil {
+		return "Console"
+	}
+	rName := fmt.Sprintf("%T", fm.scr.Renderer)
+	if strings.Contains(rName, "Gogpu") {
+		return "GUI (GoGPU)"
+	}
+	if strings.Contains(rName, "X11") {
+		return "GUI (X11)"
+	}
+	if strings.Contains(rName, "Wayland") {
+		return "GUI (Wayland)"
+	}
+	return "Console"
+}
 func (fm *frameManager) GetSyncStats() string {
 	tLen, tCap := 0, 0
 	if fm.TaskChan != nil {
