@@ -63,8 +63,8 @@ func (r *GogpuRenderer) Render(buf, shadow []CharInfo, w, h int, force bool) {
 	if !needsRedraw && r.cursorVis {
 		elapsed := time.Since(r.lastCursorReset)
 		currentBlink := true
-		if elapsed >= 500*time.Millisecond {
-			currentBlink = (int(elapsed.Milliseconds())/500)%2 == 0
+		if elapsed >= 350*time.Millisecond {
+			currentBlink = (int((elapsed - 350*time.Millisecond).Milliseconds())/500)%2 == 0
 		}
 		if currentBlink != r.lastBlinkState {
 			needsRedraw = true
@@ -427,12 +427,12 @@ func (r *GogpuRenderer) Flush() {
 			cursorVisible := r.cursorVis
 			if cursorVisible {
 				elapsed := time.Since(r.lastCursorReset)
-				// В течение 500мс после ввода или перемещения курсор всегда горит ровно
-				if elapsed < 500*time.Millisecond {
+				// В течение 350мс после ввода или перемещения курсор всегда горит ровно
+				if elapsed < 350*time.Millisecond {
 					cursorVisible = true
 				} else {
 					// Затем начинает плавно мигать каждые 500мс
-					cursorVisible = (int(elapsed.Milliseconds())/500)%2 == 0
+					cursorVisible = (int((elapsed - 350*time.Millisecond).Milliseconds())/500)%2 == 0
 				}
 			}
 

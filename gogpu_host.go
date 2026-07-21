@@ -332,7 +332,9 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 		sizeChanged := (host.lastAppW != w || host.lastAppH != h)
 		host.lastAppW, host.lastAppH = w, h
 		host.ctx = dc
-		host.resizePending = true
+		if sizeChanged {
+			host.resizePending = true
+		}
 		host.mu.Unlock()
 
 		if sizeChanged && host.reader != nil && host.reader.EventChan != nil {
