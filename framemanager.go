@@ -932,7 +932,7 @@ func (fm *frameManager) Run(reader *vtinput.Reader) {
 	// Heartbeat for animations and cursor blinking
 	go func() {
 		for fm.running {
-			time.Sleep(1000 * time.Millisecond)
+			time.Sleep(250 * time.Millisecond)
 			fm.Redraw()
 		}
 	}()

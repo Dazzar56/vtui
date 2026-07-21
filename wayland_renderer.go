@@ -25,14 +25,17 @@ type WaylandRenderer struct {
 	cursorVis              bool
 	cursorShape            CursorShape
 
+	lastCursorReset time.Time
+
 	stats renderStats
 }
 
 func NewWaylandRenderer(host *WaylandHost, face font.Face) *WaylandRenderer {
 	return &WaylandRenderer{
-		host:       host,
-		face:       face,
-		glyphCache: make(map[glyphKey]*image.RGBA),
+		host:            host,
+		face:            face,
+		glyphCache:      make(map[glyphKey]*image.RGBA),
+		lastCursorReset: time.Now(),
 	}
 }
 
@@ -48,6 +51,7 @@ func (r *WaylandRenderer) SetCursor(x, y int, visible bool, shape CursorShape) {
 		r.cursorY = y
 		r.cursorVis = visible
 		r.cursorShape = shape
+		r.lastCursorReset = time.Now()
 	}
 }
 
@@ -75,7 +79,16 @@ func (r *WaylandRenderer) Render(buf, shadow []CharInfo, w, h int, forceRedraw b
 	r.host.mu.Lock()
 	defer r.host.mu.Unlock()
 
-	blinkState := (time.Now().UnixNano()/int64(500*time.Millisecond))%2 == 0
+	cursorVisible := r.cursorVis
+	if cursorVisible {
+		elapsed := time.Since(r.lastCursorReset)
+		if elapsed < 500*time.Millisecond {
+			cursorVisible = true
+		} else {
+			cursorVisible = (int(elapsed.Milliseconds())/500)%2 == 0
+		}
+	}
+
 	r.w, r.h = w, h
 	img := r.host.imgBuf
 	cw, ch := r.host.cellW, r.host.cellH
@@ -171,7 +184,7 @@ func (r *WaylandRenderer) Render(buf, shadow []CharInfo, w, h int, forceRedraw b
 					}
 				}
 
-				if currX == r.cursorX && y == r.cursorY && r.cursorVis && blinkState {
+				if currX == r.cursorX && y == r.cursorY && cursorVisible {
 					var startY int
 					if r.cursorShape == CursorShapeBlock {
 						startY = 0

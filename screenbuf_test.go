@@ -6,6 +6,43 @@ import (
 	"testing"
 )
 
+func TestScreenBuf_CursorDirtyState(t *testing.T) {
+	scr := NewScreenBuf()
+	scr.AllocBuf(80, 25)
+
+	// Начальное состояние
+	scr.SetCursorPos(10, 10)
+	scr.SetCursorVisible(true)
+	scr.SetCursorShape(CursorShapeUnderline)
+
+	if !scr.cursorDirty {
+		t.Error("expected cursorDirty to be true after initial setup")
+	}
+
+	// Сбрасываем флаг (имитируем Flush)
+	scr.cursorDirty = false
+
+	// Проверяем, что изменение позиции взводит флаг
+	scr.SetCursorPos(11, 10)
+	if !scr.cursorDirty {
+		t.Error("expected cursorDirty to be true after cursor position change")
+	}
+	scr.cursorDirty = false
+
+	// Проверяем, что изменение видимости взводит флаг
+	scr.SetCursorVisible(false)
+	if !scr.cursorDirty {
+		t.Error("expected cursorDirty to be true after cursor visibility change")
+	}
+	scr.cursorDirty = false
+
+	// Проверяем, что изменение формы взводит флаг
+	scr.SetCursorShape(CursorShapeBlock)
+	if !scr.cursorDirty {
+		t.Error("expected cursorDirty to be true after cursor shape change")
+	}
+}
+
 func TestAttributesToANSI(t *testing.T) {
 	// 1. Simple Bold + Index Red
 	attr := ForegroundIntensity | SetIndexFore(0, 9)

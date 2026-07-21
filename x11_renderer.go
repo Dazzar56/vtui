@@ -26,14 +26,17 @@ type X11Renderer struct {
 	oldCursorX int
 	oldCursorY int
 
+	lastCursorReset time.Time
+
 	stats renderStats
 }
 
 func NewX11Renderer(host *X11Host, face font.Face) *X11Renderer {
 	return &X11Renderer{
-		host:       host,
-		face:       face,
-		glyphCache: make(map[glyphKey]*image.RGBA),
+		host:            host,
+		face:            face,
+		glyphCache:      make(map[glyphKey]*image.RGBA),
+		lastCursorReset: time.Now(),
 	}
 }
 
@@ -48,6 +51,7 @@ func (r *X11Renderer) SetCursor(x, y int, visible bool, shape CursorShape) {
 		r.cursorY = y
 		r.cursorVis = visible
 		r.cursorShape = shape
+		r.lastCursorReset = time.Now()
 	}
 }
 
@@ -101,7 +105,16 @@ func (r *X11Renderer) Render(buf, shadow []CharInfo, w, h int, forceRedraw bool)
 		forceRedraw = true
 	}
 
-	blinkState := (time.Now().UnixNano()/int64(500*time.Millisecond))%2 == 0
+	cursorVisible := r.cursorVis
+	if cursorVisible {
+		elapsed := time.Since(r.lastCursorReset)
+		if elapsed < 500*time.Millisecond {
+			cursorVisible = true
+		} else {
+			cursorVisible = (int(elapsed.Milliseconds())/500)%2 == 0
+		}
+	}
+
 	r.w, r.h = w, h
 	img := r.host.imgBuf
 	cw, ch := r.host.cellW, r.host.cellH
@@ -204,7 +217,7 @@ func (r *X11Renderer) Render(buf, shadow []CharInfo, w, h int, forceRedraw bool)
 					}
 				}
 
-				if currX == r.cursorX && y == r.cursorY && r.cursorVis && blinkState {
+				if currX == r.cursorX && y == r.cursorY && cursorVisible {
 					var startY int
 					if r.cursorShape == CursorShapeBlock {
 						startY = 0

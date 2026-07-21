@@ -25,6 +25,7 @@ type GogpuRenderer struct {
 	cursorVis        bool
 	cursorShape      CursorShape
 	lastCursorReset  time.Time
+	lastBlinkState   bool
 
 	canvas    *ggcanvas.Canvas
 	renderBuf []CharInfo
@@ -38,6 +39,7 @@ func NewGogpuRenderer(host *GogpuHost, face text.Face, cw, ch int) *GogpuRendere
 		cellW:           cw,
 		cellH:           ch,
 		lastCursorReset: time.Now(),
+		lastBlinkState:  true,
 	}
 }
 
@@ -57,6 +59,19 @@ func (r *GogpuRenderer) Render(buf, shadow []CharInfo, w, h int, force bool) {
 			}
 		}
 	}
+
+	if !needsRedraw && r.cursorVis {
+		elapsed := time.Since(r.lastCursorReset)
+		currentBlink := true
+		if elapsed >= 500*time.Millisecond {
+			currentBlink = (int(elapsed.Milliseconds())/500)%2 == 0
+		}
+		if currentBlink != r.lastBlinkState {
+			needsRedraw = true
+			r.lastBlinkState = currentBlink
+		}
+	}
+
 	if !needsRedraw {
 		return
 	}
@@ -70,10 +85,14 @@ func (r *GogpuRenderer) Render(buf, shadow []CharInfo, w, h int, force bool) {
 
 func (r *GogpuRenderer) SetCursor(x, y int, visible bool, shape CursorShape) {
 	r.mu.Lock()
-	r.cursorX, r.cursorY = x, y
-	r.cursorVis = visible
-	r.cursorShape = shape
-	r.lastCursorReset = time.Now()
+	if r.cursorX != x || r.cursorY != y || r.cursorVis != visible || r.cursorShape != shape {
+		r.cursorX, r.cursorY = x, y
+		r.cursorVis = visible
+		r.cursorShape = shape
+		r.lastCursorReset = time.Now()
+		r.lastBlinkState = true
+		r.dirty = true
+	}
 	r.mu.Unlock()
 }
 
