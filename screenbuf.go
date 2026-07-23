@@ -124,6 +124,18 @@ func (s *ScreenBuf) HardReset() {
 	s.dirty = true
 }
 
+// ClearBuf resets every cell of the pending buffer to a zero CharInfo.
+// Used by the FrameManager when the bottom of the painted frame stack is
+// transparent: nothing below will paint the background, so cells vacated
+// by moved frames must not retain stale content.
+func (s *ScreenBuf) ClearBuf() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.buf {
+		s.buf[i] = CharInfo{}
+	}
+}
+
 // AllocBuf allocates or reallocates memory for the screen buffers.
 func (s *ScreenBuf) AllocBuf(width, height int) {
 	s.mu.Lock()

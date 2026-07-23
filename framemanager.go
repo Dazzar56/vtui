@@ -1176,6 +1176,13 @@ func (fm *frameManager) renderPhase() {
 			baseIdx--
 		}
 
+		// If even the bottom screen of the painted stack is transparent,
+		// nothing below will paint the background: clear the pending buffer
+		// so cells vacated by moved frames do not leave stale content.
+		if fm.Screens[baseIdx].Transparent {
+			fm.scr.ClearBuf()
+		}
+
 		// 2. Отрисовываем стэк экранов от базового до текущего
 		for sIdx := baseIdx; sIdx <= fm.ActiveIdx; sIdx++ {
 			frames := fm.GetActiveFrames(sIdx)

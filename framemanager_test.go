@@ -1920,3 +1920,62 @@ func TestFrameManager_HideCursorWhenMenuIsActive(t *testing.T) {
 		t.Error("Cursor should be hidden when MenuBar is active")
 	}
 }
+
+// trailFrame paints a single cell at a movable position. Used to verify
+// that a transparent bottom screen leaves no stale content behind.
+type trailFrame struct {
+	BaseFrame
+	x, y int
+}
+
+func (f *trailFrame) Show(scr *ScreenBuf) {
+	scr.Write(f.x, f.y, StringToCharInfo("X", SetRGBBoth(0, 0xFFFFFF, 0x000000)))
+}
+func (f *trailFrame) GetType() FrameType { return TypeUser }
+func (f *trailFrame) GetTitle() string   { return "TrailFrame" }
+
+func TestFrameManager_TransparentBaseClearsVacatedCells(t *testing.T) {
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(10, 5)
+	fm := &frameManager{}
+	fm.Init(scr)
+
+	// The host paints the background itself (e.g. a terminal under the
+	// overlay): the bottom screen is declared transparent.
+	fm.Screens[0].Transparent = true
+
+	frame := &trailFrame{x: 2, y: 1}
+	fm.Push(frame)
+	fm.renderPhase()
+	if cell := scr.GetCell(2, 1); cell.Char != 'X' {
+		t.Fatalf("expected frame painted at (2,1), got %q", cell.Char)
+	}
+
+	// Move the frame: the vacated cell must be cleared, not keep the copy.
+	frame.x, frame.y = 5, 2
+	fm.renderPhase()
+	if cell := scr.GetCell(2, 1); cell.Char != 0 {
+		t.Errorf("vacated cell (2,1) still holds %q: moved frames leave a trail", cell.Char)
+	}
+	if cell := scr.GetCell(5, 2); cell.Char != 'X' {
+		t.Errorf("expected frame painted at (5,2), got %q", cell.Char)
+	}
+}
+
+func TestFrameManager_OpaqueBaseKeepsLegacyBehavior(t *testing.T) {
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(10, 5)
+	fm := &frameManager{}
+	fm.Init(scr)
+
+	// Default (opaque) bottom screen: the buffer is NOT cleared between
+	// render passes — the base screen is expected to paint every cell.
+	frame := &trailFrame{x: 2, y: 1}
+	fm.Push(frame)
+	fm.renderPhase()
+	frame.x, frame.y = 5, 2
+	fm.renderPhase()
+	if cell := scr.GetCell(2, 1); cell.Char != 'X' {
+		t.Errorf("opaque base: vacated cell (2,1) unexpectedly cleared")
+	}
+}
