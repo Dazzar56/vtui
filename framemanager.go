@@ -1557,6 +1557,9 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 					topic = foc.GetHelp()
 				}
 			}
+			if topic == "" {
+				topic = "Contents"
+			}
 			if topic != "" && GlobalHelpEngine != nil {
 				hv := NewHelpView(GlobalHelpEngine, topic)
 				fm.Push(hv)

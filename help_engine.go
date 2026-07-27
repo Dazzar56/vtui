@@ -142,6 +142,14 @@ func (e *HelpEngine) parseLinks(topic *HelpTopic, line string, lineIdx int) {
 	}
 }
 
+// AddTopic registers a topic and automatically parses its links.
+func (e *HelpEngine) AddTopic(topic *HelpTopic) {
+	e.topics[topic.Name] = topic
+	topic.Links = nil
+	for idx, line := range topic.Lines {
+		e.parseLinks(topic, line, idx)
+	}
+}
 func (e *HelpEngine) GetTopic(name string) *HelpTopic {
 	return e.topics[name]
 }
