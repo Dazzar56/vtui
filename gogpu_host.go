@@ -30,7 +30,6 @@ type GogpuHost struct {
 	cols, rows      int
 	cellW, cellH    int
 	face            text.Face
-	ctx             *gogpu.Context
 	mouseBtn        uint32
 	currentMods     vtinput.ControlKeyState
 	pendingKeyEvent *vtinput.InputEvent
@@ -409,7 +408,6 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 		host.mu.Lock()
 		sizeChanged := (host.lastAppW != w || host.lastAppH != h)
 		host.lastAppW, host.lastAppH = w, h
-		host.ctx = dc
 		if sizeChanged {
 			host.resizePending = true
 		}
@@ -427,11 +425,9 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 			}
 		})
 
-		host.scr.Renderer.Flush()
-
-		host.mu.Lock()
-		host.ctx = nil
-		host.mu.Unlock()
+		if gogpuRenderer, ok := host.scr.Renderer.(*GogpuRenderer); ok {
+			gogpuRenderer.DrawToScreen(dc)
+		}
 	})
 
 	GetTerminalSize = func() (int, int, error) {

@@ -11,6 +11,7 @@ import (
 	"github.com/gogpu/gg"
 	_ "github.com/gogpu/gg/gpu" // Включаем аппаратное ускорение рендеринга
 	"github.com/gogpu/gg/integration/ggcanvas"
+	"github.com/gogpu/gogpu"
 	"github.com/gogpu/gg/text"
 )
 
@@ -296,33 +297,33 @@ func (r *GogpuRenderer) drawCustomChar(dc *gg.Context, char rune, x, y, w, h flo
 	dc.Fill()
 	return true
 }
+
 func (r *GogpuRenderer) Flush() {
 	r.host.mu.Lock()
-	ctx := r.host.ctx
 	app := r.host.app
 	forceDirty := r.host.resizePending
 	r.host.resizePending = false
 	r.host.mu.Unlock()
 
 	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	// CRITICAL: If Flush is called from the background FrameManager thread
-	// (ctx == nil), we MUST NOT proceed with heavy drawing or library calls.
-	if ctx == nil {
-		if (r.dirty || forceDirty) && app != nil {
-			app.RequestRedraw()
-		}
-		return
-	}
-
-	if len(r.renderBuf) == 0 {
-		return
-	}
-
 	if forceDirty {
 		r.dirty = true
 		r.lastCursorReset = time.Now() // Ensure cursor is solid-visible on window restore/resize
+	}
+	shouldRedraw := r.dirty
+	r.mu.Unlock()
+
+	if shouldRedraw && app != nil {
+		go app.RequestRedraw()
+	}
+}
+
+func (r *GogpuRenderer) DrawToScreen(ctx *gogpu.Context) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if len(r.renderBuf) == 0 {
+		return
 	}
 
 	w, h := ctx.Width(), ctx.Height()
@@ -339,7 +340,7 @@ func (r *GogpuRenderer) Flush() {
 	}
 
 	if r.canvas == nil {
-		provider := app.GPUContextProvider()
+		provider := r.host.app.GPUContextProvider()
 		if provider == nil {
 			return
 		}
@@ -440,11 +441,11 @@ func (r *GogpuRenderer) Flush() {
 				dc.SetColor(color.White)
 				cx := float64(r.cursorX * r.cellW)
 				cy := float64(r.cursorY * r.cellH)
-				if r.cursorShape == CursorShapeUnderline {
+				if r.cursorShape == CursorShapeBlock {
+					dc.DrawRectangle(cx, cy, float64(r.cellW), float64(r.cellH))
+				} else {
 					cy += float64(r.cellH) - 2
 					dc.DrawRectangle(cx, cy, float64(r.cellW), 2)
-				} else {
-					dc.DrawRectangle(cx, cy, float64(r.cellW), float64(r.cellH))
 				}
 				dc.Fill()
 			}

@@ -66,6 +66,44 @@ func TestGogpuHost_SendEvent_NonBlocking(t *testing.T) {
 		t.Fatal("sendEvent blocked on full queue during MouseMoved event")
 	}
 }
+func TestGogpuHost_GetTerminalSize(t *testing.T) {
+	host := &GogpuHost{
+		cellW: 8,
+		cellH: 16,
+	}
+	host.lastAppW = 800
+	host.lastAppH = 600
+
+	// Set the global function to our host-bound version
+	GetTerminalSize = func() (int, int, error) {
+		host.mu.Lock()
+		defer host.mu.Unlock()
+
+		w, h := host.lastAppW, host.lastAppH
+
+		if host.cellW > 0 && host.cellH > 0 && w > 0 && h > 0 {
+			c := w / host.cellW
+			r := h / host.cellH
+			if c != host.cols || r != host.rows {
+				host.cols = c
+				host.rows = r
+			}
+		}
+		return host.cols, host.rows, nil
+	}
+
+	cols, rows, err := GetTerminalSize()
+	if err != nil {
+		t.Fatalf("GetTerminalSize returned error: %v", err)
+	}
+
+	expectedCols := 800 / 8   // 100
+	expectedRows := 600 / 16  // 37
+
+	if cols != expectedCols || rows != expectedRows {
+		t.Errorf("GetTerminalSize: expected %dx%d, got %dx%d", expectedCols, expectedRows, cols, rows)
+	}
+}
 func TestGogpuHost_LastRuneForVK_KeyRepeat(t *testing.T) {
 	pr, _ := io.Pipe()
 	reader := vtinput.NewReader(pr, true)
