@@ -1432,7 +1432,7 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 					return
 				}
 			}
-			canActivateMenu := !topFrame.IsModal() || topFrame.GetMenuBar() == activeMenu
+			canActivateMenu := !topFrame.IsModal() || topFrame.GetType() == TypeMenu || topFrame.GetMenuBar() == activeMenu
 			if activeMenu != nil && canActivateMenu && activeMenu.HitTest(mx, my) {
 				if activeMenu.ProcessMouse(ev) {
 					return
@@ -1571,7 +1571,7 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 		}
 
 		// Allow F9 if not modal, OR if the modal frame itself has a menu
-		canActivateMenu := !topFrame.IsModal() || topFrame.GetMenuBar() != nil
+		canActivateMenu := !topFrame.IsModal() || topFrame.GetType() == TypeMenu || topFrame.GetMenuBar() != nil
 		if ev.VirtualKeyCode == vtinput.VK_F9 {
 			if activeMenu == nil {
 				DebugLog("FM: F9 pressed but activeMenu is NIL")
