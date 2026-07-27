@@ -3,9 +3,11 @@
 package vtui
 
 import (
+	"context"
 	"image"
 	"io"
 	"sync"
+	"time"
 
 	window "github.com/neurlang/wayland/windowtrace"
 	"github.com/neurlang/wayland/wl"
@@ -29,6 +31,8 @@ type WaylandHost struct {
 	mouseX   int
 	mouseY   int
 	mouseBtn uint32
+
+	repeatCancel context.CancelFunc
 }
 
 func runInWaylandWindow(cols, rows int, fontName string, fontSize float64, setupApp func()) error {
@@ -158,7 +162,9 @@ func (h *WaylandHost) Redraw(widget *window.Widget) {
 func (h *WaylandHost) Enter(w *window.Widget, input *window.Input, x float32, y float32) {
 	h.mouseX, h.mouseY = int(x), int(y)
 }
-func (h *WaylandHost) Leave(w *window.Widget, input *window.Input) {}
+func (h *WaylandHost) Leave(w *window.Widget, input *window.Input) {
+	h.stopRepeat()
+}
 
 func (h *WaylandHost) Motion(w *window.Widget, input *window.Input, time uint32, x float32, y float32) int {
 	h.mouseX, h.mouseY = int(x), int(y)
@@ -223,11 +229,71 @@ func (h *WaylandHost) AxisDiscrete(w *window.Widget, input *window.Input, axis u
 	}
 }
 
-func (h *WaylandHost) Key(win *window.Window, input *window.Input, time uint32, key uint32, notUnicode uint32, state wl.KeyboardKeyState, handler window.WidgetHandler) {
+func (h *WaylandHost) stopRepeat() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.repeatCancel != nil {
+		h.repeatCancel()
+		h.repeatCancel = nil
+	}
+}
+
+func (h *WaylandHost) startRepeat(vk uint16, char rune, mods vtinput.ControlKeyState) {
+	h.stopRepeat()
+
+	h.mu.Lock()
+	ctx, cancel := context.WithCancel(context.Background())
+	h.repeatCancel = cancel
+	h.mu.Unlock()
+
+	go func() {
+		timer := time.NewTimer(400 * time.Millisecond)
+		defer timer.Stop()
+
+		select {
+		case <-timer.C:
+		case <-ctx.Done():
+			return
+		}
+
+		ticker := time.NewTicker(40 * time.Millisecond)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				h.mu.Lock()
+				r := h.reader
+				h.mu.Unlock()
+
+				if r != nil {
+					r.EventChan <- &vtinput.InputEvent{
+						Type:            vtinput.KeyEventType,
+						KeyDown:         true,
+						VirtualKeyCode:  vk,
+						Char:            char,
+						ControlKeyState: mods,
+					}
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+}
+
+func (h *WaylandHost) Key(win *window.Window, input *window.Input, timeMs uint32, key uint32, notUnicode uint32, state wl.KeyboardKeyState, handler window.WidgetHandler) {
 	isDown := state == wl.KeyboardKeyStatePressed
 	vk := keysymToVK(notUnicode) // Reuse the XKB keysym to VK mapping from X11
 
 	char := input.GetRune(&notUnicode, key)
+	mods := h.getMods(input)
+
+	if isDown {
+		h.startRepeat(vk, char, mods)
+	} else {
+		h.stopRepeat()
+	}
 
 	if h.reader != nil {
 		h.reader.EventChan <- &vtinput.InputEvent{
@@ -235,7 +301,7 @@ func (h *WaylandHost) Key(win *window.Window, input *window.Input, time uint32, 
 			KeyDown:         isDown,
 			VirtualKeyCode:  vk,
 			Char:            char,
-			ControlKeyState: h.getMods(input),
+			ControlKeyState: mods,
 		}
 	}
 }
