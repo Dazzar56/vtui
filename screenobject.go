@@ -229,14 +229,16 @@ func (so *ScreenObject) GetHelp() string {
 }
 
 // ShowHelp triggers the help system for this object.
-// For now, it just logs the topic to the debug log.
 func (so *ScreenObject) ShowHelp() {
 	topic := so.GetHelp()
 	if topic == "" {
 		topic = UIStrings.DefaultHelp
 	}
 	DebugLog("HELP SYSTEM: Requested topic '%s'", topic)
-	// In the future, this will push a HelpFrame to FrameManager.
+	if GlobalHelpEngine != nil {
+		hv := NewHelpView(GlobalHelpEngine, topic)
+		FrameManager.Push(hv)
+	}
 }
 func (so *ScreenObject) HasShadow() bool {
 	return false
