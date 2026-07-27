@@ -21,7 +21,7 @@ type HelpView struct {
 
 func NewHelpView(engine *HelpEngine, startTopic string) *HelpView {
 	hv := &HelpView{
-		BaseWindow:  *NewBaseWindow(0, 0, 60, 20, " Help "),
+		BaseWindow:  *NewBaseWindow(0, 0, 76, 20, " Help "),
 		engine:      engine,
 		selectedIdx: -1,
 	}
@@ -34,6 +34,11 @@ func NewHelpView(engine *HelpEngine, startTopic string) *HelpView {
 	hv.scrollBar.PgStep = 10 // Default, will be updated in Show
 	hv.Modal = true
 	hv.ShowClose = true
+
+	if FrameManager != nil && FrameManager.scr != nil {
+		hv.ResizeConsole(FrameManager.scr.width, FrameManager.scr.height)
+	}
+
 	hv.SwitchTopic(startTopic)
 	return hv
 }
@@ -164,13 +169,22 @@ func (hv *HelpView) renderLine(scr *ScreenBuf, x, y int, line string, width int,
 		case '~':
 			inLink = !inLink
 			if inLink {
-				linkIdx := lineLinks[linkTriggerCount]
-				if linkIdx == hv.selectedIdx {
-					currAttr = Palette[ColHelpSelectedLink]
+				if linkTriggerCount < len(lineLinks) {
+					linkIdx := lineLinks[linkTriggerCount]
+					if linkIdx == hv.selectedIdx {
+						currAttr = Palette[ColHelpSelectedLink]
+					} else {
+						currAttr = Palette[ColHelpLink]
+					}
+					linkTriggerCount++
 				} else {
-					currAttr = Palette[ColHelpLink]
+					inLink = false
+					w := runewidth.RuneWidth(r)
+					cells = append(cells, CharInfo{Char: uint64(r), Attributes: currAttr})
+					for j := 1; j < w; j++ {
+						cells = append(cells, CharInfo{Char: WideCharFiller, Attributes: currAttr})
+					}
 				}
-				linkTriggerCount++
 			} else {
 				for i+1 < len(runes) && runes[i] != '@' {
 					i++
@@ -263,6 +277,9 @@ func (hv *HelpView) ProcessKey(e *vtinput.InputEvent) bool {
 	case vtinput.VK_NEXT: // PgDn
 		viewHeight := (hv.Y2 - hv.Y1 + 1) - 2 - hv.current.StickyRows
 		maxScroll := (len(hv.current.Lines) - hv.current.StickyRows) - viewHeight
+		if maxScroll < 0 {
+			maxScroll = 0
+		}
 		hv.scrollTop += viewHeight
 		if hv.scrollTop > maxScroll {
 			hv.scrollTop = maxScroll
@@ -310,4 +327,24 @@ func (hv *HelpView) ProcessMouse(e *vtinput.InputEvent) bool {
 	}
 
 	return hv.BaseWindow.ProcessMouse(e)
+}
+
+func (hv *HelpView) ResizeConsole(w, h int) {
+	width := 76
+	if width > w-4 {
+		width = w - 4
+	}
+	if width < 20 {
+		width = 20
+	}
+	height := h - 4
+	if height < 5 {
+		height = 5
+	}
+	hv.X1 = (w - width) / 2
+	hv.Y1 = (h - height) / 2
+	hv.X2 = hv.X1 + width - 1
+	hv.Y2 = hv.Y1 + height - 1
+	hv.frame.SetPosition(hv.X1, hv.Y1, hv.X2, hv.Y2)
+	hv.rootGroup.SetPosition(hv.X1+1, hv.Y1+1, hv.X2-1, hv.Y2-1)
 }
