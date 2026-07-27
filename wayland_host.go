@@ -3,7 +3,6 @@
 package vtui
 
 import (
-	"context"
 	"image"
 	"io"
 	"sync"
@@ -32,7 +31,11 @@ type WaylandHost struct {
 	mouseY   int
 	mouseBtn uint32
 
-	repeatCancel context.CancelFunc
+	isRepeating bool
+	repeatVK    uint16
+	repeatChar  rune
+	repeatMods  vtinput.ControlKeyState
+	repeatNext  time.Time
 }
 
 func runInWaylandWindow(cols, rows int, fontName string, fontSize float64, setupApp func()) error {
@@ -153,8 +156,29 @@ func (h *WaylandHost) Redraw(widget *window.Widget) {
 		}
 		surface.Destroy() // Commits the buffer
 	}
-	// Note: We DO NOT call widget.ScheduleRedraw() here, otherwise it spins at 100% CPU.
-	// Redraws are driven by vtui.Flush() calling widget.ScheduleRedraw().
+	// Note: Normal redraws are driven by vtui.Flush() calling widget.ScheduleRedraw().
+	// However, during key repeat, we intentionally spin the event loop here
+	// to prevent it from sleeping, which allows the timer to tick safely on the main thread.
+	if h.isRepeating {
+		now := time.Now()
+		if now.After(h.repeatNext) || now.Equal(h.repeatNext) {
+			h.repeatNext = now.Add(40 * time.Millisecond)
+			if h.reader != nil {
+				// Non-blocking send to prevent deadlocks
+				select {
+				case h.reader.EventChan <- &vtinput.InputEvent{
+					Type:            vtinput.KeyEventType,
+					KeyDown:         true,
+					VirtualKeyCode:  h.repeatVK,
+					Char:            h.repeatChar,
+					ControlKeyState: h.repeatMods,
+				}:
+				default:
+				}
+			}
+		}
+		widget.ScheduleRedraw()
+	}
 }
 
 // -- Pointer & Keyboard Handlers --
@@ -163,7 +187,9 @@ func (h *WaylandHost) Enter(w *window.Widget, input *window.Input, x float32, y 
 	h.mouseX, h.mouseY = int(x), int(y)
 }
 func (h *WaylandHost) Leave(w *window.Widget, input *window.Input) {
-	h.stopRepeat()
+	h.mu.Lock()
+	h.isRepeating = false
+	h.mu.Unlock()
 }
 
 func (h *WaylandHost) Motion(w *window.Widget, input *window.Input, time uint32, x float32, y float32) int {
@@ -229,59 +255,6 @@ func (h *WaylandHost) AxisDiscrete(w *window.Widget, input *window.Input, axis u
 	}
 }
 
-func (h *WaylandHost) stopRepeat() {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if h.repeatCancel != nil {
-		h.repeatCancel()
-		h.repeatCancel = nil
-	}
-}
-
-func (h *WaylandHost) startRepeat(vk uint16, char rune, mods vtinput.ControlKeyState) {
-	h.stopRepeat()
-
-	h.mu.Lock()
-	ctx, cancel := context.WithCancel(context.Background())
-	h.repeatCancel = cancel
-	h.mu.Unlock()
-
-	go func() {
-		timer := time.NewTimer(400 * time.Millisecond)
-		defer timer.Stop()
-
-		select {
-		case <-timer.C:
-		case <-ctx.Done():
-			return
-		}
-
-		ticker := time.NewTicker(40 * time.Millisecond)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ticker.C:
-				h.mu.Lock()
-				r := h.reader
-				h.mu.Unlock()
-
-				if r != nil {
-					r.EventChan <- &vtinput.InputEvent{
-						Type:            vtinput.KeyEventType,
-						KeyDown:         true,
-						VirtualKeyCode:  vk,
-						Char:            char,
-						ControlKeyState: mods,
-					}
-				}
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-}
-
 func (h *WaylandHost) Key(win *window.Window, input *window.Input, timeMs uint32, key uint32, notUnicode uint32, state wl.KeyboardKeyState, handler window.WidgetHandler) {
 	isDown := state == wl.KeyboardKeyStatePressed
 	vk := keysymToVK(notUnicode) // Reuse the XKB keysym to VK mapping from X11
@@ -289,11 +262,19 @@ func (h *WaylandHost) Key(win *window.Window, input *window.Input, timeMs uint32
 	char := input.GetRune(&notUnicode, key)
 	mods := h.getMods(input)
 
+	h.mu.Lock()
 	if isDown {
-		h.startRepeat(vk, char, mods)
+		h.isRepeating = true
+		h.repeatVK = vk
+		h.repeatChar = char
+		h.repeatMods = mods
+		h.repeatNext = time.Now().Add(400 * time.Millisecond)
+		// Force an immediate redraw to start the spin loop
+		h.widget.ScheduleRedraw()
 	} else {
-		h.stopRepeat()
+		h.isRepeating = false
 	}
+	h.mu.Unlock()
 
 	if h.reader != nil {
 		h.reader.EventChan <- &vtinput.InputEvent{
