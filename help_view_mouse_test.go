@@ -64,4 +64,25 @@ func TestHelpView_MouseNavigation(t *testing.T) {
 	if hv.current.Name != "NextTopic" {
 		t.Errorf("Double-click failed to navigate: expected 'NextTopic', got %q", hv.current.Name)
 	}
+
+	// 3. Имитируем средний клик ВНЕ ссылки (по пустому месту)
+	// Должен симулироваться Enter на текущей выделенной ссылке.
+	hv.SwitchTopic("TestTopic") // Возвращаемся
+	hv.selectedIdx = 0          // Ссылка выделена
+
+	evMiddleClick := &vtinput.InputEvent{
+		Type:        vtinput.MouseEventType,
+		MouseX:      int16(hv.X1 + 1), // Пустое место
+		MouseY:      int16(hv.Y1 + 1),
+		ButtonState: vtinput.FromLeft2ndButtonPressed,
+		KeyDown:     true,
+	}
+
+	if !hv.ProcessMouse(evMiddleClick) {
+		t.Error("Expected HelpView to handle middle click on empty space")
+	}
+
+	if hv.current.Name != "NextTopic" {
+		t.Errorf("Middle-click failed to navigate: expected 'NextTopic', got %q", hv.current.Name)
+	}
 }

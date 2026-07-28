@@ -373,13 +373,17 @@ func (hv *HelpView) ProcessMouse(e *vtinput.InputEvent) bool {
 			if hv.selectedIdx != oldSel {
 				FrameManager.Redraw()
 			}
+		}
 
-			isLeftDoubleClick := (e.MouseEventFlags&vtinput.DoubleClick) != 0 && e.ButtonState == vtinput.FromLeft1stButtonPressed
-			isMiddleClick := e.ButtonState == vtinput.FromLeft2ndButtonPressed
+		isLeftDoubleClick := (e.MouseEventFlags&vtinput.DoubleClick) != 0 && (e.ButtonState&vtinput.FromLeft1stButtonPressed) != 0
+		isMiddleClick := (e.ButtonState&vtinput.FromLeft2ndButtonPressed) != 0
 
-			if isLeftDoubleClick || isMiddleClick {
-				hv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN})
-			}
+		if isLeftDoubleClick || isMiddleClick {
+			hv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN})
+			return true
+		}
+
+		if linkIdx != -1 {
 			return true
 		}
 	}
