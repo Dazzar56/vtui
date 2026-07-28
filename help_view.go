@@ -364,6 +364,26 @@ func (hv *HelpView) ProcessMouse(e *vtinput.InputEvent) bool {
 		return true
 	}
 
+	if e.ButtonState != 0 && e.KeyDown {
+		mx, my := int(e.MouseX), int(e.MouseY)
+		linkIdx := hv.findLinkAt(mx, my)
+		if linkIdx != -1 {
+			oldSel := hv.selectedIdx
+			hv.selectedIdx = linkIdx
+			if hv.selectedIdx != oldSel {
+				FrameManager.Redraw()
+			}
+
+			isLeftDoubleClick := (e.MouseEventFlags&vtinput.DoubleClick) != 0 && e.ButtonState == vtinput.FromLeft1stButtonPressed
+			isMiddleClick := e.ButtonState == vtinput.FromLeft2ndButtonPressed
+
+			if isLeftDoubleClick || isMiddleClick {
+				hv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN})
+			}
+			return true
+		}
+	}
+
 	return hv.BaseWindow.ProcessMouse(e)
 }
 
@@ -385,4 +405,102 @@ func (hv *HelpView) ResizeConsole(w, h int) {
 	hv.Y2 = hv.Y1 + height - 1
 	hv.frame.SetPosition(hv.X1, hv.Y1, hv.X2, hv.Y2)
 	hv.rootGroup.SetPosition(hv.X1+1, hv.Y1+1, hv.X2-1, hv.Y2-1)
+}
+
+func (hv *HelpView) findLinkAt(mx, my int) int {
+	x1, y1, x2, y2 := hv.X1+1, hv.Y1+1, hv.X2-1, hv.Y2-1
+	width := x2 - x1 + 1
+	if hv.scrollBar != nil {
+		width--
+	}
+
+	if my < y1 || my > y2 || mx < x1 || mx > x1+width-1 {
+		return -1
+	}
+
+	// Вычисляем логический индекс строки с учетом прокрутки и липкого заголовка
+	lineIdx := -1
+	if my >= y1 && my < y1+hv.current.StickyRows {
+		lineIdx = my - y1
+	} else {
+		lineIdx = my - y1 - hv.current.StickyRows + hv.scrollTop + hv.current.StickyRows
+	}
+
+	if lineIdx < 0 || lineIdx >= len(hv.current.Lines) {
+		return -1
+	}
+
+	line := hv.current.Lines[lineIdx]
+	isCentered := strings.HasPrefix(line, "^")
+	if isCentered {
+		line = line[1:]
+	}
+
+	var lineLinkIndices []int
+	for i, l := range hv.current.Links {
+		if l.Line == lineIdx {
+			lineLinkIndices = append(lineLinkIndices, i)
+		}
+	}
+
+	runes := []rune(line)
+	visualX := 0
+	inLink := false
+	linkTriggerCount := 0
+
+	type linkBounds struct {
+		linkIdx  int
+		vx1, vx2 int
+	}
+	var bounds []linkBounds
+	var currBounds *linkBounds
+
+	for i := 0; i < len(runes); i++ {
+		r := runes[i]
+		switch r {
+		case '#':
+			continue
+		case '~':
+			inLink = !inLink
+			if inLink {
+				if linkTriggerCount < len(lineLinkIndices) {
+					currBounds = &linkBounds{
+						linkIdx: lineLinkIndices[linkTriggerCount],
+						vx1:     visualX,
+					}
+					linkTriggerCount++
+				}
+			} else {
+				if currBounds != nil {
+					currBounds.vx2 = visualX - 1
+					bounds = append(bounds, *currBounds)
+					currBounds = nil
+				}
+				for i+1 < len(runes) && runes[i] != '@' {
+					i++
+				}
+			}
+			continue
+		}
+
+		w := runewidth.RuneWidth(r)
+		if w <= 0 {
+			w = 1
+		}
+		visualX += w
+	}
+
+	offX := 0
+	if isCentered {
+		offX = (width - visualX) / 2
+	}
+
+	relMX := mx - x1 - offX
+	for _, b := range bounds {
+		if relMX >= b.vx1 && relMX <= b.vx2 {
+			return b.linkIdx
+		}
+	}
+
+	return -1
 }
