@@ -300,3 +300,53 @@ func TestNestedGroupFocusCycle(t *testing.T) {
 		t.Errorf("Expected editB2 to be focused after wrapping backward to groupB")
 	}
 }
+
+func TestGroup_ProcessMouse_EmptySpacePropagation(t *testing.T) {
+	SetDefaultPalette()
+
+	// 1. Создаем родительское MDI окно
+	win := NewWindow(10, 5, 50, 15, "Test Window")
+
+	// 2. Добавляем декоративную группу GroupBox
+	gb := NewGroupBox(0, 0, 30, 8, "Container Group")
+	win.AddItem(gb)
+
+	// 3. Добавляем внутрь нее интерактивную кнопку
+	btn := NewButton(2, 2, "Btn")
+	gb.AddItem(btn)
+
+	// Настраиваем точные координаты элементов на экране
+	gb.SetPosition(12, 7, 42, 13)
+	btn.SetPosition(15, 9, 25, 9)
+
+	// Тест 1: Клик по интерактивной кнопке должен быть поглощен ею самой
+	evBtn := &vtinput.InputEvent{
+		Type:        vtinput.MouseEventType,
+		MouseX:      18,
+		MouseY:      9,
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+		KeyDown:     true,
+	}
+	if !win.ProcessMouse(evBtn) {
+		t.Error("Expected mouse click on button to be consumed")
+	}
+	if win.isDragging {
+		t.Error("Click on button should not initiate window dragging")
+	}
+
+	// Тест 2: Клик по пустому пространству GroupBox должен провалиться глубже
+	// и инициировать перетаскивание родительского BaseWindow
+	evEmpty := &vtinput.InputEvent{
+		Type:        vtinput.MouseEventType,
+		MouseX:      35,
+		MouseY:      11,
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+		KeyDown:     true,
+	}
+	if !win.ProcessMouse(evEmpty) {
+		t.Error("Expected click on empty space in GroupBox to propagate to window operations")
+	}
+	if !win.isDragging {
+		t.Error("Expected empty space click to successfully trigger window dragging")
+	}
+}
