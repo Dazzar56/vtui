@@ -7,6 +7,7 @@ import (
 	"image/color"
 	"time"
 
+	"github.com/jezek/xgb"
 	"github.com/jezek/xgb/xproto"
 	"github.com/mattn/go-runewidth"
 	"golang.org/x/image/font"
@@ -47,12 +48,41 @@ func (r *X11Renderer) ResizeWindow(cols, rows int) {
 	r.host.mu.Lock()
 	conn := r.host.conn
 	wid := r.host.wid
-	cw, ch := r.host.cellW, r.host.cellH
+	screen := r.host.screen
+	initialCols := r.host.initialCols
 	r.host.mu.Unlock()
-	if conn != nil {
-		xproto.ConfigureWindow(conn, wid, xproto.ConfigWindowWidth|xproto.ConfigWindowHeight, []uint32{
-			uint32(cols * cw), uint32(rows * ch),
-		})
+
+	if conn == nil || screen == nil {
+		return
+	}
+
+	// Посылаем ClientMessage родителю (Window Manager) для нативного разворачивания/восстановления
+	stateAtom, _ := xproto.InternAtom(conn, false, 13, "_NET_WM_STATE").Reply()
+	maxVertAtom, _ := xproto.InternAtom(conn, false, 28, "_NET_WM_STATE_MAXIMIZED_VERT").Reply()
+	maxHorzAtom, _ := xproto.InternAtom(conn, false, 28, "_NET_WM_STATE_MAXIMIZED_HORZ").Reply()
+
+	if stateAtom != nil && maxVertAtom != nil && maxHorzAtom != nil {
+		action := 0 // _NET_WM_STATE_REMOVE (восстановить)
+		if cols > initialCols {
+			action = 1 // _NET_WM_STATE_ADD (развернуть)
+		}
+
+		data := [32]byte{}
+		xgb.Put32(data[0:], uint32(action))
+		xgb.Put32(data[4:], uint32(maxVertAtom.Atom))
+		xgb.Put32(data[8:], uint32(maxHorzAtom.Atom))
+		xgb.Put32(data[12:], 1) // Источник запроса (нормальное приложение)
+
+		ev := xproto.ClientMessageEvent{
+			Format: 32,
+			Window: wid,
+			Type:   stateAtom.Atom,
+			Data:   xproto.ClientMessageDataUnionData32FromBytes(data[:20]),
+		}
+
+		xproto.SendEvent(conn, false, screen.Root,
+			xproto.EventMaskSubstructureRedirect|xproto.EventMaskSubstructureNotify,
+			string(ev.Bytes()))
 	}
 }
 

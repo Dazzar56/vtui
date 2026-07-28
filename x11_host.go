@@ -39,6 +39,7 @@ type X11Host struct {
 
 	translator keytrans.Translator
 	mouseBtn   uint32
+	initialCols int
 }
 
 func NewX11Host(cols, rows, cellW, cellH int) (*X11Host, error) {
@@ -60,17 +61,18 @@ func NewX11Host(cols, rows, cellW, cellH int) (*X11Host, error) {
 	}
 
 	host := &X11Host{
-		conn:       conn,
-		screen:     screen,
-		cellW:      cellW,
-		cellH:      cellH,
-		scale:      scale,
-		cols:       cols,
-		rows:       rows,
-		width:      uint16(cols * cellW),
-		height:     uint16(rows * cellH),
-		closeChan:  make(chan struct{}),
-		dirtyLines: make([]bool, rows*cellH),
+		conn:        conn,
+		screen:      screen,
+		cellW:       cellW,
+		cellH:       cellH,
+		scale:       scale,
+		cols:        cols,
+		rows:        rows,
+		width:       uint16(cols * cellW),
+		height:      uint16(rows * cellH),
+		closeChan:   make(chan struct{}),
+		dirtyLines:  make([]bool, rows*cellH),
+		initialCols: cols,
 	}
 
 	var visualID xproto.Visualid
