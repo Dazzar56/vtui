@@ -337,6 +337,9 @@ func (fm *frameManager) Init(scr *ScreenBuf) {
 	// Hide cursor globally at start
 	fm.scr.SetCursorVisible(false)
 
+	// Ensure terminal is in a known state before sending escape sequences
+	initTerminalOS()
+
 	// Reset terminal palette to default to clear state from possible previous crashes
 	if _, ok := fm.scr.Renderer.(*AnsiRenderer); ok {
 		os.Stdout.WriteString("\x1b]104\x07")

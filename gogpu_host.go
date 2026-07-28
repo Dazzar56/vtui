@@ -133,7 +133,6 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 	DebugLog("GOGPU_HOST: Starting RunGogpuHost %dx%d (Cell: %dx%d)", cols, rows, cellW, cellH)
 
 	config := gogpu.DefaultConfig().
-		WithContinuousRender(false).
 		WithTitle(AppName).
 		WithSize(cols*cellW, rows*cellH)
 
