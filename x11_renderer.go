@@ -66,19 +66,23 @@ func (r *X11Renderer) ResizeWindow(cols, rows int) {
 			action = 1 // _NET_WM_STATE_ADD (развернуть)
 		}
 
-		data32 := []uint32{
-			uint32(action),
-			uint32(maxVertAtom.Atom),
-			uint32(maxHorzAtom.Atom),
-			1,
-			0,
+		var data8 [20]byte
+		put32 := func(b []byte, v uint32) {
+			b[0] = byte(v)
+			b[1] = byte(v >> 8)
+			b[2] = byte(v >> 16)
+			b[3] = byte(v >> 24)
 		}
+		put32(data8[0:], uint32(action))
+		put32(data8[4:], uint32(maxVertAtom.Atom))
+		put32(data8[8:], uint32(maxHorzAtom.Atom))
+		put32(data8[12:], 1)
 
 		ev := xproto.ClientMessageEvent{
 			Format: 32,
 			Window: wid,
 			Type:   stateAtom.Atom,
-			Data:   xproto.ClientMessageDataUnion{Data32: data32},
+			Data:   xproto.ClientMessageDataUnion{Data8: data8[:]},
 		}
 
 		xproto.SendEvent(conn, false, screen.Root,
