@@ -254,17 +254,55 @@ func (hv *HelpView) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 
 	case vtinput.VK_UP:
+		isCtrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
+		if !isCtrl && len(hv.current.Links) > 0 {
+			hv.selectedIdx--
+			if hv.selectedIdx < 0 {
+				hv.selectedIdx = len(hv.current.Links) - 1
+			}
+			hv.ensureLinkVisible()
+			return true
+		}
 		if hv.scrollTop > 0 {
 			hv.scrollTop--
 		}
 		return true
 
 	case vtinput.VK_DOWN:
+		isCtrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
+		if !isCtrl && len(hv.current.Links) > 0 {
+			hv.selectedIdx++
+			if hv.selectedIdx >= len(hv.current.Links) {
+				hv.selectedIdx = 0
+			}
+			hv.ensureLinkVisible()
+			return true
+		}
 		viewHeight := (hv.Y2 - hv.Y1 + 1) - 2 - hv.current.StickyRows
 		if hv.scrollTop < (len(hv.current.Lines)-hv.current.StickyRows)-viewHeight {
 			hv.scrollTop++
 		}
 		return true
+
+	case vtinput.VK_LEFT:
+		if len(hv.current.Links) > 0 {
+			hv.selectedIdx--
+			if hv.selectedIdx < 0 {
+				hv.selectedIdx = len(hv.current.Links) - 1
+			}
+			hv.ensureLinkVisible()
+			return true
+		}
+
+	case vtinput.VK_RIGHT:
+		if len(hv.current.Links) > 0 {
+			hv.selectedIdx++
+			if hv.selectedIdx >= len(hv.current.Links) {
+				hv.selectedIdx = 0
+			}
+			hv.ensureLinkVisible()
+			return true
+		}
 
 	case vtinput.VK_PRIOR: // PgUp
 		viewHeight := (hv.Y2 - hv.Y1 + 1) - 2 - hv.current.StickyRows
