@@ -7,7 +7,6 @@ import (
 	"image/color"
 	"time"
 
-	"github.com/jezek/xgb"
 	"github.com/jezek/xgb/xproto"
 	"github.com/mattn/go-runewidth"
 	"golang.org/x/image/font"
@@ -67,17 +66,19 @@ func (r *X11Renderer) ResizeWindow(cols, rows int) {
 			action = 1 // _NET_WM_STATE_ADD (развернуть)
 		}
 
-		data := [32]byte{}
-		xgb.Put32(data[0:], uint32(action))
-		xgb.Put32(data[4:], uint32(maxVertAtom.Atom))
-		xgb.Put32(data[8:], uint32(maxHorzAtom.Atom))
-		xgb.Put32(data[12:], 1) // Источник запроса (нормальное приложение)
+		data32 := []uint32{
+			uint32(action),
+			uint32(maxVertAtom.Atom),
+			uint32(maxHorzAtom.Atom),
+			1,
+			0,
+		}
 
 		ev := xproto.ClientMessageEvent{
 			Format: 32,
 			Window: wid,
 			Type:   stateAtom.Atom,
-			Data:   xproto.ClientMessageDataUnionData32FromBytes(data[:20]),
+			Data:   xproto.ClientMessageDataUnion{Data32: data32},
 		}
 
 		xproto.SendEvent(conn, false, screen.Root,
