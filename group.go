@@ -240,6 +240,12 @@ func (g *Group) ProcessMouse(e *vtinput.InputEvent) bool {
 			if item.ProcessMouse(e) {
 				return true
 			}
+			if _, ok := item.(*Group); ok {
+				continue
+			}
+			if _, ok := item.(*GroupBox); ok {
+				continue
+			}
 			return true // Event was within an item, consume it
 		}
 	}
