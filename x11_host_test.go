@@ -1,8 +1,11 @@
 package vtui
 
 import (
+	"io"
 	"testing"
 	"time"
+
+	"github.com/unxed/vtinput"
 )
 
 func TestX11Renderer_CursorMovementTracking(t *testing.T) {
@@ -85,5 +88,93 @@ func TestX11Host_DirtySpanLogic(t *testing.T) {
 	}
 	if maxY != 51 {
 		t.Errorf("Expected maxY 51, got %d", maxY)
+	}
+}
+
+func TestX11Host_SendEvent_ClosedChannelSafety(t *testing.T) {
+	pr, pw := io.Pipe()
+	defer pw.Close()
+	reader := vtinput.NewReader(pr, true)
+
+	h := &X11Host{
+		reader:    reader,
+		closeChan: make(chan struct{}),
+	}
+
+	// Симулируем закрытие канала горутиной рендера при выходе
+	reader.Close()
+
+	// Вызов отправки события не должен паниковать
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("sendEvent panicked on closed channel: %v", r)
+		}
+	}()
+
+	h.sendEvent(&vtinput.InputEvent{Type: vtinput.ResizeEventType})
+
+	// Тест отправки при закрытии канала завершения хоста
+	close(h.closeChan)
+	h.sendEvent(&vtinput.InputEvent{Type: vtinput.ResizeEventType})
+}
+
+func TestX11Host_MouseStateTracking(t *testing.T) {
+	pr, pw := io.Pipe()
+	defer pw.Close()
+	reader := vtinput.NewReader(pr, true)
+
+	h := &X11Host{
+		reader:    reader,
+		closeChan: make(chan struct{}),
+		cellW:     10,
+		cellH:     20,
+	}
+	defer h.Close()
+
+	// 1. Имитируем нажатие левой кнопки мыши (detail=1) на координатах (100, 40) -> колонка 10, строка 2
+	h.handleButtonEvent(100, 40, 1, 0, true)
+
+	h.mu.Lock()
+	pressedBtn := h.mouseBtn
+	h.mu.Unlock()
+
+	if pressedBtn != uint32(vtinput.FromLeft1stButtonPressed) {
+		t.Errorf("Expected mouseBtn to be FromLeft1stButtonPressed, got %d", pressedBtn)
+	}
+
+	// Достаем событие и проверяем ButtonState
+	select {
+	case ev := <-reader.EventChan:
+		if ev.ButtonState != uint32(vtinput.FromLeft1stButtonPressed) {
+			t.Errorf("Expected ButtonState %d, got %d", vtinput.FromLeft1stButtonPressed, ev.ButtonState)
+		}
+		if !ev.KeyDown {
+			t.Error("Expected KeyDown to be true")
+		}
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("Button press event was not sent")
+	}
+
+	// 2. Имитируем отпускание левой кнопки мыши (detail=1, isDown=false)
+	h.handleButtonEvent(100, 40, 1, 0, false)
+
+	h.mu.Lock()
+	releasedBtn := h.mouseBtn
+	h.mu.Unlock()
+
+	if releasedBtn != 0 {
+		t.Errorf("Expected mouseBtn to be 0 after release, got %d", releasedBtn)
+	}
+
+	select {
+	case ev := <-reader.EventChan:
+		if ev.ButtonState != 0 {
+			t.Errorf("Expected ButtonState 0 on release, got %d", ev.ButtonState)
+		}
+		if ev.KeyDown {
+			t.Error("Expected KeyDown to be false")
+		}
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("Button release event was not sent")
 	}
 }

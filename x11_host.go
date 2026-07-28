@@ -219,7 +219,9 @@ func (h *X11Host) Close() {
 	if tr != nil {
 		tr.Close()
 	}
-	h.conn.Close()
+	if h.conn != nil {
+		h.conn.Close()
+	}
 	close(h.closeChan)
 }
 
