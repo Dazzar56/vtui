@@ -91,6 +91,7 @@ func runInWaylandWindow(cols, rows int, fontName string, fontSize float64, setup
 	// FrameManager must run in a goroutine because Wayland's DisplayRun blocks the main thread
 	go func() {
 		FrameManager.Run(reader)
+		host.Close()
 		// On exit, close Wayland display
 		host.display.Exit()
 	}()
@@ -179,6 +180,12 @@ func (h *WaylandHost) Redraw(widget *window.Widget) {
 		}
 		widget.ScheduleRedraw()
 	}
+}
+
+func (h *WaylandHost) Close() {
+	h.mu.Lock()
+	h.reader = nil
+	h.mu.Unlock()
 }
 
 // -- Pointer & Keyboard Handlers --
