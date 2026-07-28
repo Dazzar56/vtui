@@ -240,13 +240,23 @@ func (g *Group) ProcessMouse(e *vtinput.InputEvent) bool {
 			if item.ProcessMouse(e) {
 				return true
 			}
-			if _, ok := item.(*Group); ok {
+
+			// Если элемент является контейнером, и он не обработал клик (ни один из дочерних
+			// элементов не был затронут), мы пропускаем его. Контейнер — это лишь группировка,
+			// и клик по его пустому пространству должен "провалиться" ниже.
+			if _, ok := item.(Container); ok {
 				continue
 			}
-			if _, ok := item.(*GroupBox); ok {
-				continue
+
+			// Для атомарных элементов (не контейнеров):
+			// Если элемент интерактивный (может получить фокус), он поглощает клик,
+			// чтобы мы не перетаскивали окно, случайно схватившись за поле ввода или чекбокс.
+			if item.CanFocus() && !item.IsDisabled() {
+				return true
 			}
-			return true // Event was within an item, consume it
+
+			// Для неинтерактивных элементов (Text, Separator, ProgressBar) мы не поглощаем клик.
+			// Это позволяет клику дойти до фона окна (BaseWindow) и инициировать перетаскивание.
 		}
 	}
 	return false

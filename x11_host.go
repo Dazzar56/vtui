@@ -38,6 +38,7 @@ type X11Host struct {
 	dirtyLines []bool
 
 	translator keytrans.Translator
+	mouseBtn   uint32
 }
 
 func NewX11Host(cols, rows, cellW, cellH int) (*X11Host, error) {
@@ -189,6 +190,24 @@ func NewX11Host(cols, rows, cellW, cellH int) (*X11Host, error) {
 	return host, nil
 }
 
+func (h *X11Host) sendEvent(ev *vtinput.InputEvent) {
+	h.mu.Lock()
+	closed := h.reader == nil || h.reader.EventChan == nil
+	h.mu.Unlock()
+	if closed {
+		return
+	}
+
+	defer func() {
+		recover() // Безопасно гасим панику при гонке закрытия канала
+	}()
+
+	select {
+	case h.reader.EventChan <- ev:
+	case <-h.closeChan:
+	}
+}
+
 func (h *X11Host) Close() {
 	if h.shmSeg != 0 {
 		x11shmDetach(h.conn, h.shmSeg)
@@ -230,9 +249,7 @@ func (h *X11Host) RunEventLoop() {
 				h.width, h.height = w, ht
 				h.cols, h.rows = int(w)/h.cellW, int(ht)/h.cellH
 				h.mu.Unlock()
-				if h.reader != nil {
-					h.reader.EventChan <- &vtinput.InputEvent{Type: vtinput.ResizeEventType}
-				}
+				h.sendEvent(&vtinput.InputEvent{Type: vtinput.ResizeEventType})
 			}
 
 		case xproto.MappingNotifyEvent:
@@ -262,14 +279,17 @@ func (h *X11Host) RunEventLoop() {
 			h.handleButtonEvent(e.EventX, e.EventY, e.Detail, e.State, false)
 
 		case xproto.MotionNotifyEvent:
-			if h.reader != nil {
-				h.reader.EventChan <- &vtinput.InputEvent{
-					Type:            vtinput.MouseEventType,
-					MouseX:          int16(int(e.EventX) / h.cellW),
-					MouseY:          int16(int(e.EventY) / h.cellH),
-					MouseEventFlags: vtinput.MouseMoved,
-				}
-			}
+			h.mu.Lock()
+			btn := h.mouseBtn
+			h.mu.Unlock()
+			h.sendEvent(&vtinput.InputEvent{
+				Type:            vtinput.MouseEventType,
+				MouseX:          int16(int(e.EventX) / h.cellW),
+				MouseY:          int16(int(e.EventY) / h.cellH),
+				MouseEventFlags: vtinput.MouseMoved,
+				ButtonState:     btn,
+				ControlKeyState: h.translateModifiers(e.State),
+			})
 
 		case xproto.ClientMessageEvent:
 			if e.Data.Data32[0] == uint32(h.atomDelete) {
@@ -293,28 +313,39 @@ func (h *X11Host) handleKeyEvent(detail xproto.Keycode, state uint16, isDown boo
 			ControlKeyState: vtinput.ControlKeyState(wev.ControlKeyState),
 			InputSource:     wev.InputSource,
 		}
-		if h.reader != nil {
-			h.reader.EventChan <- event
-		}
+		h.sendEvent(event)
 	}
 }
 
 func (h *X11Host) handleButtonEvent(x, y int16, detail xproto.Button, state uint16, isDown bool) {
+	h.mu.Lock()
+	var btn uint32
+	if isDown {
+		switch detail {
+		case 1:
+			btn = uint32(vtinput.FromLeft1stButtonPressed)
+		case 2:
+			btn = uint32(vtinput.FromLeft2ndButtonPressed)
+		case 3:
+			btn = uint32(vtinput.RightmostButtonPressed)
+		}
+		h.mouseBtn = btn
+	} else {
+		h.mouseBtn = 0
+	}
+	currMouseBtn := h.mouseBtn
+	h.mu.Unlock()
+
 	event := &vtinput.InputEvent{
 		Type:            vtinput.MouseEventType,
 		MouseX:          int16(int(x) / h.cellW),
 		MouseY:          int16(int(y) / h.cellH),
 		KeyDown:         isDown,
+		ButtonState:     currMouseBtn,
 		ControlKeyState: h.translateModifiers(state),
 	}
 
 	switch detail {
-	case 1:
-		event.ButtonState = vtinput.FromLeft1stButtonPressed
-	case 2:
-		event.ButtonState = vtinput.FromLeft2ndButtonPressed
-	case 3:
-		event.ButtonState = vtinput.RightmostButtonPressed
 	case 4:
 		if isDown {
 			event.WheelDirection = 1
@@ -328,9 +359,7 @@ func (h *X11Host) handleButtonEvent(x, y int16, detail xproto.Button, state uint
 			return
 		}
 	}
-	if h.reader != nil {
-		h.reader.EventChan <- event
-	}
+	h.sendEvent(event)
 }
 
 func (h *X11Host) translateModifiers(state uint16) vtinput.ControlKeyState {
