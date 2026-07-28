@@ -99,6 +99,16 @@ func (r *GogpuRenderer) SetCursor(x, y int, visible bool, shape CursorShape) {
 
 func (r *GogpuRenderer) SetPalette(pal *[256]uint32) {}
 
+func (r *GogpuRenderer) ResizeWindow(cols, rows int) {
+	r.host.mu.Lock()
+	app := r.host.app
+	cw, ch := r.host.cellW, r.host.cellH
+	r.host.mu.Unlock()
+	if app != nil {
+		app.SetSize(cols*cw, rows*ch)
+	}
+}
+
 func (r *GogpuRenderer) drawCustomChar(dc *gg.Context, char rune, x, y, w, h float64) bool {
 	thick := 1.0
 

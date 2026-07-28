@@ -43,6 +43,19 @@ func NewX11Renderer(host *X11Host, face font.Face) *X11Renderer {
 func (r *X11Renderer) SetPalette(pal *[256]uint32) {
 }
 
+func (r *X11Renderer) ResizeWindow(cols, rows int) {
+	r.host.mu.Lock()
+	conn := r.host.conn
+	wid := r.host.wid
+	cw, ch := r.host.cellW, r.host.cellH
+	r.host.mu.Unlock()
+	if conn != nil {
+		xproto.ConfigureWindow(conn, wid, xproto.ConfigWindowWidth|xproto.ConfigWindowHeight, []uint32{
+			uint32(cols * cw), uint32(rows * ch),
+		})
+	}
+}
+
 func (r *X11Renderer) SetCursor(x, y int, visible bool, shape CursorShape) {
 	if r.cursorX != x || r.cursorY != y || r.cursorVis != visible || r.cursorShape != shape {
 		r.oldCursorX = r.cursorX

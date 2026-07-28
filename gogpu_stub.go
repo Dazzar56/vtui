@@ -12,6 +12,7 @@ func (r *GogpuRenderer) Render(buf, shadow []CharInfo, width, height int, forceR
 func (r *GogpuRenderer) SetCursor(x, y int, visible bool, shape CursorShape)                {}
 func (r *GogpuRenderer) SetPalette(palette *[256]uint32)                                    {}
 func (r *GogpuRenderer) SetWindowTitle(title string)                                        {}
+func (r *GogpuRenderer) ResizeWindow(cols, rows int)                                        {}
 func (r *GogpuRenderer) Flush()                                                             {}
 
 // RunGogpuHost — заглушка функции запуска для BSD.

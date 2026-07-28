@@ -897,6 +897,14 @@ var GetTerminalSize = func() (int, int, error) {
 	return w, h, err
 }
 
+func (fm *frameManager) ResizeWindow(cols, rows int) {
+	if fm.scr != nil && fm.scr.Renderer != nil {
+		if r, ok := fm.scr.Renderer.(interface{ ResizeWindow(int, int) }); ok {
+			r.ResizeWindow(cols, rows)
+		}
+	}
+}
+
 // Stop signals the main loop to exit.
 func (fm *frameManager) Stop() {
 	DebugLog("FM: Stop() requested. Deactivating menus and exiting loop.")
