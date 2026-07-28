@@ -42,4 +42,17 @@ func initTerminalOS() {
 			windows.SetConsoleMode(hOut, mode)
 		}
 	}
+
+	// Отключаем режим QuickEdit на Windows, чтобы консоль отдавала нам правый и средний клики
+	hIn, err := windows.GetStdHandle(windows.STD_INPUT_HANDLE)
+	if err == nil {
+		var mode uint32
+		if err := windows.GetConsoleMode(hIn, &mode); err == nil {
+			const ENABLE_QUICK_EDIT_MODE = 0x0040
+			const ENABLE_EXTENDED_FLAGS = 0x0080
+			mode &^= ENABLE_QUICK_EDIT_MODE
+			mode |= ENABLE_EXTENDED_FLAGS
+			windows.SetConsoleMode(hIn, mode)
+		}
+	}
 }
