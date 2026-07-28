@@ -62,6 +62,17 @@ func (r *WaylandRenderer) SetWindowTitle(title string) {
 		r.host.win.SetTitle(title)
 	}
 }
+func (r *WaylandRenderer) ResizeWindow(cols, rows int) {
+	r.host.mu.Lock()
+	widget := r.host.widget
+	cw := r.host.cellW
+	ch := r.host.cellH
+	r.host.mu.Unlock()
+
+	if widget != nil {
+		widget.ScheduleResize(int32(cols*cw), int32(rows*ch))
+	}
+}
 func (r *WaylandRenderer) getCellColors(cell CharInfo) (uint32, uint32) {
 	bg := GetRGBBack(cell.Attributes)
 	if cell.Attributes&IsBgRGB == 0 {
