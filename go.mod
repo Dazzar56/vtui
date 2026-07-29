@@ -4,7 +4,7 @@ go 1.25.5
 
 require (
 	github.com/gogpu/gg v0.50.7
-	github.com/gogpu/gogpu v0.45.2-0.20260729134706-b1d8fae26ea4
+	github.com/gogpu/gogpu v0.45.2-0.20260729151649-3253d7e51da5
 	github.com/gogpu/gpucontext v0.21.1
 	github.com/jezek/xgb v1.3.1
 	github.com/mattn/go-runewidth v0.0.15
