@@ -1979,3 +1979,63 @@ func TestFrameManager_OpaqueBaseKeepsLegacyBehavior(t *testing.T) {
 		t.Errorf("opaque base: vacated cell (2,1) unexpectedly cleared")
 	}
 }
+func TestFrameManager_NilEventsHandling(t *testing.T) {
+	fm := &frameManager{}
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(10, 10)
+	fm.Init(scr)
+	defer fm.Shutdown()
+
+	f := &mockFrame{}
+	fm.Push(f)
+
+	pr, pw := io.Pipe()
+	reader := vtinput.NewReader(pr, false)
+
+	// Simulate sending a nil event followed by a closed channel
+	go func() {
+		reader.EventChan <- nil
+		time.Sleep(10 * time.Millisecond)
+		pw.Close() // This triggers EOF on reader, closing EventChan
+	}()
+
+	// Should handle the nil event safely and exit cleanly without panicking
+	fm.Run(reader)
+}
+
+func TestFrameManager_WaitFar2lResponse_NilEvent(t *testing.T) {
+	fm := &frameManager{}
+	fm.Init(NewSilentScreenBuf())
+	defer fm.Shutdown()
+
+	fm.EventChan = make(chan *vtinput.InputEvent, 10) // Initialize EventChan for the test
+
+	// Send nil event and then find the active waiter channel and send the valid response
+	go func() {
+		fm.EventChan <- nil
+		time.Sleep(10 * time.Millisecond)
+
+		var ch chan *vtinput.Far2lStack
+		for i := 0; i < 100; i++ {
+			fm.far2lMu.Lock()
+			if fm.pendingFar2l != nil {
+				ch = fm.pendingFar2l[42]
+			}
+			fm.far2lMu.Unlock()
+			if ch != nil {
+				break
+			}
+			time.Sleep(1 * time.Millisecond)
+		}
+
+		if ch != nil {
+			ch <- &vtinput.Far2lStack{42, 1}
+		}
+	}()
+
+	// WaitFar2lResponse should skip nil without panicking and return valid response
+	res := fm.WaitFar2lResponse(42, 150*time.Millisecond)
+	if res == nil {
+		t.Error("WaitFar2lResponse returned nil, expected valid response after skipping nil event")
+	}
+}
