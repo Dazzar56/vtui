@@ -4,7 +4,7 @@ go 1.25.5
 
 require (
 	github.com/gogpu/gg v0.50.7
-	github.com/gogpu/gogpu v0.44.9
+	github.com/gogpu/gogpu v0.45.2-0.20260729134706-b1d8fae26ea4
 	github.com/gogpu/gpucontext v0.21.1
 	github.com/jezek/xgb v1.3.1
 	github.com/mattn/go-runewidth v0.0.15
@@ -20,11 +20,11 @@ require (
 	github.com/ebitengine/purego v0.8.0 // indirect
 	github.com/emmansun/base64 v0.9.0 // indirect
 	github.com/fogleman/gg v1.3.0 // indirect
-	github.com/go-webgpu/goffi v0.6.0 // indirect
-	github.com/go-webgpu/webgpu v0.5.3 // indirect
+	github.com/go-webgpu/goffi v0.6.2 // indirect
+	github.com/go-webgpu/webgpu v0.5.4 // indirect
 	github.com/gogpu/gputypes v0.5.1 // indirect
-	github.com/gogpu/naga v0.17.15 // indirect
-	github.com/gogpu/wgpu v0.30.22 // indirect
+	github.com/gogpu/naga v0.17.16 // indirect
+	github.com/gogpu/wgpu v0.30.23 // indirect
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/neurlang/winc v0.1.2 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
