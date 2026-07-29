@@ -104,34 +104,32 @@ func TestScrollView_MiddleClick(t *testing.T) {
 	var triggeredPos int
 
 	sv := &ScrollView{ItemCount: 5, ViewHeight: 5}
-	sv.SetFocus(true)
 	sv.OnAction = func(pos int) {
 		actionTriggered = true
 		triggeredPos = pos
 	}
 
-	// Simulate middle mouse button click (wheel click) on Y coordinate 2
-	event := &vtinput.InputEvent{
+	// Simulated click on y=2 (which is index 2)
+	ev := &vtinput.InputEvent{
 		Type:        vtinput.MouseEventType,
 		MouseY:      2,
-		KeyDown:     true,
 		ButtonState: vtinput.FromLeft2ndButtonPressed,
+		KeyDown:     true,
 	}
 
-	handled := sv.HandleMouse(event)
-	if !handled {
+	if !sv.HandleMouse(ev) {
 		t.Error("HandleMouse should return true for middle click on a valid item")
 	}
 
-	if sv.SelectPos != 0 {
-		t.Errorf("Expected SelectPos to remain 0, got %d", sv.SelectPos)
+	if sv.SelectPos != 2 {
+		t.Errorf("Expected SelectPos to be updated to 2, got %d", sv.SelectPos)
 	}
 
 	if !actionTriggered {
 		t.Error("OnAction should be triggered on middle click")
 	}
 
-	if triggeredPos != 0 {
-		t.Errorf("Expected action triggered on highlighted position (0), got %d", triggeredPos)
+	if triggeredPos != 2 {
+		t.Errorf("Expected action triggered on position 2, got %d", triggeredPos)
 	}
 }

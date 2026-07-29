@@ -1438,15 +1438,6 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 			}
 		}
 
-		// Глобально транслируем клик средней кнопкой (колесиком) в Enter для активного фрейма
-		if ev.ButtonState == vtinput.FromLeft2ndButtonPressed && ev.KeyDown {
-			topFrame.ProcessKey(&vtinput.InputEvent{
-				Type:           vtinput.KeyEventType,
-				KeyDown:        true,
-				VirtualKeyCode: vtinput.VK_RETURN,
-			})
-			return
-		}
 
 		// 3.1. Active Mouse Capture (Dragging/Resizing)
 		if fm.capturedFrame != nil {
