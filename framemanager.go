@@ -638,6 +638,9 @@ func (fm *frameManager) WaitFar2lResponse(id uint8, timeout time.Duration) *vtin
 			if !ok {
 				return nil
 			}
+			if e == nil {
+				continue
+			}
 			fm.dispatchEvent(e, false)
 		case <-time.After(10 * time.Millisecond):
 			if time.Now().After(deadline) {
@@ -1072,6 +1075,9 @@ func (fm *frameManager) Run(reader *vtinput.Reader) {
 		if loopAgain {
 			continue
 		}
+		if e == nil {
+			continue
+		}
 		if e.Type == vtinput.Far2lEventType {
 			// Protocol level events handled inside dispatchEvent to cover both main loop and drain loop
 			fm.dispatchEvent(e, injected)
@@ -1111,6 +1117,9 @@ func (fm *frameManager) Run(reader *vtinput.Reader) {
 				}
 				if !ok {
 					return
+				}
+				if ev == nil {
+					continue
 				}
 				if len(fm.frames) > 0 {
 					fm.dispatchEvent(ev, false)
