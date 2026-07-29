@@ -268,6 +268,14 @@ func (sv *ScrollView) HandleMouse(e *vtinput.InputEvent) bool {
 	}
 
 	if e.ButtonState != 0 && e.KeyDown {
+		if e.ButtonState == vtinput.FromLeft2ndButtonPressed {
+			if sv.IsFocused() && sv.OnAction != nil {
+				sv.OnAction(sv.SelectPos)
+				return true
+			}
+			return false
+		}
+
 		clickIdx := sv.GetClickIndex(int(e.MouseY))
 		if clickIdx != -1 {
 			oldPos := sv.SelectPos
@@ -277,10 +285,8 @@ func (sv *ScrollView) HandleMouse(e *vtinput.InputEvent) bool {
 				sv.OnSelect(sv.SelectPos)
 			}
 
-			// Trigger actions for left double-click OR middle-click (wheel click)
-			isLeftDoubleClick := e.ButtonState == vtinput.FromLeft1stButtonPressed && (e.MouseEventFlags&vtinput.DoubleClick) != 0
-			isMiddleClick := e.ButtonState == vtinput.FromLeft2ndButtonPressed
-			if (isLeftDoubleClick || isMiddleClick) && sv.OnAction != nil {
+			// Trigger actions only for the primary (left) button
+			if e.ButtonState == vtinput.FromLeft1stButtonPressed && (e.MouseEventFlags&vtinput.DoubleClick) != 0 && sv.OnAction != nil {
 				sv.OnAction(sv.SelectPos)
 			}
 			return true
