@@ -312,16 +312,12 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 		host.mouseBtn = btn
 		cW := host.cellW
 		cH := host.cellH
-		scale := host.app.ScaleFactor()
-		if scale <= 0 {
-			scale = 1.0
-		}
 		host.mu.Unlock()
 
 		host.sendEvent(&vtinput.InputEvent{
 			Type:        vtinput.MouseEventType,
-			MouseX:      int16(x / (float64(cW) * scale)),
-			MouseY:      int16(y / (float64(cH) * scale)),
+			MouseX:      int16(x / float64(cW)),
+			MouseY:      int16(y / float64(cH)),
 			KeyDown:     true,
 			ButtonState: btn,
 		})
@@ -332,16 +328,12 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 		host.mouseBtn = 0
 		cW := host.cellW
 		cH := host.cellH
-		scale := host.app.ScaleFactor()
-		if scale <= 0 {
-			scale = 1.0
-		}
 		host.mu.Unlock()
 
 		host.sendEvent(&vtinput.InputEvent{
 			Type:        vtinput.MouseEventType,
-			MouseX:      int16(x / (float64(cW) * scale)),
-			MouseY:      int16(y / (float64(cH) * scale)),
+			MouseX:      int16(x / float64(cW)),
+			MouseY:      int16(y / float64(cH)),
 			KeyDown:     false,
 			ButtonState: 0,
 		})
@@ -352,17 +344,13 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 		btn := host.mouseBtn
 		cW := host.cellW
 		cH := host.cellH
-		scale := host.app.ScaleFactor()
-		if scale <= 0 {
-			scale = 1.0
-		}
 		host.mu.Unlock()
 
 		if btn != 0 {
 			host.sendEvent(&vtinput.InputEvent{
 				Type:            vtinput.MouseEventType,
-				MouseX:          int16(x / (float64(cW) * scale)),
-				MouseY:          int16(y / (float64(cH) * scale)),
+				MouseX:          int16(x / float64(cW)),
+				MouseY:          int16(y / float64(cH)),
 				MouseEventFlags: vtinput.MouseMoved,
 				ButtonState:     btn,
 				ControlKeyState: host.currentMods,
@@ -374,10 +362,6 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 		host.mu.Lock()
 		cW := host.cellW
 		cH := host.cellH
-		scale := host.app.ScaleFactor()
-		if scale <= 0 {
-			scale = 1.0
-		}
 		host.mu.Unlock()
 
 		mx, my := app.Input().Mouse().Position()
@@ -393,8 +377,8 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 		for i := 0; i < steps; i++ {
 			host.sendEvent(&vtinput.InputEvent{
 				Type:           vtinput.MouseEventType,
-				MouseX:         int16(float64(mx) / (float64(cW) * scale)),
-				MouseY:         int16(float64(my) / (float64(cH) * scale)),
+				MouseX:         int16(float64(mx) / float64(cW)),
+				MouseY:         int16(float64(my) / float64(cH)),
 				WheelDirection: dir,
 			})
 		}
