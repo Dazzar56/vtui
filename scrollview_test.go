@@ -99,3 +99,38 @@ func TestScrollView_SelectableSkipping(t *testing.T) {
 		t.Errorf("Wrap move failed: expected 0, got %d", sv.SelectPos)
 	}
 }
+func TestScrollView_MiddleClick(t *testing.T) {
+	actionTriggered := false
+	var triggeredPos int
+
+	sv := &ScrollView{ItemCount: 5, ViewHeight: 5}
+	sv.OnAction = func(pos int) {
+		actionTriggered = true
+		triggeredPos = pos
+	}
+
+	// Simulate middle mouse button click (wheel click) on Y coordinate 2
+	event := &vtinput.InputEvent{
+		Type:        vtinput.MouseEventType,
+		MouseY:      2,
+		KeyDown:     true,
+		ButtonState: vtinput.FromLeft2ndButtonPressed,
+	}
+
+	handled := sv.HandleMouse(event)
+	if !handled {
+		t.Error("HandleMouse should return true for middle click on a valid item")
+	}
+
+	if sv.SelectPos != 2 {
+		t.Errorf("Expected SelectPos to be updated to 2, got %d", sv.SelectPos)
+	}
+
+	if !actionTriggered {
+		t.Error("OnAction should be triggered on middle click")
+	}
+
+	if triggeredPos != 2 {
+		t.Errorf("Expected action triggered on position 2, got %d", triggeredPos)
+	}
+}
