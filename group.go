@@ -21,6 +21,9 @@ type Group struct {
 }
 
 func (g *Group) SetFocusDirection(direction int) {
+	if g.focusIdx >= 0 && g.focusIdx < len(g.items) {
+		g.items[g.focusIdx].SetFocus(false)
+	}
 	if direction > 0 {
 		g.focusIdx = -1
 	} else {

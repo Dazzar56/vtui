@@ -350,3 +350,60 @@ func TestGroup_ProcessMouse_EmptySpacePropagation(t *testing.T) {
 		t.Error("Expected empty space click to successfully trigger window dragging")
 	}
 }
+func TestGroup_DoubleFocusRegression(t *testing.T) {
+	SetDefaultPalette()
+
+	parent := NewGroup(0, 0, 40, 20)
+	parent.WrapFocus = true
+
+	gb := NewGroupBox(2, 2, 20, 10, "Group")
+	chk1 := NewCheckbox(0, 0, "C1", false)
+	chk2 := NewCheckbox(0, 1, "C2", false)
+	gb.AddItem(chk1)
+	gb.AddItem(chk2)
+
+	edit := NewEdit(2, 12, 10, "")
+
+	parent.AddItem(gb)
+	parent.AddItem(edit)
+
+	// Set initial focus to parent
+	parent.SetFocus(true)
+
+	// Initially, parent focus should be on gb, and gb focus on chk1.
+	// Since parent is focused, chk1 should be focused. chk2 should not.
+	if !chk1.IsFocused() {
+		t.Error("chk1 should be focused initially")
+	}
+	if chk2.IsFocused() {
+		t.Error("chk2 should not be focused initially")
+	}
+
+	// Move forward to chk2 (Tab 1)
+	parent.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_TAB})
+	if !chk2.IsFocused() {
+		t.Error("chk2 should be focused after Tab 1")
+	}
+	if chk1.IsFocused() {
+		t.Error("chk1 should lose focus after Tab 1")
+	}
+
+	// Move forward to edit (Tab 2) -> gb loses focus completely, so chk2 must lose focus too!
+	parent.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_TAB})
+	if !edit.IsFocused() {
+		t.Error("edit should be focused after Tab 2")
+	}
+	if chk2.IsFocused() {
+		t.Error("chk2 should lose focus when parent focus moves to edit")
+	}
+
+	// Move focus backward with Up arrow (VK_UP) -> enters gb from the bottom, should focus chk2.
+	// Both chk1 and chk2 must NOT be focused at the same time!
+	parent.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_UP})
+	if !chk2.IsFocused() {
+		t.Error("chk2 should be focused when entering gb from the bottom")
+	}
+	if chk1.IsFocused() {
+		t.Error("chk1 must NOT be focused when chk2 gets focused (double focus regression!)")
+	}
+}

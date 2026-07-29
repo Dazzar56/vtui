@@ -1420,8 +1420,13 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 			DebugLog("FM: Mouse Event at (%d,%d) State:%X Wheel:%d", mx, my, ev.ButtonState, ev.WheelDirection)
 		}
 
-		if fm.scr == nil || mx < 0 || my < 0 || mx >= fm.scr.width || my >= fm.scr.height {
+		if mx < -1 || my < -1 {
 			return
+		}
+		if fm.scr != nil && fm.scr.width > 0 && fm.scr.height > 0 {
+			if mx > fm.scr.width || my > fm.scr.height {
+				return
+			}
 		}
 
 		// 3.1. Active Mouse Capture (Dragging/Resizing)
