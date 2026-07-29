@@ -79,7 +79,9 @@ func colorToANSI(isBg bool, attr uint64, activePal *[256]uint32, profile ColorPr
 		}
 
 		if profile != ColorProfileTrueColor {
-			if cachedIdx, ok := quantCache[rgbVal]; ok {
+			if quantCache == nil {
+				idxVal = findNearestColor(rgbVal, activePal, 256)
+			} else if cachedIdx, ok := quantCache[rgbVal]; ok {
 				idxVal = cachedIdx
 			} else {
 				maxColors := 256

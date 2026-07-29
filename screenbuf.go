@@ -98,6 +98,7 @@ func NewScreenBuf() *ScreenBuf {
 	s := &ScreenBuf{
 		dirty:        true,
 		ColorProfile: DetectColorProfile(),
+		quantCache:   make(map[uint32]uint8),
 	}
 	s.Renderer = &AnsiRenderer{parent: s}
 	return s
@@ -560,6 +561,9 @@ type AnsiRenderer struct {
 }
 
 func (r *AnsiRenderer) SetPalette(pal *[256]uint32) {
+	if r.parent.quantCache == nil {
+		r.parent.quantCache = make(map[uint32]uint8)
+	}
 	if pal == nil {
 		return
 	}
