@@ -4,8 +4,8 @@ go 1.25.5
 
 require (
 	github.com/gogpu/gg v0.50.7
-	github.com/gogpu/gogpu v0.45.2-0.20260729151649-3253d7e51da5
-	github.com/gogpu/gpucontext v0.21.1
+	github.com/gogpu/gogpu v0.46.0
+	github.com/gogpu/gpucontext v0.22.0
 	github.com/jezek/xgb v1.3.1
 	github.com/mattn/go-runewidth v0.0.15
 	github.com/neurlang/wayland v0.4.2
@@ -24,7 +24,7 @@ require (
 	github.com/go-webgpu/webgpu v0.5.4 // indirect
 	github.com/gogpu/gputypes v0.5.1 // indirect
 	github.com/gogpu/naga v0.17.16 // indirect
-	github.com/gogpu/wgpu v0.30.23 // indirect
+	github.com/gogpu/wgpu v0.30.25 // indirect
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/neurlang/winc v0.1.2 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
