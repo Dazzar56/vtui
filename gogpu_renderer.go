@@ -271,22 +271,46 @@ func (r *GogpuRenderer) drawCustomChar(dc *gg.Context, char rune, x, y, w, h flo
 		dc.DrawRectangle(mx-ofs, y, thick, h)
 		dc.DrawRectangle(mx+ofs, y, thick, h)
 
-	// Arrows
+	// Arrows and Triangles
 	case '↑':
-		dc.DrawLine(mx, y+h*0.1, mx, y+h*0.9)
-		dc.DrawLine(mx, y+h*0.1, mx-w*0.3, y+h*0.4)
-		dc.DrawLine(mx, y+h*0.1, mx+w*0.3, y+h*0.4)
+		dc.DrawLine(mx, y+h*0.15, mx, y+h*0.85)
+		dc.DrawLine(mx, y+h*0.15, mx-w*0.25, y+h*0.4)
+		dc.DrawLine(mx, y+h*0.15, mx+w*0.25, y+h*0.4)
 		dc.SetLineWidth(thick)
 		dc.Stroke()
 		dc.SetLineWidth(0)
 		return true
 	case '↓':
-		dc.DrawLine(mx, y+h*0.1, mx, y+h*0.9)
-		dc.DrawLine(mx, y+h*0.9, mx-w*0.3, y+h*0.6)
-		dc.DrawLine(mx, y+h*0.9, mx+w*0.3, y+h*0.6)
+		dc.DrawLine(mx, y+h*0.15, mx, y+h*0.85)
+		dc.DrawLine(mx, y+h*0.85, mx-w*0.25, y+h*0.6)
+		dc.DrawLine(mx, y+h*0.85, mx+w*0.25, y+h*0.6)
 		dc.SetLineWidth(thick)
 		dc.Stroke()
 		dc.SetLineWidth(0)
+		return true
+	case '↕':
+		dc.DrawLine(mx, y+h*0.15, mx, y+h*0.85)
+		dc.DrawLine(mx, y+h*0.15, mx-w*0.25, y+h*0.35)
+		dc.DrawLine(mx, y+h*0.15, mx+w*0.25, y+h*0.35)
+		dc.DrawLine(mx, y+h*0.85, mx-w*0.25, y+h*0.65)
+		dc.DrawLine(mx, y+h*0.85, mx+w*0.25, y+h*0.65)
+		dc.SetLineWidth(thick)
+		dc.Stroke()
+		dc.SetLineWidth(0)
+		return true
+	case '▲':
+		dc.MoveTo(mx, y+h*0.2)
+		dc.LineTo(mx-w*0.3, y+h*0.8)
+		dc.LineTo(mx+w*0.3, y+h*0.8)
+		dc.ClosePath()
+		dc.Fill()
+		return true
+	case '▼':
+		dc.MoveTo(mx-w*0.3, y+h*0.2)
+		dc.LineTo(mx+w*0.3, y+h*0.2)
+		dc.LineTo(mx, y+h*0.8)
+		dc.ClosePath()
+		dc.Fill()
 		return true
 
 	// Solid Blocks
@@ -417,7 +441,7 @@ func (r *GogpuRenderer) DrawToScreen(ctx *gogpu.Context) {
 						}
 
 						char := rune(currCell.Char)
-						isBox := (char >= 0x2500 && char <= 0x259F) || (char >= 0x2190 && char <= 0x2193)
+						isBox := (char >= 0x2500 && char <= 0x25BF) || (char >= 0x2190 && char <= 0x2195)
 
 						if isBox {
 							if r.drawCustomChar(dc, char, lx+float64(sx*r.cellW), ly, float64(rw*r.cellW), float64(r.cellH)) {

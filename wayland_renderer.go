@@ -435,6 +435,73 @@ func (r *WaylandRenderer) drawCustomChar(img *image.RGBA, char rune, px, py, cw,
 		drawVLine(mx-ofs, my+ofs, py+ch-1)
 		drawVLine(mx+ofs, my+ofs, py+ch-1)
 		return true
+
+	// Arrows and Triangles
+	case '↑':
+		yTop := py + ch/6
+		yBot := py + ch - ch/6
+		drawVLine(mx, yTop, yBot)
+		arm := cw / 4
+		if arm < 2 {
+			arm = 2
+		}
+		for i := 0; i <= arm; i++ {
+			drawHLine(mx-i, mx+i, yTop+i)
+		}
+		return true
+	case '↓':
+		yTop := py + ch/6
+		yBot := py + ch - ch/6
+		drawVLine(mx, yTop, yBot)
+		arm := cw / 4
+		if arm < 2 {
+			arm = 2
+		}
+		for i := 0; i <= arm; i++ {
+			drawHLine(mx-(arm-i), mx+(arm-i), yBot-arm+i)
+		}
+		return true
+	case '↕':
+		yTop := py + ch/6
+		yBot := py + ch - ch/6
+		drawVLine(mx, yTop, yBot)
+		arm := cw / 4
+		if arm < 2 {
+			arm = 2
+		}
+		for i := 0; i <= arm; i++ {
+			drawHLine(mx-i, mx+i, yTop+i)
+		}
+		for i := 0; i <= arm; i++ {
+			drawHLine(mx-(arm-i), mx+(arm-i), yBot-arm+i)
+		}
+		return true
+	case '▲':
+		yTop := py + ch/5
+		yBot := py + ch - ch/5
+		hSpan := yBot - yTop
+		maxW := cw / 3
+		if maxW < 2 {
+			maxW = 2
+		}
+		for y := yTop; y <= yBot; y++ {
+			dx := (y - yTop) * maxW / max(hSpan, 1)
+			drawHLine(mx-dx, mx+dx, y)
+		}
+		return true
+	case '▼':
+		yTop := py + ch/5
+		yBot := py + ch - ch/5
+		hSpan := yBot - yTop
+		maxW := cw / 3
+		if maxW < 2 {
+			maxW = 2
+		}
+		for y := yTop; y <= yBot; y++ {
+			dx := (yBot - y) * maxW / max(hSpan, 1)
+			drawHLine(mx-dx, mx+dx, y)
+		}
+		return true
 	case '█':
 		baseOff := py*img.Stride + px*4
 		maxBytes := cw * 4
