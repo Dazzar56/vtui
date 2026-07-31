@@ -23,7 +23,7 @@ func (s *Separator) DisplayObject(scr *ScreenBuf) {
 		return
 	}
 	p := NewPainter(scr)
-	attr := Palette[ColDialogBox]
+	attr := s.GetStateAttr(ColDialogBox, ColDialogBox)
 
 	p.DrawLine(s.X1, s.Y1, s.X2, s.Y1, boxSymbols[bsH], attr, s.ConnectLeft, s.ConnectRight)
 }

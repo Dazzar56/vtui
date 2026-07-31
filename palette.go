@@ -43,6 +43,17 @@ const (
 	ColHelpSelectedLink
 	ColHelpBox
 
+	ColWarnText
+	ColWarnHighlightText
+	ColWarnBox
+	ColWarnBoxTitle
+	ColWarnHighlightBoxTitle
+	ColWarnEdit
+	ColWarnButton
+	ColWarnSelectedButton
+	ColWarnHighlightButton
+	ColWarnHighlightSelectedButton
+
 	// Helper for array size
 	LastPaletteColor
 )
@@ -120,6 +131,19 @@ func SetDefaultPalette() {
 	Palette[ColHelpLink] = SetRGBBoth(0, 0x0000A0, 0xD3D7CF)      // Blue links
 	Palette[ColHelpSelectedLink] = SetRGBBoth(0, white, 0x0000A0) // White on Blue
 	Palette[ColHelpBox] = Palette[ColHelpText]
+
+	red := uint32(0x800000)
+	// Warnings (White/Yellow on Red)
+	Palette[ColWarnText] = SetRGBBoth(0, white, red)
+	Palette[ColWarnHighlightText] = SetRGBBoth(0, yellow, red)
+	Palette[ColWarnBox] = SetRGBBoth(0, white, red)
+	Palette[ColWarnBoxTitle] = SetRGBBoth(0, white, red)
+	Palette[ColWarnHighlightBoxTitle] = SetRGBBoth(0, yellow, red)
+	Palette[ColWarnEdit] = SetRGBBoth(0, black, cyan)
+	Palette[ColWarnButton] = SetRGBBoth(0, white, red)
+	Palette[ColWarnSelectedButton] = SetRGBBoth(0, black, cyan)
+	Palette[ColWarnHighlightButton] = SetRGBBoth(0, yellow, red)
+	Palette[ColWarnHighlightSelectedButton] = SetRGBBoth(0, yellow, cyan)
 }
 
 // ThemePalette is the host application's 256-color palette for UI indexing.

@@ -81,10 +81,7 @@ func (cb *ComboBox) DisplayObject(scr *ScreenBuf) {
 		cb.Edit.Show(scr)
 	}
 
-	attr := Palette[ColDialogText]
-	if cb.focused {
-		attr = Palette[ColDialogSelectedButton]
-	}
+	attr := cb.GetStateAttr(ColDialogText, ColDialogSelectedButton)
 	if cb.IsDisabled() {
 		attr = DimColor(attr)
 	}

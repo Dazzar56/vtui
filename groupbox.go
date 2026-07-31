@@ -34,9 +34,9 @@ func (gb *GroupBox) DisplayObject(scr *ScreenBuf) {
 	}
 	p := NewPainter(scr)
 
-	p.DrawBox(gb.X1, gb.Y1, gb.X2, gb.Y2, Palette[gb.ColorBoxIdx], SingleBox)
+	p.DrawBox(gb.X1, gb.Y1, gb.X2, gb.Y2, gb.GetStateAttr(gb.ColorBoxIdx, gb.ColorBoxIdx), SingleBox)
 	// DrawTitle is also simplified now as it can use cleanText
-	p.DrawTitle(gb.X1, gb.Y1, gb.X2, gb.cleanText, Palette[gb.ColorTitleIdx])
+	p.DrawTitle(gb.X1, gb.Y1, gb.X2, gb.cleanText, gb.GetStateAttr(gb.ColorTitleIdx, gb.ColorTitleIdx))
 
 	gb.Group.DisplayObject(scr)
 }

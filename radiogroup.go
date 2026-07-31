@@ -46,10 +46,10 @@ func (rg *RadioGroup) DisplayObject(scr *ScreenBuf) {
 		return
 	}
 
-	attr := Palette[ColDialogText]
-	highAttr := Palette[ColDialogHighlightText]
-	selAttr := Palette[ColDialogSelectedButton]
-	selHighAttr := Palette[ColDialogHighlightSelectedButton]
+	attr := rg.GetStateAttr(ColDialogText, ColDialogText)
+	highAttr := rg.GetStateAttr(ColDialogHighlightText, ColDialogHighlightText)
+	selAttr := rg.GetStateAttr(ColDialogSelectedButton, ColDialogSelectedButton)
+	selHighAttr := rg.GetStateAttr(ColDialogHighlightSelectedButton, ColDialogHighlightSelectedButton)
 
 	p := NewPainter(scr)
 	for i, itm := range rg.Items {

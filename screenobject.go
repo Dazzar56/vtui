@@ -1,6 +1,9 @@
 package vtui
 
 import "github.com/unxed/vtinput"
+type ColorStyleProvider interface {
+	GetPaletteIndex(baseIdx int) int
+}
 
 // CommandHandler defines an object that can process or route commands.
 type CommandHandler interface {
@@ -256,6 +259,20 @@ func (so *ScreenObject) GetStateAttr(normIdx, focIdx int) uint64 {
 	if so.IsFocused() {
 		idx = focIdx
 	}
+
+	var owner CommandHandler = so.owner
+	for owner != nil {
+		if csp, ok := owner.(ColorStyleProvider); ok {
+			idx = csp.GetPaletteIndex(idx)
+			break
+		}
+		if s, ok := owner.(interface{ GetOwner() CommandHandler }); ok {
+			owner = s.GetOwner()
+		} else {
+			break
+		}
+	}
+
 	attr := Palette[idx]
 	if so.IsDisabled() {
 		return DimColor(attr)

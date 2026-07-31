@@ -63,10 +63,10 @@ func (cg *CheckGroup) DisplayObject(scr *ScreenBuf) {
 		return
 	}
 
-	attr := Palette[ColDialogText]
-	highAttr := Palette[ColDialogHighlightText]
-	selAttr := Palette[ColDialogSelectedButton]
-	selHighAttr := Palette[ColDialogHighlightSelectedButton]
+	attr := cg.GetStateAttr(ColDialogText, ColDialogText)
+	highAttr := cg.GetStateAttr(ColDialogHighlightText, ColDialogHighlightText)
+	selAttr := cg.GetStateAttr(ColDialogSelectedButton, ColDialogSelectedButton)
+	selHighAttr := cg.GetStateAttr(ColDialogHighlightSelectedButton, ColDialogHighlightSelectedButton)
 
 	for i, itm := range cg.Items {
 		curAttr, curHigh := attr, highAttr

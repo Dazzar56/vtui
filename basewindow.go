@@ -23,6 +23,7 @@ type BaseWindow struct {
 	ShowZoom    bool
 	SavedBounds *Rect
 	progress    int
+	IsWarning   bool
 }
 
 func (bw *BaseWindow) GetFocusedItem() UIElement {
@@ -51,6 +52,35 @@ func NewBaseWindow(x1, y1, x2, y2 int, title string) *BaseWindow {
 	bw.lastW = x2 - x1 + 1
 	bw.lastH = y2 - y1 + 1
 	return bw
+}
+
+func (bw *BaseWindow) GetPaletteIndex(baseIdx int) int {
+	if !bw.IsWarning {
+		return baseIdx
+	}
+	switch baseIdx {
+	case ColDialogText:
+		return ColWarnText
+	case ColDialogHighlightText:
+		return ColWarnHighlightText
+	case ColDialogBox:
+		return ColWarnBox
+	case ColDialogBoxTitle:
+		return ColWarnBoxTitle
+	case ColDialogHighlightBoxTitle:
+		return ColWarnHighlightBoxTitle
+	case ColDialogEdit:
+		return ColWarnEdit
+	case ColDialogButton:
+		return ColWarnButton
+	case ColDialogSelectedButton:
+		return ColWarnSelectedButton
+	case ColDialogHighlightButton:
+		return ColWarnHighlightButton
+	case ColDialogHighlightSelectedButton:
+		return ColWarnHighlightSelectedButton
+	}
+	return baseIdx
 }
 
 func (bw *BaseWindow) SetFocus(f bool) {
@@ -82,12 +112,13 @@ func (bw *BaseWindow) Show(scr *ScreenBuf) {
 
 	// Draw active frame color if this window has focus
 	if bw.IsFocused() {
-		bw.frame.ColorBoxIdx = ColDialogBox
-		bw.frame.ColorTitleIdx = ColDialogHighlightBoxTitle
+		bw.frame.ColorBoxIdx = bw.GetPaletteIndex(ColDialogBox)
+		bw.frame.ColorTitleIdx = bw.GetPaletteIndex(ColDialogHighlightBoxTitle)
 	} else {
-		bw.frame.ColorBoxIdx = ColDialogBox
-		bw.frame.ColorTitleIdx = ColDialogBoxTitle
+		bw.frame.ColorBoxIdx = bw.GetPaletteIndex(ColDialogBox)
+		bw.frame.ColorTitleIdx = bw.GetPaletteIndex(ColDialogBoxTitle)
 	}
+	bw.frame.ColorBackgroundIdx = bw.GetPaletteIndex(ColDialogText)
 
 	bw.frame.DisplayObject(scr)
 

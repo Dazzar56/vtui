@@ -220,6 +220,10 @@ func createMessageDialog(title string, text string, buttons []string) *Window {
 	}
 
 	dlg := NewCenteredDialog(dlgWidth, dlgHeight, title)
+	trimmedTitle := strings.TrimSpace(title)
+	if trimmedTitle == "Warning" || trimmedTitle == "Error" || trimmedTitle == "Confirm" {
+		dlg.IsWarning = true
+	}
 
 	if dlgHeight > maxScreenHeight-2 {
 		dlgHeight = maxScreenHeight - 2

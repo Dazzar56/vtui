@@ -35,7 +35,7 @@ func (t *Text) DisplayObject(scr *ScreenBuf) {
 	}
 
 	attr, highAttr := t.GetStateAttrs(ColDialogText, ColDialogText, ColDialogHighlightText, ColDialogHighlightText)
-	if t.color != 0 && !t.IsDisabled() {
+	if t.color != 0 && t.color != Palette[ColDialogText] && !t.IsDisabled() {
 		attr = t.color
 	}
 
