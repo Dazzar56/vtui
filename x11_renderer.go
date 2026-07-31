@@ -482,16 +482,16 @@ func (r *X11Renderer) drawCustomChar(img *image.RGBA, char rune, px, py, cw, ch 
 		drawVLine(mx+ofs, py, py+ch-1)
 		return true
 	case '╔':
-		drawHLine(mx-ofs, px+cw-1, my-ofs)
-		drawHLine(mx+ofs, px+cw-1, my+ofs)
-		drawVLine(mx-ofs, my-ofs, py+ch-1)
-		drawVLine(mx+ofs, my+ofs, py+ch-1)
+		drawHLine(mx+ofs, px+cw-1, my-ofs)
+		drawHLine(mx-ofs, px+cw-1, my+ofs)
+		drawVLine(mx-ofs, my+ofs, py+ch-1)
+		drawVLine(mx+ofs, my-ofs, py+ch-1)
 		return true
 	case '╗':
-		drawHLine(px, mx+ofs, my-ofs)
-		drawHLine(px, mx-ofs, my+ofs)
-		drawVLine(mx+ofs, my-ofs, py+ch-1)
-		drawVLine(mx-ofs, my+ofs, py+ch-1)
+		drawHLine(px, mx-ofs, my-ofs)
+		drawHLine(px, mx+ofs, my+ofs)
+		drawVLine(mx+ofs, my+ofs, py+ch-1)
+		drawVLine(mx-ofs, my-ofs, py+ch-1)
 		return true
 	case '╚':
 		drawHLine(mx-ofs, px+cw-1, my-ofs)
@@ -514,6 +514,16 @@ func (r *X11Renderer) drawCustomChar(img *image.RGBA, char rune, px, py, cw, ch 
 	case '╣':
 		drawHLine(px, mx+ofs, my-ofs)
 		drawHLine(px, mx-ofs, my+ofs)
+		drawVLine(mx-ofs, py, py+ch-1)
+		drawVLine(mx+ofs, py, py+ch-1)
+		return true
+	case '╟':
+		drawHLine(mx+ofs, px+cw-1, my)
+		drawVLine(mx-ofs, py, py+ch-1)
+		drawVLine(mx+ofs, py, py+ch-1)
+		return true
+	case '╢':
+		drawHLine(px, mx-ofs, my)
 		drawVLine(mx-ofs, py, py+ch-1)
 		drawVLine(mx+ofs, py, py+ch-1)
 		return true

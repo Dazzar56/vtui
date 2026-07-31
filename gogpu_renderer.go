@@ -216,26 +216,26 @@ func (r *GogpuRenderer) drawCustomChar(dc *gg.Context, char rune, x, y, w, h flo
 		dc.DrawRectangle(mx-ofs, y, thick, h)
 		dc.DrawRectangle(mx+ofs, y, thick, h)
 	case '╔':
+		dc.DrawRectangle(mx+ofs, my-ofs, w-(mx-x+ofs), thick)
+		dc.DrawRectangle(mx-ofs, my+ofs, w-(mx-x-ofs), thick)
+		dc.DrawRectangle(mx-ofs, my+ofs, thick, (y+h)-(my+ofs))
+		dc.DrawRectangle(mx+ofs, my-ofs, thick, (y+h)-(my-ofs))
+	case '╗':
+		dc.DrawRectangle(x, my-ofs, mx-x-ofs+thick, thick)
+		dc.DrawRectangle(x, my+ofs, mx-x+ofs+thick, thick)
+		dc.DrawRectangle(mx+ofs, my+ofs, thick, (y+h)-(my+ofs))
+		dc.DrawRectangle(mx-ofs, my-ofs, thick, (y+h)-(my-ofs))
+	case '╚':
 		dc.DrawRectangle(mx-ofs, my-ofs, w-(mx-x-ofs), thick)
 		dc.DrawRectangle(mx+ofs, my+ofs, w-(mx-x+ofs), thick)
-		dc.DrawRectangle(mx-ofs, my-ofs, thick, h-(my-y-ofs))
-		dc.DrawRectangle(mx+ofs, my+ofs, thick, h-(my-y+ofs))
-	case '╗':
+		dc.DrawRectangle(mx-ofs, y, thick, (my-ofs)-y+thick)
+		dc.DrawRectangle(mx+ofs, y, thick, (my+ofs)-y+thick)
+	case '╝':
 		dc.DrawRectangle(x, my-ofs, mx-x+ofs+thick, thick)
 		dc.DrawRectangle(x, my+ofs, mx-x-ofs+thick, thick)
-		dc.DrawRectangle(mx+ofs, my-ofs, thick, h-(my-y-ofs))
-		dc.DrawRectangle(mx-ofs, my+ofs, thick, h-(my-y+ofs))
-	case '╚':
-		dc.DrawRectangle(mx-ofs, my+ofs, w-(mx-x-ofs), thick)
-		dc.DrawRectangle(mx+ofs, my-ofs, w-(mx-x+ofs), thick)
-		dc.DrawRectangle(mx-ofs, y, thick, my-y+ofs+thick)
-		dc.DrawRectangle(mx+ofs, y, thick, my-y-ofs+thick)
-	case '╝':
-		dc.DrawRectangle(x, my+ofs, mx-x+ofs+thick, thick)
-		dc.DrawRectangle(x, my-ofs, mx-x-ofs+thick, thick)
-		dc.DrawRectangle(mx+ofs, y, thick, my-y+ofs+thick)
-		dc.DrawRectangle(mx-ofs, y, thick, my-y-ofs+thick)
-	case '╠':
+		dc.DrawRectangle(mx+ofs, y, thick, (my-ofs)-y+thick)
+		dc.DrawRectangle(mx-ofs, y, thick, (my+ofs)-y+thick)
+    case '╠':
 		dc.DrawRectangle(mx-ofs, my-ofs, w-(mx-x-ofs), thick)
 		dc.DrawRectangle(mx+ofs, my+ofs, w-(mx-x+ofs), thick)
 		dc.DrawRectangle(mx-ofs, y, thick, h)
