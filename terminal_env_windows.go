@@ -5,6 +5,7 @@ package vtui
 import (
 	"os"
 	"syscall"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
@@ -56,23 +57,40 @@ func initTerminalOS() {
 		}
 	}
 }
+type consoleCursorInfo struct {
+	size    uint32
+	visible int32
+}
+
+var (
+	kernel32DLL              = syscall.NewLazyDLL("kernel32.dll")
+	procGetConsoleCursorInfo = kernel32DLL.NewProc("GetConsoleCursorInfo")
+	procSetConsoleCursorInfo = kernel32DLL.NewProc("SetConsoleCursorInfo")
+)
+
 func SetCursorStyleOS(visible bool, shape CursorShape) {
 	hOut, err := syscall.GetStdHandle(syscall.STD_OUTPUT_HANDLE)
 	if err != nil {
 		return
 	}
-	var info syscall.ConsoleCursorInfo
-	if err := syscall.GetConsoleCursorInfo(hOut, &info); err != nil {
+
+	var info consoleCursorInfo
+	r1, _, _ := procGetConsoleCursorInfo.Call(uintptr(hOut), uintptr(unsafe.Pointer(&info)))
+	if r1 == 0 {
 		return
 	}
 
-	info.Visible = visible
-
-	if shape == CursorShapeBlock {
-		info.Size = 100
+	if visible {
+		info.visible = 1
 	} else {
-		info.Size = 30
+		info.visible = 0
 	}
 
-	syscall.SetConsoleCursorInfo(hOut, &info)
+	if shape == CursorShapeBlock {
+		info.size = 100
+	} else {
+		info.size = 30
+	}
+
+	procSetConsoleCursorInfo.Call(uintptr(hOut), uintptr(unsafe.Pointer(&info)))
 }
