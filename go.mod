@@ -10,7 +10,7 @@ require (
 	github.com/mattn/go-runewidth v0.0.15
 	github.com/neurlang/wayland v0.4.2
 	github.com/unxed/keytrans v0.1.27
-	github.com/unxed/vtinput v0.1.1
+	github.com/unxed/vtinput v0.1.2
 	golang.org/x/image v0.44.0
 	golang.org/x/sys v0.47.0
 	golang.org/x/term v0.40.0
@@ -38,8 +38,5 @@ require (
 	golang.org/x/mobile v0.0.0-20230301163155-e0f57694e12c // indirect
 	golang.org/x/text v0.40.0 // indirect
 )
-
-// This line tells Go to use a local copy of vtinput
-replace github.com/unxed/vtinput => ../vtinput
 
 replace github.com/ebitengine/purego => github.com/unxed/pureffi v0.1.11
