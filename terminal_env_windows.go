@@ -57,20 +57,16 @@ func initTerminalOS() {
 	}
 }
 func SetCursorStyleOS(visible bool, shape CursorShape) {
-	hOut, err := windows.GetStdHandle(windows.STD_OUTPUT_HANDLE)
+	hOut, err := syscall.GetStdHandle(syscall.STD_OUTPUT_HANDLE)
 	if err != nil {
 		return
 	}
-	var info windows.ConsoleCursorInfo
-	if err := windows.GetConsoleCursorInfo(hOut, &info); err != nil {
+	var info syscall.ConsoleCursorInfo
+	if err := syscall.GetConsoleCursorInfo(hOut, &info); err != nil {
 		return
 	}
 
-	if visible {
-		info.Visible = 1
-	} else {
-		info.Visible = 0
-	}
+	info.Visible = visible
 
 	if shape == CursorShapeBlock {
 		info.Size = 100
@@ -78,5 +74,5 @@ func SetCursorStyleOS(visible bool, shape CursorShape) {
 		info.Size = 30
 	}
 
-	windows.SetConsoleCursorInfo(hOut, &info)
+	syscall.SetConsoleCursorInfo(hOut, &info)
 }
