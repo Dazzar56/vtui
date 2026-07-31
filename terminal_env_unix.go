@@ -13,3 +13,4 @@ func initTerminalOS() {}
 func watchResizeSignal(c chan os.Signal) {
 	signal.Notify(c, syscall.SIGWINCH)
 }
+func SetCursorStyleOS(visible bool, shape CursorShape) {}

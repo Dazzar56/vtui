@@ -652,14 +652,24 @@ func (r *AnsiRenderer) Flush() {
 		if r.cursorVis {
 			r.frameOut.WriteString("\x1b[?25h")
 			if ManageCursorStyle {
-				if r.cursorShape == CursorShapeBlock {
-					r.frameOut.WriteString("\x1b[1 q") // Blinking Block
+				if os.Getenv("TERM") == "linux" {
+					if r.cursorShape == CursorShapeBlock {
+						r.frameOut.WriteString("\x1b[?6c")
+					} else {
+						r.frameOut.WriteString("\x1b[?3c")
+					}
 				} else {
-					r.frameOut.WriteString("\x1b[3 q") // Blinking Underline
+					if r.cursorShape == CursorShapeBlock {
+						r.frameOut.WriteString("\x1b[1 q") // Blinking Block
+					} else {
+						r.frameOut.WriteString("\x1b[3 q") // Blinking Underline
+					}
 				}
 			}
+			SetCursorStyleOS(r.cursorVis, r.cursorShape)
 		} else {
 			r.frameOut.WriteString("\x1b[?25l")
+			SetCursorStyleOS(false, r.cursorShape)
 		}
 		r.lastSentCursorX = r.cursorX
 		r.lastSentCursorY = r.cursorY
