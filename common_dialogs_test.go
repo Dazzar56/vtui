@@ -410,6 +410,47 @@ func TestShowMessage_HeightTruncation(t *testing.T) {
 	// Should pass layout validation
 	AssertLayout(t, dlg)
 }
+func TestCommonDialogs_WarningMapping(t *testing.T) {
+	SetDefaultPalette()
+	FrameManager.Init(NewSilentScreenBuf())
+
+	// 1. Create a warning dialog
+	dlg := createMessageDialog(" Warning ", "This is a test warning.", []string{"&Ok"})
+
+	if !dlg.IsWarning {
+		t.Error("Expected IsWarning to be true for ' Warning ' title")
+	}
+
+	// 2. Check that the frame's ColorBackgroundIdx maps to ColWarnText after rendering
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	dlg.Show(scr)
+
+	if dlg.frame.ColorBackgroundIdx != ColWarnText {
+		t.Errorf("Expected ColorBackgroundIdx to be ColWarnText (%d), got %d", ColWarnText, dlg.frame.ColorBackgroundIdx)
+	}
+
+	// 3. Find the text element and check its resolved color
+	var txt *Text
+	walk(dlg.rootGroup, func(el UIElement) bool {
+		if t, ok := el.(*Text); ok {
+			txt = t
+			return false
+		}
+		return true
+	})
+
+	if txt == nil {
+		t.Fatal("Text element not found in dialog")
+	}
+
+	// Since we are inside a warning dialog, GetStateAttr(ColDialogText, ColDialogText) must resolve to Palette[ColWarnText]
+	resolvedAttr := txt.GetStateAttr(ColDialogText, ColDialogText)
+	expectedAttr := Palette[ColWarnText]
+	if resolvedAttr != expectedAttr {
+		t.Errorf("Expected resolved text attribute to be %016X (ColWarnText), got %016X", expectedAttr, resolvedAttr)
+	}
+}
 func TestShowMessage_Structure(t *testing.T) {
 	SetDefaultPalette()
 	FrameManager.Init(NewSilentScreenBuf())
