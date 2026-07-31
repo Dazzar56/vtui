@@ -45,9 +45,11 @@ func runInWaylandWindow(cols, rows int, fontName string, fontSize float64, setup
 	}
 
 	if fontSize <= 0 {
-		fontSize = 12.0
+		fontSize = 18.0
 	}
-	dpi := 96.0 // Wayland scaling is usually handled by the compositor buffers, assuming 96 base
+	// Wayland scaling is handled by the compositor scaling the 1x buffer.
+	// Use 72.0 DPI so that fontSize maps exactly 1:1 to logical pixels, matching gogpu.
+	dpi := 72.0
 	face, cellW, cellH := loadBestFont(fontName, fontSize, dpi)
 
 	host := &WaylandHost{

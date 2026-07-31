@@ -8,6 +8,8 @@ import (
 	"io"
 	"os"
 	"runtime"
+	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/jezek/xgb"
@@ -444,18 +446,41 @@ func runInX11Window(cols, rows int, fontName string, fontSize float64, setupApp 
 	}
 
 	if fontSize <= 0 {
-		fontSize = 22.0
+		fontSize = 18.0
 	}
 	tempConn, _ := xgb.NewConn()
-	dpi := 96.0
+	xftDpi := 96.0
 	if tempConn != nil {
 		setup := xproto.Setup(tempConn)
 		screen := setup.DefaultScreen(tempConn)
-		if screen.WidthInMillimeters > 0 {
-			dpi = (float64(screen.WidthInPixels) * 25.4) / float64(screen.WidthInMillimeters)
+
+		// Attempt to read explicit DPI scaling from the X11 Resource Manager
+		atomReply, err := xproto.InternAtom(tempConn, false, 16, "RESOURCE_MANAGER").Reply()
+		if err == nil && atomReply != nil {
+			propReply, err := xproto.GetProperty(tempConn, false, screen.Root, atomReply.Atom, xproto.AtomAny, 0, 1024*1024).Reply()
+			if err == nil && propReply != nil && propReply.Format == 8 {
+				val := string(propReply.Value)
+				for _, line := range strings.Split(val, "\n") {
+					if strings.HasPrefix(line, "Xft.dpi:") {
+						parts := strings.Split(line, ":")
+						if len(parts) == 2 {
+							parsed, err := strconv.ParseFloat(strings.TrimSpace(parts[1]), 64)
+							if err == nil && parsed > 0 {
+								xftDpi = parsed
+								break
+							}
+						}
+					}
+				}
+			}
 		}
 		tempConn.Close()
 	}
+
+	// gogpu treats fontSize as pixels (DPI=72). We want to match this visually.
+	// Scale the 72 DPI baseline by the OS scale factor (Xft.dpi / 96.0).
+	scaleFactor := xftDpi / 96.0
+	dpi := 72.0 * scaleFactor
 
 	face, cellW, cellH := loadBestFont(fontName, fontSize, dpi)
 
