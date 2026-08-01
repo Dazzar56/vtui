@@ -70,7 +70,10 @@ func isSpecialOrModifiedKey(vk uint16, mods vtinput.ControlKeyState) bool {
 	case vtinput.VK_ESCAPE, vtinput.VK_RETURN, vtinput.VK_TAB, vtinput.VK_BACK, vtinput.VK_DELETE, vtinput.VK_INSERT,
 		vtinput.VK_UP, vtinput.VK_DOWN, vtinput.VK_LEFT, vtinput.VK_RIGHT,
 		vtinput.VK_HOME, vtinput.VK_END, vtinput.VK_PRIOR, vtinput.VK_NEXT,
-		vtinput.VK_CONTROL, vtinput.VK_SHIFT, vtinput.VK_MENU, vtinput.VK_LWIN, vtinput.VK_RWIN, vtinput.VK_APPS,
+		vtinput.VK_CONTROL, vtinput.VK_LCONTROL, vtinput.VK_RCONTROL,
+		vtinput.VK_SHIFT, vtinput.VK_LSHIFT, vtinput.VK_RSHIFT,
+		vtinput.VK_MENU, vtinput.VK_LMENU, vtinput.VK_RMENU,
+		vtinput.VK_LWIN, vtinput.VK_RWIN, vtinput.VK_APPS,
 		vtinput.VK_CAPITAL, vtinput.VK_NUMLOCK, vtinput.VK_SCROLL:
 		return true
 	}
@@ -81,41 +84,53 @@ func isSpecialOrModifiedKey(vk uint16, mods vtinput.ControlKeyState) bool {
 }
 
 func (h *GogpuHost) syncMods(vk uint16, mods gpucontext.Modifiers, isDown bool) vtinput.ControlKeyState {
-	var sysMods vtinput.ControlKeyState
-	if mods.HasShift() {
-		sysMods |= vtinput.ShiftPressed
-	}
-	if mods.HasControl() {
-		sysMods |= vtinput.LeftCtrlPressed
-	}
-	if mods.HasAlt() {
-		sysMods |= vtinput.LeftAltPressed
-	}
-
 	if isDown {
-		if vk == vtinput.VK_SHIFT {
-			sysMods |= vtinput.ShiftPressed
-		}
-		if vk == vtinput.VK_CONTROL {
-			sysMods |= vtinput.LeftCtrlPressed
-		}
-		if vk == vtinput.VK_MENU {
-			sysMods |= vtinput.LeftAltPressed
+		if vk == vtinput.VK_LSHIFT {
+			h.currentMods |= vtinput.ShiftPressed
+		} else if vk == vtinput.VK_RSHIFT {
+			h.currentMods |= vtinput.ShiftPressed
+		} else if vk == vtinput.VK_LCONTROL {
+			h.currentMods |= vtinput.LeftCtrlPressed
+		} else if vk == vtinput.VK_RCONTROL {
+			h.currentMods |= vtinput.RightCtrlPressed
+		} else if vk == vtinput.VK_LMENU {
+			h.currentMods |= vtinput.LeftAltPressed
+		} else if vk == vtinput.VK_RMENU {
+			h.currentMods |= vtinput.RightAltPressed
 		}
 	} else {
-		if vk == vtinput.VK_SHIFT {
-			sysMods &^= vtinput.ShiftPressed
-		}
-		if vk == vtinput.VK_CONTROL {
-			sysMods &^= vtinput.LeftCtrlPressed
-		}
-		if vk == vtinput.VK_MENU {
-			sysMods &^= vtinput.LeftAltPressed
+		if vk == vtinput.VK_LSHIFT || vk == vtinput.VK_RSHIFT {
+			if !mods.HasShift() {
+				h.currentMods &^= vtinput.ShiftPressed
+			}
+		} else if vk == vtinput.VK_LCONTROL {
+			h.currentMods &^= vtinput.LeftCtrlPressed
+		} else if vk == vtinput.VK_RCONTROL {
+			h.currentMods &^= vtinput.RightCtrlPressed
+		} else if vk == vtinput.VK_LMENU {
+			h.currentMods &^= vtinput.LeftAltPressed
+		} else if vk == vtinput.VK_RMENU {
+			h.currentMods &^= vtinput.RightAltPressed
 		}
 	}
 
-	h.currentMods = sysMods
-	return sysMods
+	if mods.HasShift() {
+		h.currentMods |= vtinput.ShiftPressed
+	} else {
+		h.currentMods &^= vtinput.ShiftPressed
+	}
+	if !mods.HasControl() {
+		h.currentMods &^= (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)
+	} else if (h.currentMods & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) == 0 {
+		h.currentMods |= vtinput.LeftCtrlPressed
+	}
+	if !mods.HasAlt() {
+		h.currentMods &^= (vtinput.LeftAltPressed | vtinput.RightAltPressed)
+	} else if (h.currentMods & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) == 0 {
+		h.currentMods |= vtinput.LeftAltPressed
+	}
+
+	return h.currentMods
 }
 
 func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp func()) error {
@@ -546,12 +561,18 @@ func gogpuKeyToVK(k gpucontext.Key) uint16 {
 		return vtinput.VK_TAB
 	case gpucontext.KeySpace:
 		return vtinput.VK_SPACE
-	case gpucontext.KeyLeftControl, gpucontext.KeyRightControl:
-		return vtinput.VK_CONTROL
-	case gpucontext.KeyLeftShift, gpucontext.KeyRightShift:
-		return vtinput.VK_SHIFT
-	case gpucontext.KeyLeftAlt, gpucontext.KeyRightAlt:
-		return vtinput.VK_MENU
+	case gpucontext.KeyLeftControl:
+		return vtinput.VK_LCONTROL
+	case gpucontext.KeyRightControl:
+		return vtinput.VK_RCONTROL
+	case gpucontext.KeyLeftShift:
+		return vtinput.VK_LSHIFT
+	case gpucontext.KeyRightShift:
+		return vtinput.VK_RSHIFT
+	case gpucontext.KeyLeftAlt:
+		return vtinput.VK_LMENU
+	case gpucontext.KeyRightAlt:
+		return vtinput.VK_RMENU
 	case gpucontext.KeyA:
 		return vtinput.VK_A
 	case gpucontext.KeyB:

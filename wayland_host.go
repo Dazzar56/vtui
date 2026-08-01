@@ -36,6 +36,7 @@ type WaylandHost struct {
 	repeatChar  rune
 	repeatMods  vtinput.ControlKeyState
 	repeatNext  time.Time
+	currentMods vtinput.ControlKeyState
 }
 
 func runInWaylandWindow(cols, rows int, fontName string, fontSize float64, setupApp func()) error {
@@ -269,20 +270,57 @@ func (h *WaylandHost) Key(win *window.Window, input *window.Input, timeMs uint32
 	vk := keysymToVK(notUnicode) // Reuse the XKB keysym to VK mapping from X11
 
 	char := input.GetRune(&notUnicode, key)
-	mods := h.getMods(input)
 
 	h.mu.Lock()
 	if isDown {
 		h.isRepeating = true
 		h.repeatVK = vk
 		h.repeatChar = char
-		h.repeatMods = mods
+		if vk == vtinput.VK_LSHIFT || vk == vtinput.VK_RSHIFT {
+			h.currentMods |= vtinput.ShiftPressed
+		} else if vk == vtinput.VK_LCONTROL {
+			h.currentMods |= vtinput.LeftCtrlPressed
+		} else if vk == vtinput.VK_RCONTROL {
+			h.currentMods |= vtinput.RightCtrlPressed
+		} else if vk == vtinput.VK_LMENU {
+			h.currentMods |= vtinput.LeftAltPressed
+		} else if vk == vtinput.VK_RMENU {
+			h.currentMods |= vtinput.RightAltPressed
+		}
+		h.repeatMods = h.currentMods
 		h.repeatNext = time.Now().Add(400 * time.Millisecond)
 		// Force an immediate redraw to start the spin loop
 		h.widget.ScheduleRedraw()
 	} else {
 		h.isRepeating = false
+		if vk == vtinput.VK_LSHIFT || vk == vtinput.VK_RSHIFT {
+			h.currentMods &^= vtinput.ShiftPressed
+		} else if vk == vtinput.VK_LCONTROL {
+			h.currentMods &^= vtinput.LeftCtrlPressed
+		} else if vk == vtinput.VK_RCONTROL {
+			h.currentMods &^= vtinput.RightCtrlPressed
+		} else if vk == vtinput.VK_LMENU {
+			h.currentMods &^= vtinput.LeftAltPressed
+		} else if vk == vtinput.VK_RMENU {
+			h.currentMods &^= vtinput.RightAltPressed
+		}
 	}
+
+	waylandMods := h.getMods(input)
+	if waylandMods&vtinput.ShiftPressed == 0 {
+		h.currentMods &^= vtinput.ShiftPressed
+	}
+	if waylandMods&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed) == 0 {
+		h.currentMods &^= (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)
+	} else if h.currentMods&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed) == 0 {
+		h.currentMods |= vtinput.LeftCtrlPressed
+	}
+	if waylandMods&(vtinput.LeftAltPressed|vtinput.RightAltPressed) == 0 {
+		h.currentMods &^= (vtinput.LeftAltPressed | vtinput.RightAltPressed)
+	} else if h.currentMods&(vtinput.LeftAltPressed|vtinput.RightAltPressed) == 0 {
+		h.currentMods |= vtinput.LeftAltPressed
+	}
+	modsToSend := h.currentMods
 	h.mu.Unlock()
 
 	if h.reader != nil {
@@ -291,7 +329,7 @@ func (h *WaylandHost) Key(win *window.Window, input *window.Input, timeMs uint32
 			KeyDown:         isDown,
 			VirtualKeyCode:  vk,
 			Char:            char,
-			ControlKeyState: mods,
+			ControlKeyState: modsToSend,
 		}
 	}
 }
