@@ -370,6 +370,11 @@ func (bw *BaseWindow) SetData(record any) {
 func (bw *BaseWindow) GetData(record any) {
 	bw.rootGroup.GetData(record)
 }
+func (bw *BaseWindow) SetTitle(title string) {
+	if bw.frame != nil {
+		bw.frame.SetTitle(title)
+	}
+}
 func (bw *BaseWindow) GetTitle() string {
 	if bw.frame != nil {
 		return bw.frame.title
