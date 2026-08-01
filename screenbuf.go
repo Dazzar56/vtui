@@ -660,9 +660,9 @@ func (r *AnsiRenderer) Flush() {
 					}
 				} else {
 					if r.cursorShape == CursorShapeBlock {
-						r.frameOut.WriteString("\x1b[1 q") // Blinking Block
+						r.frameOut.WriteString("\x1b[0 q\x1b]1337;CursorShape=0\x07")
 					} else {
-						r.frameOut.WriteString("\x1b[3 q") // Blinking Underline
+						r.frameOut.WriteString("\x1b[3 q\x1b]1337;CursorShape=2\x07")
 					}
 				}
 			}
