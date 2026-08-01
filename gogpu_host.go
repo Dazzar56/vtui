@@ -36,6 +36,9 @@ type GogpuHost struct {
 	pendingKeyTimer *time.Timer
 	lastRuneForVK   map[uint16]rune
 	lastVK          uint16
+	lCtrl, rCtrl   bool
+	lAlt, rAlt     bool
+	lShift, rShift bool
 
 	// Cached sizes to prevent deadlocks and speed up GetTerminalSize
 	lastAppW, lastAppH int
@@ -85,52 +88,42 @@ func isSpecialOrModifiedKey(vk uint16, mods vtinput.ControlKeyState) bool {
 
 func (h *GogpuHost) syncMods(vk uint16, mods gpucontext.Modifiers, isDown bool) vtinput.ControlKeyState {
 	if isDown {
-		if vk == vtinput.VK_LSHIFT {
-			h.currentMods |= vtinput.ShiftPressed
-		} else if vk == vtinput.VK_RSHIFT {
-			h.currentMods |= vtinput.ShiftPressed
-		} else if vk == vtinput.VK_LCONTROL {
-			h.currentMods |= vtinput.LeftCtrlPressed
-		} else if vk == vtinput.VK_RCONTROL {
-			h.currentMods |= vtinput.RightCtrlPressed
-		} else if vk == vtinput.VK_LMENU {
-			h.currentMods |= vtinput.LeftAltPressed
-		} else if vk == vtinput.VK_RMENU {
-			h.currentMods |= vtinput.RightAltPressed
-		}
+		if vk == vtinput.VK_LCONTROL { h.lCtrl = true }
+		if vk == vtinput.VK_RCONTROL { h.rCtrl = true }
+		if vk == vtinput.VK_LMENU { h.lAlt = true }
+		if vk == vtinput.VK_RMENU { h.rAlt = true }
+		if vk == vtinput.VK_LSHIFT { h.lShift = true }
+		if vk == vtinput.VK_RSHIFT { h.rShift = true }
 	} else {
-		if vk == vtinput.VK_LSHIFT || vk == vtinput.VK_RSHIFT {
-			if !mods.HasShift() {
-				h.currentMods &^= vtinput.ShiftPressed
-			}
-		} else if vk == vtinput.VK_LCONTROL {
-			h.currentMods &^= vtinput.LeftCtrlPressed
-		} else if vk == vtinput.VK_RCONTROL {
-			h.currentMods &^= vtinput.RightCtrlPressed
-		} else if vk == vtinput.VK_LMENU {
-			h.currentMods &^= vtinput.LeftAltPressed
-		} else if vk == vtinput.VK_RMENU {
-			h.currentMods &^= vtinput.RightAltPressed
-		}
+		if vk == vtinput.VK_LCONTROL { h.lCtrl = false }
+		if vk == vtinput.VK_RCONTROL { h.rCtrl = false }
+		if vk == vtinput.VK_LMENU { h.lAlt = false }
+		if vk == vtinput.VK_RMENU { h.rAlt = false }
+		if vk == vtinput.VK_LSHIFT { h.lShift = false }
+		if vk == vtinput.VK_RSHIFT { h.rShift = false }
 	}
 
+	var sysMods vtinput.ControlKeyState
 	if mods.HasShift() {
-		h.currentMods |= vtinput.ShiftPressed
-	} else {
-		h.currentMods &^= vtinput.ShiftPressed
+		sysMods |= vtinput.ShiftPressed
 	}
-	if !mods.HasControl() {
-		h.currentMods &^= (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)
-	} else if (h.currentMods & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) == 0 {
-		h.currentMods |= vtinput.LeftCtrlPressed
+	if mods.HasControl() {
+		if h.rCtrl {
+			sysMods |= vtinput.RightCtrlPressed
+		} else {
+			sysMods |= vtinput.LeftCtrlPressed
+		}
 	}
-	if !mods.HasAlt() {
-		h.currentMods &^= (vtinput.LeftAltPressed | vtinput.RightAltPressed)
-	} else if (h.currentMods & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) == 0 {
-		h.currentMods |= vtinput.LeftAltPressed
+	if mods.HasAlt() {
+		if h.rAlt {
+			sysMods |= vtinput.RightAltPressed
+		} else {
+			sysMods |= vtinput.LeftAltPressed
+		}
 	}
 
-	return h.currentMods
+	h.currentMods = sysMods
+	return sysMods
 }
 
 func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp func()) error {
