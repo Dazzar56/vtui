@@ -375,7 +375,7 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 		mx, my := app.Input().Mouse().Position()
 
 		// Multiply scroll lines to match preferred user experience
-		steps := int(math.Abs(dy) * 3)
+		steps := int(math.Abs(dy) * float64(getSystemScrollLines()))
 		if steps == 0 {
 			return
 		}
@@ -394,8 +394,8 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 		// Request a redraw to ensure the UI updates instantly in event-driven mode
 		app.RequestRedraw()
 	})
-
-	var infoLogged sync.Once
+    
+    var infoLogged sync.Once
 	app.OnDraw(func(dc *gogpu.Context) {
 		w, h := dc.Width(), dc.Height()
 

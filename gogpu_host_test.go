@@ -4,6 +4,7 @@ package vtui
 
 import (
 	"io"
+	"runtime"
 	"testing"
 	"time"
 
@@ -134,5 +135,15 @@ func TestGogpuHost_LastRuneForVK_KeyRepeat(t *testing.T) {
 
 	if ev.Char != 'a' {
 		t.Errorf("Expected restored Char 'a', got %c", ev.Char)
+	}
+}
+func TestGetSystemScrollLines(t *testing.T) {
+	lines := getSystemScrollLines()
+	if lines <= 0 {
+		t.Errorf("Expected positive number of scroll lines, got %d", lines)
+	}
+	// Under non-Windows, it should return 3
+	if runtime.GOOS != "windows" && lines != 3 {
+		t.Errorf("Expected 3 scroll lines on non-Windows platforms, got %d", lines)
 	}
 }
