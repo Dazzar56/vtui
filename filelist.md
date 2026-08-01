@@ -1,5 +1,5 @@
 # Project Structure
-Last updated: 2026-07-31 22:10:10
+Last updated: 2026-08-01 17:38:19
 
 ```text
 .
@@ -57,6 +57,8 @@ Last updated: 2026-07-31 22:10:10
 ├── gogpu_host_test.go
 ├── gogpu_renderer.go
 ├── gogpu_renderer_test.go
+├── gogpu_scroll_other.go
+├── gogpu_scroll_windows.go
 ├── gogpu_stub.go
 ├── go.mod
 ├── go.sum
@@ -161,5 +163,5 @@ Last updated: 2026-07-31 22:10:10
 ├── xlat_tables.go
 └── xlat_test.go
 
-3 directories, 155 files
+3 directories, 157 files
 ```
