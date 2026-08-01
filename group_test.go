@@ -350,6 +350,30 @@ func TestGroup_ProcessMouse_EmptySpacePropagation(t *testing.T) {
 		t.Error("Expected empty space click to successfully trigger window dragging")
 	}
 }
+func TestGroup_GetElementAt(t *testing.T) {
+	g := NewGroup(0, 0, 50, 50)
+
+	gb := NewGroupBox(5, 5, 30, 20, "Box")
+	g.AddItem(gb)
+
+	btn := NewButton(10, 10, "ClickMe")
+	gb.AddItem(btn)
+
+	// 1. Hit test exact button coordinates
+	if el := g.GetElementAt(12, 10); el != btn {
+		t.Errorf("Expected button at (12,10), got %T", el)
+	}
+
+	// 2. Hit test empty space in GroupBox
+	if el := g.GetElementAt(6, 6); el != gb {
+		t.Errorf("Expected GroupBox at (6,6), got %T", el)
+	}
+
+	// 3. Hit test outside
+	if el := g.GetElementAt(1, 1); el != nil {
+		t.Errorf("Expected nil at (1,1), got %T", el)
+	}
+}
 func TestGroup_DoubleFocusRegression(t *testing.T) {
 	SetDefaultPalette()
 

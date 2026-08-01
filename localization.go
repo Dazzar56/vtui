@@ -28,6 +28,18 @@ func Msg(key string) string {
 	}
 	return fmt.Sprintf("{%s}", key)
 }
+// ReverseLookup attempts to find the translation key for a given localized string.
+// This is used exclusively by the developer/translator tools.
+func ReverseLookup(val string) string {
+	stringsMu.RLock()
+	defer stringsMu.RUnlock()
+	for k, v := range stringsMap {
+		if v == val {
+			return k
+		}
+	}
+	return ""
+}
 
 // AddStrings allows an application to add or override strings in the UI.
 func AddStrings(m map[string]string) {

@@ -27,3 +27,18 @@ func TestLocalization_Msg(t *testing.T) {
 		t.Errorf("Overriding existing key failed, got %q", Msg("vtui.Ok"))
 	}
 }
+func TestReverseLookup(t *testing.T) {
+	AddStrings(map[string]string{
+		"Test.ReverseKey": "UniqueTranslatedString",
+	})
+
+	gotKey := ReverseLookup("UniqueTranslatedString")
+	if gotKey != "Test.ReverseKey" {
+		t.Errorf("ReverseLookup = %q; want %q", gotKey, "Test.ReverseKey")
+	}
+
+	missingKey := ReverseLookup("NonExistentString12345")
+	if missingKey != "" {
+		t.Errorf("ReverseLookup(missing) = %q; want empty string", missingKey)
+	}
+}

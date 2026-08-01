@@ -2039,3 +2039,51 @@ func TestFrameManager_WaitFar2lResponse_NilEvent(t *testing.T) {
 		t.Error("WaitFar2lResponse returned nil, expected valid response after skipping nil event")
 	}
 }
+func TestFrameManager_TranslatorTool(t *testing.T) {
+	// Временно отключаем синхронизацию с far2l, чтобы избежать 15-секундного таймаута в тестах
+	oldFar2l := Far2lEnabled
+	Far2lEnabled = false
+	defer func() { Far2lEnabled = oldFar2l }()
+
+	fm := &frameManager{}
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	fm.Init(scr)
+	defer fm.Shutdown()
+
+	oldFm := FrameManager
+	FrameManager = fm
+	defer func() { FrameManager = oldFm }()
+
+	AddStrings(map[string]string{"Label.TestKey": "TestLabelText"})
+
+	dlg := NewDialog(0, 0, 30, 20, "TestDialog")
+	dlg.SetHelp("Help.DialogContext")
+
+	txt := NewText(10, 10, "TestLabelText", 0)
+	txt.SetHelp("Help.TextContext")
+	dlg.AddItem(txt)
+
+	fm.Push(dlg)
+
+	SetOSClipboard("")
+
+	ev := &vtinput.InputEvent{
+		Type:            vtinput.MouseEventType,
+		MouseX:          12,
+		MouseY:          10,
+		ButtonState:     vtinput.RightmostButtonPressed,
+		KeyDown:         true,
+		ControlKeyState: vtinput.LeftCtrlPressed | vtinput.LeftAltPressed,
+	}
+
+	fm.dispatchEvent(ev, false)
+
+	clip := GetOSClipboard()
+	if !strings.Contains(clip, "Key:  Label.TestKey") {
+		t.Errorf("Clipboard missing key 'Label.TestKey'. Got:\n%s", clip)
+	}
+	if !strings.Contains(clip, "Help.DialogContext -> Help.TextContext") {
+		t.Errorf("Clipboard missing help context stack. Got:\n%s", clip)
+	}
+}

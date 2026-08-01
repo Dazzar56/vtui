@@ -67,6 +67,20 @@ func (g *Group) SetFocusedItem(item UIElement) {
 func (g *Group) GetChildren() []UIElement {
 	return g.items
 }
+func (g *Group) GetElementAt(x, y int) UIElement {
+	for i := len(g.items) - 1; i >= 0; i-- {
+		item := g.items[i]
+		if item.HitTest(x, y) {
+			if c, ok := item.(Container); ok {
+				if child := c.GetElementAt(x, y); child != nil {
+					return child
+				}
+			}
+			return item
+		}
+	}
+	return nil
+}
 
 // walk is a helper for recursive traversal of the UI tree.
 // Returning false from the callback stops the traversal.

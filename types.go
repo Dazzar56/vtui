@@ -84,6 +84,7 @@ type UIElement interface {
 // Container is an interface for elements that have child UI elements.
 type Container interface {
 	GetChildren() []UIElement
+	GetElementAt(x, y int) UIElement
 }
 
 // DataControl is an interface for UI elements that can store and return data.

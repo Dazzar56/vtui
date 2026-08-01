@@ -45,6 +45,13 @@ func (w *Window) GetType() FrameType {
 	}
 	return TypeUser
 }
+func (w *Window) GetElementAt(x, y int) UIElement {
+	return w.rootGroup.GetElementAt(x, y)
+}
+
+func (w *Window) GetChildren() []UIElement {
+	return w.rootGroup.GetChildren()
+}
 
 func (w *Window) GetProgress() int  { return w.progress }
 func (w *Window) SetProgress(p int) { w.progress = p }

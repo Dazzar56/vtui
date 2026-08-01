@@ -1298,6 +1298,81 @@ func (fm *frameManager) renderPhase() {
 
 func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) {
 	DebugLog("FM_DISPATCH: Received event: %s", ev.String())
+	// Translator Tool: Ctrl+Alt+RightClick
+	if ev.Type == vtinput.MouseEventType && ev.ButtonState == vtinput.RightmostButtonPressed && ev.KeyDown {
+		ctrl := (ev.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
+		alt := (ev.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
+		if ctrl && alt {
+			mx, my := int(ev.MouseX), int(ev.MouseY)
+
+			// Find the top-most frame under the mouse
+			var hitFrame Frame
+			for i := len(fm.frames) - 1; i >= 0; i-- {
+				if fm.frames[i].HitTest(mx, my) {
+					hitFrame = fm.frames[i]
+					break
+				}
+			}
+
+			if hitFrame != nil {
+				var target UIElement
+				if c, ok := hitFrame.(interface{ GetElementAt(x, y int) UIElement }); ok {
+					target = c.GetElementAt(mx, my)
+				}
+
+				if target != nil {
+					// 1. Extract text (using interfaces)
+					text := ""
+					if txtObj, ok := target.(interface{ GetText() string }); ok {
+						text = txtObj.GetText()
+					}
+
+					// 2. Reverse lookup key
+					key := ""
+					if text != "" {
+						key = ReverseLookup(text)
+					}
+
+					// 3. Build Help Context Stack
+					var contexts []string
+					if target.GetHelp() != "" {
+						contexts = append(contexts, target.GetHelp())
+					}
+					owner := target.GetOwner()
+					for owner != nil {
+						if owner.GetHelp() != "" {
+							contexts = append([]string{owner.GetHelp()}, contexts...) // Prepend
+						}
+						if obj, ok := owner.(interface{ GetOwner() CommandHandler }); ok {
+							owner = obj.GetOwner()
+						} else {
+							break
+						}
+					}
+
+					// 4. Format and copy to clipboard
+					report := "--- f4 Translator Tool ---\n"
+					if key != "" {
+						report += fmt.Sprintf("Key:  %s\nText: %s\n", key, text)
+					} else if text != "" {
+						report += fmt.Sprintf("Key:  <HARDCODED>\nText: %s\n", text)
+					} else {
+						report += "Key:  <NO TEXT>\n"
+					}
+
+					ctxStr := "None"
+					if len(contexts) > 0 {
+						ctxStr = strings.Join(contexts, " -> ")
+					}
+					report += fmt.Sprintf("Help Context: %s\n", ctxStr)
+
+					SetClipboard(report)
+					ShowToast("Translator info copied to clipboard", 3 * time.Second)
+					return // Consume event
+				}
+			}
+		}
+	}
 	RecordEvent(ev.String())
 	if ev.Type == vtinput.Far2lEventType {
 		DebugLog("FM_DISPATCH: Processing Far2l event: cmd=%q", ev.Far2lCommand)
