@@ -52,4 +52,14 @@ func TestButton_HotkeyParsing(t *testing.T) {
 	if node["hotkey"] != "v" {
 		t.Errorf("Expected semantic hotkey %q, got %v", "v", node["hotkey"])
 	}
+
+	// A later SetText must re-decorate the text and refresh both the caption
+	// and the hotkey.
+	b.SetText("&Close")
+	if b.GetCaption() != "Close" || b.GetText() != "[ &Close ]" {
+		t.Errorf("Expected the caption to follow SetText, got %q and %q", b.GetCaption(), b.GetText())
+	}
+	if b.GetHotkey() != 'c' {
+		t.Errorf("Expected hotkey 'c' after SetText, got %c", b.GetHotkey())
+	}
 }
