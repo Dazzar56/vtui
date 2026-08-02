@@ -38,4 +38,18 @@ func TestButton_HotkeyParsing(t *testing.T) {
 	if b.GetHotkey() != 'v' {
 		t.Errorf("Expected hotkey 'v', got %c", b.GetHotkey())
 	}
+	// The brackets must not leak into the caption exposed to the outside.
+	if b.GetCaption() != "Save" {
+		t.Errorf("Expected caption %q, got %q", "Save", b.GetCaption())
+	}
+	if b.GetText() != "[ Sa&ve ]" {
+		t.Errorf("Expected raw text %q, got %q", "[ Sa&ve ]", b.GetText())
+	}
+	node := b.SemanticNode(&SemanticContext{Width: 80, Height: 25})
+	if node["text"] != "Save" {
+		t.Errorf("Expected semantic text %q, got %v", "Save", node["text"])
+	}
+	if node["hotkey"] != "v" {
+		t.Errorf("Expected semantic hotkey %q, got %v", "v", node["hotkey"])
+	}
 }

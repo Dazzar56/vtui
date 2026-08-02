@@ -10,6 +10,7 @@ type Button struct {
 	ScreenObject
 	OnClick   func()
 	IsDefault bool
+	caption   string
 }
 
 func NewButton(x, y int, text string) *Button {
@@ -18,10 +19,24 @@ func NewButton(x, y int, text string) *Button {
 	b.Y2 = y
 	b.canFocus = true
 	// Buttons in Far always look like "[ Text ]"
-	b.SetText(string(UIStrings.ButtonBrackets[0]) + " " + text + " " + string(UIStrings.ButtonBrackets[1]))
+	b.SetText(text)
 	// Calculate width based on the parsed clean text
 	b.X2 = b.X1 + runewidth.StringWidth(b.cleanText) - 1
 	return b
+}
+
+// SetText assigns the button caption. The stored text is always decorated
+// with the Far-style brackets, while the bare caption is kept aside, so the
+// semantic export and external tooling can use it as is.
+func (b *Button) SetText(text string) {
+	b.caption, _, _ = ParseAmpersandString(text)
+	b.ScreenObject.SetText(string(UIStrings.ButtonBrackets[0]) + " " + text + " " + string(UIStrings.ButtonBrackets[1]))
+}
+
+// GetCaption returns the button caption without the decorating brackets
+// and without the ampersand hotkey marker.
+func (b *Button) GetCaption() string {
+	return b.caption
 }
 
 func (b *Button) Show(scr *ScreenBuf) {
