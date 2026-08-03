@@ -2,6 +2,7 @@
 package vtui
 
 import (
+	"image"
 	"image/color"
 	"math"
 	"sync"
