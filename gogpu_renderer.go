@@ -495,10 +495,12 @@ func (r *GogpuRenderer) DrawToScreen(ctx *gogpu.Context) {
 					continue
 				}
 
-				dc.SetColor(color.White)
+				dc.SetRGBA(1, 1, 1, 1)
 
-				if drawer, ok := any(dc).(imageDrawer); ok {
-					drawer.DrawImage(entry.asImage(), px, py)
+				if drawerF, ok := any(dc).(interface{ DrawImage(img image.Image, x, y float64) }); ok {
+					drawerF.DrawImage(entry.asImage(), float64(px), float64(py))
+				} else if drawerI, ok := any(dc).(interface{ DrawImage(img image.Image, x, y int) }); ok {
+					drawerI.DrawImage(entry.asImage(), px, py)
 				} else {
 					warnNoImageDrawer()
 				}
