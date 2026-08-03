@@ -29,6 +29,11 @@ type X11Renderer struct {
 	lastCursorReset time.Time
 
 	stats renderStats
+
+	gfxList  []ImagePlacement
+	gfxCache nativeGraphicsCache
+	gfxGen   uint64
+	gfxKnown bool
 }
 
 func NewX11Renderer(host *X11Host, face font.Face) *X11Renderer {
@@ -118,6 +123,39 @@ func (r *X11Renderer) SetWindowTitle(title string) {
 		}
 	}
 }
+// RenderGraphics implements GraphicsRenderer by compositing the image layer
+// straight into the window framebuffer. That is both faster and sharper than
+// any escape sequence protocol, and it needs nothing from the terminal.
+func (r *X11Renderer) RenderGraphics(layer *GraphicsLayer, buf, shadow []CharInfo, w, h int, force bool) {
+	if layer == nil || layer.Protocol() != GraphicsNative {
+		return
+	}
+
+	gen := layer.Generation()
+	if !force && r.gfxKnown && gen == r.gfxGen && !layer.DirtyRowsUnder(buf, shadow, w, h) {
+		return
+	}
+	r.gfxGen = gen
+	r.gfxKnown = true
+
+	r.host.mu.Lock()
+	defer r.host.mu.Unlock()
+
+	img := r.host.imgBuf
+	cw, ch := r.host.cellW, r.host.cellH
+	if img == nil || cw <= 0 || ch <= 0 {
+		return
+	}
+
+	r.gfxList, _ = layer.Snapshot(r.gfxList)
+	rect := drawNativePlacements(img, r.gfxList, cw, ch, &r.gfxCache)
+	for y := rect.Min.Y; y < rect.Max.Y; y++ {
+		if y >= 0 && y < len(r.host.dirtyLines) {
+			r.host.dirtyLines[y] = true
+		}
+	}
+}
+
 func (r *X11Renderer) getCellColors(cell CharInfo) (uint32, uint32) {
 	bg := GetRGBBack(cell.Attributes)
 	if cell.Attributes&IsBgRGB == 0 {

@@ -28,6 +28,11 @@ type WaylandRenderer struct {
 	lastCursorReset time.Time
 
 	stats renderStats
+
+	gfxList  []ImagePlacement
+	gfxCache nativeGraphicsCache
+	gfxGen   uint64
+	gfxKnown bool
 }
 
 func NewWaylandRenderer(host *WaylandHost, face font.Face) *WaylandRenderer {
@@ -73,6 +78,34 @@ func (r *WaylandRenderer) ResizeWindow(cols, rows int) {
 		widget.ScheduleResize(int32(cols*cw), int32(rows*ch))
 	}
 }
+// RenderGraphics implements GraphicsRenderer. The Wayland host pushes the
+// whole buffer to the compositor on every flush, so unlike X11 there are no
+// dirty lines to mark.
+func (r *WaylandRenderer) RenderGraphics(layer *GraphicsLayer, buf, shadow []CharInfo, w, h int, force bool) {
+	if layer == nil || layer.Protocol() != GraphicsNative {
+		return
+	}
+
+	gen := layer.Generation()
+	if !force && r.gfxKnown && gen == r.gfxGen && !layer.DirtyRowsUnder(buf, shadow, w, h) {
+		return
+	}
+	r.gfxGen = gen
+	r.gfxKnown = true
+
+	r.host.mu.Lock()
+	defer r.host.mu.Unlock()
+
+	img := r.host.imgBuf
+	cw, ch := r.host.cellW, r.host.cellH
+	if img == nil || cw <= 0 || ch <= 0 {
+		return
+	}
+
+	r.gfxList, _ = layer.Snapshot(r.gfxList)
+	drawNativePlacements(img, r.gfxList, cw, ch, &r.gfxCache)
+}
+
 func (r *WaylandRenderer) getCellColors(cell CharInfo) (uint32, uint32) {
 	bg := GetRGBBack(cell.Attributes)
 	if cell.Attributes&IsBgRGB == 0 {

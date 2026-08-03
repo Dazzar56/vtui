@@ -544,7 +544,7 @@ func (s *ScreenBuf) Flush() {
 	}
 	s.Renderer.Flush()
 
-	s.dirty = false
+	s.dirty = s.graphics.TakeRepaintRequest()
 	s.cursorDirty = false
 	copy(s.shadow, s.buf)
 }

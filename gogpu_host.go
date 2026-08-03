@@ -188,6 +188,8 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 	scr.AllocBuf(cols, rows)
 	renderer := NewGogpuRenderer(host, face, cellW, cellH)
 	scr.Renderer = renderer
+	scr.Graphics().SetProtocol(GraphicsNative)
+	scr.Graphics().SetCellSize(cellW, cellH)
 
 	FrameManager.Init(scr)
 

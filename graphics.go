@@ -310,6 +310,8 @@ type GraphicsLayer struct {
 
 	cellW int
 	cellH int
+
+	repaint bool
 }
 
 // Protocol returns the active protocol, detecting it on first use.
@@ -333,6 +335,7 @@ func (g *GraphicsLayer) SetProtocol(p GraphicsProtocol) {
 	g.protocol = p
 	g.protocolValid = true
 	g.gen++
+	g.repaint = true
 }
 
 // Supported reports whether images can be displayed at all.
@@ -387,6 +390,7 @@ func (g *GraphicsLayer) Update(id uint32, mutate func(*ImagePlacement)) bool {
 		if g.placements[i].ID == id {
 			mutate(&g.placements[i])
 			g.placements[i].ID = id
+			g.repaint = true
 			g.gen++
 			return true
 		}
@@ -402,6 +406,7 @@ func (g *GraphicsLayer) Remove(id uint32) bool {
 		if g.placements[i].ID == id {
 			g.placements = append(g.placements[:i], g.placements[i+1:]...)
 			g.gen++
+			g.repaint = true
 			return true
 		}
 	}
@@ -417,6 +422,7 @@ func (g *GraphicsLayer) Clear() {
 	}
 	g.placements = g.placements[:0]
 	g.gen++
+	g.repaint = true
 }
 
 // Len returns the number of placements.
@@ -432,6 +438,19 @@ func (g *GraphicsLayer) Generation() uint64 {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return g.gen
+}
+
+// TakeRepaintRequest reports, and clears, a pending request to repaint the
+// text under the images. A placement that moved or disappeared leaves the
+// pixels of the previous frame behind, and only a full redraw clears them.
+func (g *GraphicsLayer) TakeRepaintRequest() bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if !g.repaint {
+		return false
+	}
+	g.repaint = false
+	return true
 }
 
 // Invalidate forces the next frame to re-emit everything, for example after

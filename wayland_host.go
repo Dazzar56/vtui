@@ -78,6 +78,8 @@ func runInWaylandWindow(cols, rows int, fontName string, fontSize float64, setup
 	scr := NewScreenBuf()
 	scr.AllocBuf(cols, rows)
 	scr.Renderer = NewWaylandRenderer(host, face)
+	scr.Graphics().SetProtocol(GraphicsNative)
+	scr.Graphics().SetCellSize(cellW, cellH)
 	FrameManager.Init(scr)
 
 	pr, _ := io.Pipe()

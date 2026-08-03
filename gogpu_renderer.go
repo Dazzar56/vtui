@@ -31,6 +31,11 @@ type GogpuRenderer struct {
 	canvas    *ggcanvas.Canvas
 	renderBuf []CharInfo
 	dirty     bool
+
+	gfxList  []ImagePlacement
+	gfxCache nativeGraphicsCache
+	gfxGen   uint64
+	gfxKnown bool
 }
 
 func NewGogpuRenderer(host *GogpuHost, face text.Face, cw, ch int) *GogpuRenderer {
@@ -94,6 +99,26 @@ func (r *GogpuRenderer) SetCursor(x, y int, visible bool, shape CursorShape) {
 		r.lastBlinkState = true
 		r.dirty = true
 	}
+	r.mu.Unlock()
+}
+
+// RenderGraphics implements GraphicsRenderer. The GPU canvas is rebuilt as a
+// whole whenever it is dirty, so here we only have to remember the snapshot
+// and make sure the next frame is considered dirty.
+func (r *GogpuRenderer) RenderGraphics(layer *GraphicsLayer, buf, shadow []CharInfo, w, h int, force bool) {
+	if layer == nil || layer.Protocol() != GraphicsNative {
+		return
+	}
+
+	list, gen := layer.Snapshot(nil)
+
+	r.mu.Lock()
+	if force || !r.gfxKnown || gen != r.gfxGen {
+		r.dirty = true
+	}
+	r.gfxList = list
+	r.gfxGen = gen
+	r.gfxKnown = true
 	r.mu.Unlock()
 }
 
@@ -457,6 +482,23 @@ func (r *GogpuRenderer) DrawToScreen(ctx *gogpu.Context) {
 					}
 
 					x += spanW
+				}
+			}
+
+			for i := range r.gfxList {
+				p := &r.gfxList[i]
+				px, py, pw, ph := placementPixelRect(p, r.cellW, r.cellH)
+				if pw <= 0 || ph <= 0 {
+					continue
+				}
+				entry := r.gfxCache.scaled(p, pw, ph)
+				if entry == nil {
+					continue
+				}
+				if drawer, ok := any(dc).(imageDrawer); ok {
+					drawer.DrawImage(entry.asImage(), px, py)
+				} else {
+					warnNoImageDrawer()
 				}
 			}
 
