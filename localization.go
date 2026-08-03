@@ -28,6 +28,7 @@ func Msg(key string) string {
 	}
 	return fmt.Sprintf("{%s}", key)
 }
+
 // ReverseLookup attempts to find the translation key for a given localized string.
 // This is used exclusively by the developer/translator tools.
 func ReverseLookup(val string) string {

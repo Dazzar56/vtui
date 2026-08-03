@@ -11,8 +11,8 @@ import (
 	"github.com/gogpu/gg"
 	_ "github.com/gogpu/gg/gpu" // Включаем аппаратное ускорение рендеринга
 	"github.com/gogpu/gg/integration/ggcanvas"
-	"github.com/gogpu/gogpu"
 	"github.com/gogpu/gg/text"
+	"github.com/gogpu/gogpu"
 )
 
 type GogpuRenderer struct {
@@ -235,7 +235,7 @@ func (r *GogpuRenderer) drawCustomChar(dc *gg.Context, char rune, x, y, w, h flo
 		dc.DrawRectangle(x, my+ofs, mx-x-ofs+thick, thick)
 		dc.DrawRectangle(mx+ofs, y, thick, (my-ofs)-y+thick)
 		dc.DrawRectangle(mx-ofs, y, thick, (my+ofs)-y+thick)
-    case '╠':
+	case '╠':
 		dc.DrawRectangle(mx-ofs, my-ofs, w-(mx-x-ofs), thick)
 		dc.DrawRectangle(mx+ofs, my+ofs, w-(mx-x+ofs), thick)
 		dc.DrawRectangle(mx-ofs, y, thick, h)

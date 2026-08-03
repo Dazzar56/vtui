@@ -1,6 +1,7 @@
 package vtui
 
 import "github.com/unxed/vtinput"
+
 type ColorStyleProvider interface {
 	GetPaletteIndex(baseIdx int) int
 }

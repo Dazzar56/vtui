@@ -150,6 +150,7 @@ func ShowToast(msg string, dur time.Duration) {
 		}()
 	})
 }
+
 // GetActiveToast returns the message of the currently active toast if it hasn't expired yet.
 func (fm *frameManager) GetActiveToast() string {
 	if fm.currentToast != nil && time.Now().Before(fm.currentToast.Expires) {
@@ -837,6 +838,7 @@ func SetWindowTitle(title string) {
 		FrameManager.SetWindowTitle(title)
 	}
 }
+
 // GetTopFrameType returns the type of the topmost frame or -1 if empty.
 func (fm *frameManager) GetTopFrameType() FrameType {
 	if len(fm.frames) == 0 {
@@ -1367,7 +1369,7 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 					report += fmt.Sprintf("Help Context: %s\n", ctxStr)
 
 					SetClipboard(report)
-					ShowToast("Translator info copied to clipboard", 3 * time.Second)
+					ShowToast("Translator info copied to clipboard", 3*time.Second)
 					return // Consume event
 				}
 			}
@@ -1512,7 +1514,6 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 				return
 			}
 		}
-
 
 		// 3.1. Active Mouse Capture (Dragging/Resizing)
 		if fm.capturedFrame != nil {

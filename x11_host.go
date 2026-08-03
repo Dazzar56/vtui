@@ -39,10 +39,10 @@ type X11Host struct {
 	atomDelete xproto.Atom
 	dirtyLines []bool
 
-	translator keytrans.Translator
-	mouseBtn   uint32
-	initialCols int
-	currentMods vtinput.ControlKeyState
+	translator     keytrans.Translator
+	mouseBtn       uint32
+	initialCols    int
+	currentMods    vtinput.ControlKeyState
 	lCtrl, rCtrl   bool
 	lAlt, rAlt     bool
 	lShift, rShift bool
@@ -319,19 +319,43 @@ func (h *X11Host) handleKeyEvent(detail xproto.Keycode, state uint16, isDown boo
 
 		h.mu.Lock()
 		if isDown {
-			if vk == vtinput.VK_LCONTROL { h.lCtrl = true }
-			if vk == vtinput.VK_RCONTROL { h.rCtrl = true }
-			if vk == vtinput.VK_LMENU { h.lAlt = true }
-			if vk == vtinput.VK_RMENU { h.rAlt = true }
-			if vk == vtinput.VK_LSHIFT { h.lShift = true }
-			if vk == vtinput.VK_RSHIFT { h.rShift = true }
+			if vk == vtinput.VK_LCONTROL {
+				h.lCtrl = true
+			}
+			if vk == vtinput.VK_RCONTROL {
+				h.rCtrl = true
+			}
+			if vk == vtinput.VK_LMENU {
+				h.lAlt = true
+			}
+			if vk == vtinput.VK_RMENU {
+				h.rAlt = true
+			}
+			if vk == vtinput.VK_LSHIFT {
+				h.lShift = true
+			}
+			if vk == vtinput.VK_RSHIFT {
+				h.rShift = true
+			}
 		} else {
-			if vk == vtinput.VK_LCONTROL { h.lCtrl = false }
-			if vk == vtinput.VK_RCONTROL { h.rCtrl = false }
-			if vk == vtinput.VK_LMENU { h.lAlt = false }
-			if vk == vtinput.VK_RMENU { h.rAlt = false }
-			if vk == vtinput.VK_LSHIFT { h.lShift = false }
-			if vk == vtinput.VK_RSHIFT { h.rShift = false }
+			if vk == vtinput.VK_LCONTROL {
+				h.lCtrl = false
+			}
+			if vk == vtinput.VK_RCONTROL {
+				h.rCtrl = false
+			}
+			if vk == vtinput.VK_LMENU {
+				h.lAlt = false
+			}
+			if vk == vtinput.VK_RMENU {
+				h.rAlt = false
+			}
+			if vk == vtinput.VK_LSHIFT {
+				h.lShift = false
+			}
+			if vk == vtinput.VK_RSHIFT {
+				h.rShift = false
+			}
 		}
 
 		var sysMods vtinput.ControlKeyState

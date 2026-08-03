@@ -98,8 +98,8 @@ func TestGogpuHost_GetTerminalSize(t *testing.T) {
 		t.Fatalf("GetTerminalSize returned error: %v", err)
 	}
 
-	expectedCols := 800 / 8   // 100
-	expectedRows := 600 / 16  // 37
+	expectedCols := 800 / 8  // 100
+	expectedRows := 600 / 16 // 37
 
 	if cols != expectedCols || rows != expectedRows {
 		t.Errorf("GetTerminalSize: expected %dx%d, got %dx%d", expectedCols, expectedRows, cols, rows)

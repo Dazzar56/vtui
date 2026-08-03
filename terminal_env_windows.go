@@ -57,6 +57,7 @@ func initTerminalOS() {
 		}
 	}
 }
+
 type consoleCursorInfo struct {
 	size    uint32
 	visible int32

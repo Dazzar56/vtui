@@ -36,9 +36,9 @@ type GogpuHost struct {
 	pendingKeyTimer *time.Timer
 	lastRuneForVK   map[uint16]rune
 	lastVK          uint16
-	lCtrl, rCtrl   bool
-	lAlt, rAlt     bool
-	lShift, rShift bool
+	lCtrl, rCtrl    bool
+	lAlt, rAlt      bool
+	lShift, rShift  bool
 
 	// Cached sizes to prevent deadlocks and speed up GetTerminalSize
 	lastAppW, lastAppH int
@@ -88,19 +88,43 @@ func isSpecialOrModifiedKey(vk uint16, mods vtinput.ControlKeyState) bool {
 
 func (h *GogpuHost) syncMods(vk uint16, mods gpucontext.Modifiers, isDown bool) vtinput.ControlKeyState {
 	if isDown {
-		if vk == vtinput.VK_LCONTROL { h.lCtrl = true }
-		if vk == vtinput.VK_RCONTROL { h.rCtrl = true }
-		if vk == vtinput.VK_LMENU { h.lAlt = true }
-		if vk == vtinput.VK_RMENU { h.rAlt = true }
-		if vk == vtinput.VK_LSHIFT { h.lShift = true }
-		if vk == vtinput.VK_RSHIFT { h.rShift = true }
+		if vk == vtinput.VK_LCONTROL {
+			h.lCtrl = true
+		}
+		if vk == vtinput.VK_RCONTROL {
+			h.rCtrl = true
+		}
+		if vk == vtinput.VK_LMENU {
+			h.lAlt = true
+		}
+		if vk == vtinput.VK_RMENU {
+			h.rAlt = true
+		}
+		if vk == vtinput.VK_LSHIFT {
+			h.lShift = true
+		}
+		if vk == vtinput.VK_RSHIFT {
+			h.rShift = true
+		}
 	} else {
-		if vk == vtinput.VK_LCONTROL { h.lCtrl = false }
-		if vk == vtinput.VK_RCONTROL { h.rCtrl = false }
-		if vk == vtinput.VK_LMENU { h.lAlt = false }
-		if vk == vtinput.VK_RMENU { h.rAlt = false }
-		if vk == vtinput.VK_LSHIFT { h.lShift = false }
-		if vk == vtinput.VK_RSHIFT { h.rShift = false }
+		if vk == vtinput.VK_LCONTROL {
+			h.lCtrl = false
+		}
+		if vk == vtinput.VK_RCONTROL {
+			h.rCtrl = false
+		}
+		if vk == vtinput.VK_LMENU {
+			h.lAlt = false
+		}
+		if vk == vtinput.VK_RMENU {
+			h.rAlt = false
+		}
+		if vk == vtinput.VK_LSHIFT {
+			h.lShift = false
+		}
+		if vk == vtinput.VK_RSHIFT {
+			h.rShift = false
+		}
 	}
 
 	var sysMods vtinput.ControlKeyState
@@ -394,8 +418,8 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 		// Request a redraw to ensure the UI updates instantly in event-driven mode
 		app.RequestRedraw()
 	})
-    
-    var infoLogged sync.Once
+
+	var infoLogged sync.Once
 	app.OnDraw(func(dc *gogpu.Context) {
 		w, h := dc.Width(), dc.Height()
 
