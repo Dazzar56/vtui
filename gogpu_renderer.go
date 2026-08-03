@@ -1,5 +1,4 @@
 //go:build !freebsd && !dragonfly && !openbsd && !netbsd && !illumos && !solaris
-
 package vtui
 
 import (
@@ -495,6 +494,9 @@ func (r *GogpuRenderer) DrawToScreen(ctx *gogpu.Context) {
 				if entry == nil {
 					continue
 				}
+
+				dc.SetColor(color.White)
+
 				if drawer, ok := any(dc).(imageDrawer); ok {
 					drawer.DrawImage(entry.asImage(), px, py)
 				} else {
