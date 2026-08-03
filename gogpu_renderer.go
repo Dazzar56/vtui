@@ -2,7 +2,6 @@
 package vtui
 
 import (
-	"image"
 	"image/color"
 	"math"
 	"sync"
@@ -497,14 +496,7 @@ func (r *GogpuRenderer) DrawToScreen(ctx *gogpu.Context) {
 				}
 
 				dc.SetRGBA(1, 1, 1, 1)
-
-				if drawerF, ok := any(dc).(interface{ DrawImage(img image.Image, x, y float64) }); ok {
-					drawerF.DrawImage(entry.asImage(), float64(px), float64(py))
-				} else if drawerI, ok := any(dc).(interface{ DrawImage(img image.Image, x, y int) }); ok {
-					drawerI.DrawImage(entry.asImage(), px, py)
-				} else {
-					warnNoImageDrawer()
-				}
+				dc.DrawImage(gg.ImageBufFromImage(entry.asImage()), float64(px), float64(py))
 			}
 
 			cursorVisible := r.cursorVis
