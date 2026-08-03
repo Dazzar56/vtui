@@ -290,6 +290,13 @@ func (fm *frameManager) GetActiveMenuBar() *MenuBar {
 	return fm.MenuBar
 }
 
+// Screen returns the ScreenBuf the frames are painted into. A frame needs it
+// outside of its Show method, for example to find out whether the backend can
+// display images before it offers to open a picture.
+func (fm *frameManager) Screen() *ScreenBuf {
+	return fm.scr
+}
+
 // Init initializes the FrameManager with a ScreenBuf.
 func (fm *frameManager) Init(scr *ScreenBuf) {
 	fm.scr = scr
@@ -1201,6 +1208,7 @@ func (fm *frameManager) renderPhase() {
 		// to avoid "index out of range" during rendering.
 		fm.cleanupOrphanedMenus()
 
+		fm.scr.Graphics().BeginFrame()
 		fm.scr.SetCursorVisible(false)
 		fm.scr.ActivePalette = nil
 		// By default, we use OverlayMode (Early Binding) for host UI elements.
@@ -1266,6 +1274,7 @@ func (fm *frameManager) renderPhase() {
 			fm.OnRender(fm.scr)
 		}
 
+		fm.scr.Graphics().EndFrame()
 		if semanticRenderer, ok := fm.scr.Renderer.(SemanticSceneRenderer); ok {
 			semanticRenderer.SetSemanticScene(fm.ExportSemanticScene())
 		}

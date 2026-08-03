@@ -312,6 +312,10 @@ type GraphicsLayer struct {
 	cellH int
 
 	repaint bool
+
+	frameMode bool
+	seen      map[string]bool
+	byKey     map[string]uint32
 }
 
 // Protocol returns the active protocol, detecting it on first use.
@@ -474,6 +478,86 @@ func (g *GraphicsLayer) Snapshot(dst []ImagePlacement) ([]ImagePlacement, uint64
 		return dst[i].ID < dst[j].ID
 	})
 	return dst, g.gen
+}
+
+// BeginFrame starts an immediate mode painting pass: every keyed placement is
+// marked stale, and only the ones re-declared through DrawImage survive
+// EndFrame. This is what ties an image to the frame that paints it, so a
+// window that is not drawn cannot leave its picture on the screen.
+func (g *GraphicsLayer) BeginFrame() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.frameMode = true
+	if g.seen == nil {
+		g.seen = make(map[string]bool)
+	}
+	for k := range g.seen {
+		delete(g.seen, k)
+	}
+}
+
+// DrawImage declares an image for the current painting pass. The key
+// identifies the owner, so the same caller keeps the same placement across
+// frames and only its geometry changes. An unchanged declaration costs
+// nothing: the generation is bumped only when something really moved.
+func (g *GraphicsLayer) DrawImage(key string, p ImagePlacement) uint32 {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	if g.seen == nil {
+		g.seen = make(map[string]bool)
+	}
+	if g.byKey == nil {
+		g.byKey = make(map[string]uint32)
+	}
+	g.seen[key] = true
+
+	if id, ok := g.byKey[key]; ok {
+		for i := range g.placements {
+			if g.placements[i].ID == id {
+				p.ID = id
+				if g.placements[i] != p {
+					g.placements[i] = p
+					g.gen++
+					g.repaint = true
+				}
+				return id
+			}
+		}
+	}
+
+	g.nextID++
+	p.ID = g.nextID
+	g.placements = append(g.placements, p)
+	g.byKey[key] = p.ID
+	g.gen++
+	return p.ID
+}
+
+// EndFrame drops every keyed placement that was not re-declared during the
+// pass. Placements added through Add are untouched.
+func (g *GraphicsLayer) EndFrame() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if !g.frameMode {
+		return
+	}
+	g.frameMode = false
+
+	for key, id := range g.byKey {
+		if g.seen[key] {
+			continue
+		}
+		delete(g.byKey, key)
+		for i := range g.placements {
+			if g.placements[i].ID == id {
+				g.placements = append(g.placements[:i], g.placements[i+1:]...)
+				g.gen++
+				g.repaint = true
+				break
+			}
+		}
+	}
 }
 
 // DirtyUnder reports whether the text under any placement was repainted in

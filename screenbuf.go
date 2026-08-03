@@ -528,6 +528,9 @@ func (s *ScreenBuf) Flush() {
 	if s.lockCount > 0 || s.buf == nil || s.Renderer == nil {
 		return
 	}
+	if s.graphics.TakeRepaintRequest() {
+		s.dirty = true
+	}
 
 	var activePal *[256]uint32
 	if s.ActivePalette != nil {
@@ -544,7 +547,7 @@ func (s *ScreenBuf) Flush() {
 	}
 	s.Renderer.Flush()
 
-	s.dirty = s.graphics.TakeRepaintRequest()
+	s.dirty = false
 	s.cursorDirty = false
 	copy(s.shadow, s.buf)
 }
