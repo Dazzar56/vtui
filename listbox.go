@@ -19,6 +19,7 @@ type ListBox struct {
 	Items       []string
 	SelectedMap map[int]bool
 	MultiSelect bool
+	OnKeyDown   func(e *vtinput.InputEvent) bool
 }
 
 func NewListBox(x, y, w, h int, items []string) *ListBox {
@@ -77,6 +78,9 @@ func (lb *ListBox) SetPosition(x1, y1, x2, y2 int) {
 func (lb *ListBox) ProcessKey(e *vtinput.InputEvent) bool {
 	if !e.KeyDown || lb.IsDisabled() {
 		return false
+	}
+	if lb.OnKeyDown != nil && lb.OnKeyDown(e) {
+		return true
 	}
 	switch e.VirtualKeyCode {
 	case vtinput.VK_SPACE, vtinput.VK_INSERT:
