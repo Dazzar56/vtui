@@ -91,6 +91,8 @@ type ScreenBuf struct {
 
 	Renderer SurfaceRenderer
 	Writer   io.Writer // Output destination, defaults to os.Stdout
+
+	graphics GraphicsLayer
 }
 
 // NewScreenBuf creates a new ScreenBuf instance.
@@ -123,6 +125,7 @@ func (s *ScreenBuf) HardReset() {
 		s.shadow[i] = CharInfo{}
 	}
 	s.dirty = true
+	s.graphics.Invalidate()
 }
 
 // ClearBuf resets every cell of the pending buffer to a zero CharInfo.
@@ -536,6 +539,9 @@ func (s *ScreenBuf) Flush() {
 	s.Renderer.SetPalette(activePal)
 	s.Renderer.SetCursor(s.cursorX, s.cursorY, s.cursorVisible, s.cursorShape)
 	s.Renderer.Render(s.buf, s.shadow, s.width, s.height, s.dirty)
+	if gr, ok := s.Renderer.(GraphicsRenderer); ok {
+		gr.RenderGraphics(&s.graphics, s.buf, s.shadow, s.width, s.height, s.dirty)
+	}
 	s.Renderer.Flush()
 
 	s.dirty = false
@@ -558,6 +564,11 @@ type AnsiRenderer struct {
 	lastSentCursorShape              CursorShape
 	termCursorInvalid                bool
 	firstInit                        bool
+
+	gfxProto GraphicsProtocol
+	gfxGen   uint64
+	gfxKitty *kittyEncoder
+	gfxList  []ImagePlacement
 }
 
 func (r *AnsiRenderer) SetPalette(pal *[256]uint32) {
