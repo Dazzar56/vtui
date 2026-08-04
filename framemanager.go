@@ -130,6 +130,9 @@ type frameManager struct {
 	lastMouseClickTime     time.Time
 	lastMouseX, lastMouseY int
 	lastMouseButton        uint32
+	lastMouseEventX        int
+	lastMouseEventY        int
+	mousePositionKnown     bool
 	Reader                 *vtinput.Reader
 	currentToast           *Toast
 }
@@ -308,6 +311,7 @@ func (fm *frameManager) Init(scr *ScreenBuf) {
 	fm.frames = make([]Frame, 0, 10)
 	fm.Screens = []*AppScreen{{Frames: fm.frames}}
 	fm.ActiveIdx = 0
+	fm.mousePositionKnown = false
 
 	if fm.RedrawChan == nil {
 		fm.RedrawChan = make(chan struct{}, 1)
@@ -1319,7 +1323,28 @@ func (fm *frameManager) renderPhase() {
 	}
 }
 
+// isDuplicateMouseMove filters backend motion notifications that do not change
+// the pointer's cell position. Windows consoles can emit many such records
+// while the pointer is stationary; treating the first one after a menu opens as
+// hover would unexpectedly move the menu selection.
+func (fm *frameManager) isDuplicateMouseMove(ev *vtinput.InputEvent) bool {
+	if ev.Type != vtinput.MouseEventType {
+		return false
+	}
+
+	x, y := int(ev.MouseX), int(ev.MouseY)
+	isMove := ev.MouseEventFlags&vtinput.MouseMoved != 0
+	duplicate := isMove && fm.mousePositionKnown && x == fm.lastMouseEventX && y == fm.lastMouseEventY
+	fm.lastMouseEventX = x
+	fm.lastMouseEventY = y
+	fm.mousePositionKnown = true
+	return duplicate
+}
+
 func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) {
+	if fm.isDuplicateMouseMove(ev) {
+		return
+	}
 	DebugLog("FM_DISPATCH: Received event: %s", ev.String())
 	// Translator Tool: Ctrl+Alt+RightClick
 	if ev.Type == vtinput.MouseEventType && ev.ButtonState == vtinput.RightmostButtonPressed && ev.KeyDown {
