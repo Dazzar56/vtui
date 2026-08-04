@@ -78,6 +78,7 @@ func (r *WaylandRenderer) ResizeWindow(cols, rows int) {
 		widget.ScheduleResize(int32(cols*cw), int32(rows*ch))
 	}
 }
+
 // RenderGraphics implements GraphicsRenderer. The Wayland host pushes the
 // whole buffer to the compositor on every flush, so unlike X11 there are no
 // dirty lines to mark.

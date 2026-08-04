@@ -123,6 +123,7 @@ func (r *X11Renderer) SetWindowTitle(title string) {
 		}
 	}
 }
+
 // RenderGraphics implements GraphicsRenderer by compositing the image layer
 // straight into the window framebuffer. That is both faster and sharper than
 // any escape sequence protocol, and it needs nothing from the terminal.
