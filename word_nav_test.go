@@ -89,7 +89,7 @@ func TestWordNav_Far2lJumps(t *testing.T) {
 		{"select left steps dividers again", "a.-/b", 3, false, true, 2},
 		{"select left to word start", "a.-/b", 2, false, true, 0},
 
-		{"select right skips spaces", "foo bar", 3, true, true, 7},
+		{"select right stops after spaces", "foo bar", 3, true, true, 4},
 		{"select left skips spaces", "foo bar", 4, false, true, 0},
 	}
 
