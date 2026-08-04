@@ -42,6 +42,7 @@ const (
 	ColHelpLink
 	ColHelpSelectedLink
 	ColHelpBox
+	ColHelpBoxTitle
 
 	ColWarnText
 	ColWarnHighlightText
@@ -131,6 +132,7 @@ func SetDefaultPalette() {
 	Palette[ColHelpLink] = SetRGBBoth(0, 0x0000A0, 0xD3D7CF)      // Blue links
 	Palette[ColHelpSelectedLink] = SetRGBBoth(0, white, 0x0000A0) // White on Blue
 	Palette[ColHelpBox] = Palette[ColHelpText]
+	Palette[ColHelpBoxTitle] = Palette[ColHelpText]
 
 	red := uint32(0x800000)
 	// Warnings (White/Yellow on Red)
