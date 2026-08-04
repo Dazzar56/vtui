@@ -87,6 +87,31 @@ func TestFrameManager_GlobalUIPriority(t *testing.T) {
 	}
 }
 
+func TestFrameManager_FilteredEventCleansUpClosedFrame(t *testing.T) {
+	fm := &frameManager{}
+	fm.Init(NewSilentScreenBuf())
+
+	frame := newMockFrame(0, 0, 10, 10, false)
+	fm.Push(frame)
+	fm.EventFilter = func(*vtinput.InputEvent) bool {
+		frame.Close()
+		return true
+	}
+
+	fm.dispatchEvent(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_ESCAPE,
+	}, false)
+
+	if !frame.IsDone() {
+		t.Fatal("filter did not close the frame")
+	}
+	if len(fm.frames) != 0 {
+		t.Fatalf("closed frame survived a consumed event: %d frame(s) remain", len(fm.frames))
+	}
+}
+
 type busyFrame struct {
 	mockFrame
 	Busy bool
