@@ -59,6 +59,7 @@ func getEventHistory() []string {
 }
 
 var CrashDirBase string
+var CrashDirFull string
 
 func recordLogMemory(line string) {
 	crashMu.Lock()
@@ -95,6 +96,9 @@ func getMemLogs() []string {
 }
 
 func getCrashDir() string {
+	if CrashDirFull != "" {
+		return CrashDirFull
+	}
 	if CrashDirBase != "" {
 		return filepath.Join(CrashDirBase, AppName, "crashes")
 	}
