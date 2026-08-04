@@ -43,6 +43,57 @@ func (m *mockFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 
 func (m *mockFrame) GetType() FrameType { return TypeUser }
 func (m *mockFrame) GetTitle() string   { return "MockFrame" }
+
+func TestFrameManager_DuplicateMouseMoveDoesNotHoverNewMenu(t *testing.T) {
+	oldFM := FrameManager
+	fm := &frameManager{}
+	fm.Init(NewSilentScreenBuf())
+	FrameManager = fm
+	defer func() { FrameManager = oldFM }()
+
+	background := newMockFrame(0, 0, 40, 20, false)
+	fm.Push(background)
+
+	// Establish the pointer position before the menu exists.
+	fm.dispatchEvent(&vtinput.InputEvent{
+		Type:            vtinput.MouseEventType,
+		MouseX:          15,
+		MouseY:          8,
+		MouseEventFlags: vtinput.MouseMoved,
+	}, false)
+
+	menu := NewVMenu("Menu")
+	menu.AddItem(MenuItem{Text: "First"})
+	menu.AddSeparator()
+	menu.AddItem(MenuItem{Text: "Third"})
+	menu.SetPosition(10, 5, 30, 9)
+	menu.SetSelectPos(0)
+	fm.Push(menu)
+
+	// A backend may repeat MouseMoved at the unchanged cell after the menu is
+	// pushed. That is not a new hover and must preserve keyboard selection.
+	fm.dispatchEvent(&vtinput.InputEvent{
+		Type:            vtinput.MouseEventType,
+		MouseX:          15,
+		MouseY:          8,
+		MouseEventFlags: vtinput.MouseMoved,
+	}, false)
+	if menu.SelectPos != 0 {
+		t.Fatalf("duplicate mouse move selected item %d, want 0", menu.SelectPos)
+	}
+
+	// A real cell-coordinate change still enables normal hover navigation.
+	fm.dispatchEvent(&vtinput.InputEvent{
+		Type:            vtinput.MouseEventType,
+		MouseX:          16,
+		MouseY:          8,
+		MouseEventFlags: vtinput.MouseMoved,
+	}, false)
+	if menu.SelectPos != 2 {
+		t.Fatalf("real mouse move selected item %d, want 2", menu.SelectPos)
+	}
+}
+
 func TestFrameManager_GlobalUIPriority(t *testing.T) {
 	oldFm := FrameManager
 	fm := &frameManager{}
