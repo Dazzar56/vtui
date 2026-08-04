@@ -1,5 +1,5 @@
 # Project Structure
-Last updated: 2026-08-01 17:38:19
+Last updated: 2026-08-04 07:43:43
 
 ```text
 .
@@ -51,6 +51,7 @@ Last updated: 2026-08-01 17:38:19
 ├── filelist_update.sh
 ├── frame.go
 ├── framemanager.go
+├── framemanager_hidebars_test.go
 ├── framemanager_test.go
 ├── .gitignore
 ├── gogpu_host.go
@@ -62,6 +63,16 @@ Last updated: 2026-08-01 17:38:19
 ├── gogpu_stub.go
 ├── go.mod
 ├── go.sum
+├── graphics_frame_test.go
+├── graphics.go
+├── graphics_image.go
+├── graphics_kitty.go
+├── graphics_kitty_test.go
+├── GRAPHICS.md
+├── graphics_native.go
+├── graphics_native_test.go
+├── graphics_scale.go
+├── graphics_test.go
 ├── grid_nav.go
 ├── groupbox.go
 ├── group.go
@@ -113,6 +124,7 @@ Last updated: 2026-08-01 17:38:19
 ├── scrollview.go
 ├── scrollview_test.go
 ├── semantic.go
+├── semantic_test.go
 ├── separator.go
 ├── statusline.go
 ├── statusline_test.go
@@ -163,5 +175,5 @@ Last updated: 2026-08-01 17:38:19
 ├── xlat_tables.go
 └── xlat_test.go
 
-3 directories, 157 files
+3 directories, 169 files
 ```
