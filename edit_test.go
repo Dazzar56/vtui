@@ -484,16 +484,18 @@ func TestEdit_WordJumps_FarSpec(t *testing.T) {
 		t.Errorf("Stop W->D fail: expected 4, got %d", e.curPos)
 	}
 
-	// 2. Ctrl+Right: [D1] -> [D2] (смена разделителя с точки на слэш)
+	// 2. Ctrl+Right: a run of dividers is not a boundary in far2l, and neither
+	// is [D] -> [W], so the whole "...///next" block is crossed in one jump.
+	// The next stop is the dot block after the spaces ([S] -> [D], index 17).
 	e.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT, ControlKeyState: vtinput.LeftCtrlPressed})
-	if e.curPos != 7 {
-		t.Errorf("Stop D1->D2 fail: expected 7, got %d", e.curPos)
+	if e.curPos != 17 {
+		t.Errorf("Stop S->D fail: expected 17, got %d", e.curPos)
 	}
 
-	// 3. Ctrl+Right: [D] -> [W] (прыжок к началу 'next')
+	// 3. Ctrl+Right: [S] -> [W], landing on the emoji at index 27.
 	e.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT, ControlKeyState: vtinput.LeftCtrlPressed})
-	if e.curPos != 10 {
-		t.Errorf("Stop D->W fail: expected 10, got %d", e.curPos)
+	if e.curPos != 27 {
+		t.Errorf("Stop S->W fail (Unicode): expected 27, got %d", e.curPos)
 	}
 
 	// 4. Ctrl+Right: [S] -> [D] (прыжок через пробелы к блоку точек)
@@ -569,19 +571,38 @@ func TestEdit_WordSelection_FarSpec(t *testing.T) {
 	}
 }
 func TestEdit_WordJumps_DifferentDividers(t *testing.T) {
-	// Прыжок вправо должен останавливаться при смене одного знака препинания на другой (D1 -> D2)
+	// A change of divider kind is not a word boundary in far2l, so plain
+	// Ctrl+Right crosses the whole run at once (issue #280).
 	e := NewEdit(0, 0, 20, "...///")
 	e.curPos = 0
 
-	// Ctrl+Right
-	// Первый шаг (обязательный) -> индекс 1.
-	// Цикл:
-	// Индекс 2: Prev='.', Curr='.' (D->D, одинаковые) -> продолжаем.
-	// Индекс 3: Prev='.', Curr='/' (D1->D2, разные) -> STOP.
 	e.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT, ControlKeyState: vtinput.LeftCtrlPressed})
 
-	if e.curPos != 3 {
-		t.Errorf("Expected stop on first slash (index 3), got %d", e.curPos)
+	if e.curPos != 6 {
+		t.Errorf("Expected stop at end of the divider run (index 6), got %d", e.curPos)
+	}
+}
+
+// far2l edit.cpp goes the other way for the selecting variants: every boundary
+// inside a run of dividers is a stop, so Ctrl+Shift+Right walks it one
+// character at a time while plain Ctrl+Right skips it whole.
+func TestEdit_WordSelection_StepsThroughDividers(t *testing.T) {
+	e := NewEdit(0, 0, 20, "a.-/b")
+	e.curPos = 0
+
+	for _, want := range []int{1, 2, 3, 4, 5} {
+		e.ProcessKey(&vtinput.InputEvent{
+			Type: vtinput.KeyEventType, KeyDown: true,
+			VirtualKeyCode:  vtinput.VK_RIGHT,
+			ControlKeyState: vtinput.LeftCtrlPressed | vtinput.ShiftPressed,
+		})
+		if e.curPos != want {
+			t.Fatalf("Ctrl+Shift+Right: expected %d, got %d", want, e.curPos)
+		}
+	}
+
+	if e.selStart != 0 || e.selEnd != 5 {
+		t.Errorf("Selection fail: expected [0:5], got [%d:%d]", e.selStart, e.selEnd)
 	}
 }
 func TestEdit_RightArrow_FullSelection_StaysInFocus(t *testing.T) {

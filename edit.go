@@ -1,7 +1,6 @@
 package vtui
 
 import (
-	"strings"
 	"unicode"
 
 	"github.com/mattn/go-runewidth"
@@ -228,22 +227,6 @@ func (e *Edit) Valid(cmd int) bool {
 	return true
 }
 
-const (
-	catSpace = iota
-	catDivider
-	catWord
-)
-
-func getCharCategory(r rune) int {
-	if r == ' ' || r == '\t' {
-		return catSpace
-	}
-	if strings.ContainsRune("~!%^&*()+|{}:\"<>?`-=\\[];',./", r) {
-		return catDivider
-	}
-	return catWord
-}
-
 // InsertString inserts text at the current cursor position.
 func (e *Edit) InsertString(text string) {
 	if e.clearFlag {
@@ -423,11 +406,7 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 				}
 				for e.curPos > 0 {
 					prev, curr := e.text[e.curPos-1], e.text[e.curPos]
-					pCat, cCat := getCharCategory(prev), getCharCategory(curr)
-					if (shift && pCat != catSpace && cCat == catSpace) ||
-						(pCat == catSpace && cCat == catWord) ||
-						(pCat == catSpace && cCat == catDivider) ||
-						(pCat == catDivider && cCat == catWord) {
+					if stopBeforeRuneLeft(prev, curr, shift) {
 						break
 					}
 					e.curPos--
@@ -473,27 +452,7 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 				}
 				for e.curPos < len(e.text) {
 					prev, curr := e.text[e.curPos-1], e.text[e.curPos]
-					pCat, cCat := getCharCategory(prev), getCharCategory(curr)
-					stop := false
-					if shift && pCat != catSpace && cCat == catSpace {
-						stop = true
-					}
-					if pCat == catWord && cCat == catDivider {
-						stop = true
-					}
-					if pCat == catSpace && cCat == catWord {
-						stop = true
-					}
-					if pCat == catSpace && cCat == catDivider {
-						stop = true
-					}
-					if pCat == catDivider && cCat == catWord {
-						stop = true
-					}
-					if pCat == catDivider && cCat == catDivider && prev != curr {
-						stop = true
-					}
-					if stop {
+					if stopBeforeRuneRight(prev, curr, shift) {
 						break
 					}
 					e.curPos++
