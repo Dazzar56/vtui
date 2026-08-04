@@ -1,5 +1,5 @@
 # Project Structure
-Last updated: 2026-08-04 07:43:43
+Last updated: 2026-08-04 21:35:09
 
 ```text
 .
@@ -103,6 +103,7 @@ Last updated: 2026-08-04 07:43:43
 ├── localization.go
 ├── localization_test.go
 ├── menubar.go
+├── menubar_test.go
 ├── painter.go
 ├── palette.go
 ├── palette_test.go
@@ -151,6 +152,7 @@ Last updated: 2026-08-04 07:43:43
 ├── treeview_test.go
 ├── types.go
 ├── UI_TESTING.md
+├── UX_GUIDELINES.md
 ├── validator.go
 ├── validator_test.go
 ├── vmenu.go
@@ -163,6 +165,9 @@ Last updated: 2026-08-04 07:43:43
 ├── wayland_renderer.go
 ├── wayland_stub.go
 ├── window.go
+├── word_nav.go
+├── WORDNAV.md
+├── word_nav_test.go
 ├── x11_host.go
 ├── x11_host_test.go
 ├── x11_keys_shared.go
@@ -175,5 +180,5 @@ Last updated: 2026-08-04 07:43:43
 ├── xlat_tables.go
 └── xlat_test.go
 
-3 directories, 169 files
+3 directories, 174 files
 ```
