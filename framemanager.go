@@ -1460,6 +1460,9 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 	// User-defined filter has first say
 	if !is_injected && fm.EventFilter != nil && fm.EventFilter(ev) {
 		DebugLog("FM_DISPATCH: Event CONSUMED by EventFilter (Macro?).")
+		// Filters may execute actions that close a frame. Preserve the normal
+		// end-of-dispatch cleanup even though the event itself is consumed.
+		fm.cleanupDoneFrames()
 		return
 	}
 
