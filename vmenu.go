@@ -218,12 +218,28 @@ func (m *VMenu) ClearDone() {
 	m.exitCode = -1
 }
 
-// ProcessMouse handles mouse wheel scrolling and menu item clicks.
+// ProcessMouse handles mouse wheel scrolling, menu item hover, and clicks.
 func (m *VMenu) ProcessMouse(e *vtinput.InputEvent) bool {
 	if m.IsDisabled() || e.Type != vtinput.MouseEventType {
 		return false
 	}
 	if m.HandleMouseScroll(e) {
+		return true
+	}
+
+	if (e.MouseEventFlags & vtinput.MouseMoved) != 0 {
+		mx := int(e.MouseX)
+		if mx <= m.X1 || mx >= m.X2 {
+			return false
+		}
+
+		hoverIdx := m.GetClickIndex(int(e.MouseY))
+		if hoverIdx == -1 {
+			return false
+		}
+		if !m.Items[hoverIdx].Separator {
+			m.SetSelectPos(hoverIdx)
+		}
 		return true
 	}
 

@@ -87,3 +87,66 @@ func TestVMenu_OnKeyDownHook(t *testing.T) {
 		t.Error("Standard navigation should still work if hook returns false")
 	}
 }
+
+func TestVMenu_MouseMoveSelectsItemWithoutActivatingIt(t *testing.T) {
+	m := NewVMenu("Menu")
+	m.AddItem(MenuItem{Text: "First"})
+	m.AddSeparator()
+	m.AddItem(MenuItem{Text: "Third"})
+	m.SetPosition(10, 5, 30, 9)
+	m.SetSelectPos(0)
+
+	actions := 0
+	m.OnAction = func(int) { actions++ }
+
+	handled := m.ProcessMouse(&vtinput.InputEvent{
+		Type:            vtinput.MouseEventType,
+		MouseX:          15,
+		MouseY:          8,
+		MouseEventFlags: vtinput.MouseMoved,
+	})
+	if !handled {
+		t.Fatal("mouse move over a menu item should be handled")
+	}
+	if m.SelectPos != 2 {
+		t.Fatalf("expected hovered item 2 to be selected, got %d", m.SelectPos)
+	}
+	if actions != 0 || m.IsDone() {
+		t.Fatal("hovering must not activate an item or close the menu")
+	}
+}
+
+func TestVMenu_MouseMoveIgnoresSeparatorAndOutside(t *testing.T) {
+	m := NewVMenu("Menu")
+	m.AddItem(MenuItem{Text: "First"})
+	m.AddSeparator()
+	m.AddItem(MenuItem{Text: "Third"})
+	m.SetPosition(10, 5, 30, 9)
+	m.SetSelectPos(2)
+
+	separatorHandled := m.ProcessMouse(&vtinput.InputEvent{
+		Type:            vtinput.MouseEventType,
+		MouseX:          15,
+		MouseY:          7,
+		MouseEventFlags: vtinput.MouseMoved,
+	})
+	if !separatorHandled {
+		t.Fatal("mouse move over a separator inside the menu should be consumed")
+	}
+	if m.SelectPos != 2 {
+		t.Fatalf("separator must not become selected, got %d", m.SelectPos)
+	}
+
+	outsideHandled := m.ProcessMouse(&vtinput.InputEvent{
+		Type:            vtinput.MouseEventType,
+		MouseX:          9,
+		MouseY:          6,
+		MouseEventFlags: vtinput.MouseMoved,
+	})
+	if outsideHandled {
+		t.Fatal("mouse move outside the menu content should not be handled")
+	}
+	if m.SelectPos != 2 {
+		t.Fatalf("outside movement must not change selection, got %d", m.SelectPos)
+	}
+}

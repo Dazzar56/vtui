@@ -240,33 +240,59 @@ func (mb *MenuBar) ProcessKey(e *vtinput.InputEvent) bool {
 }
 
 func (mb *MenuBar) ProcessMouse(e *vtinput.InputEvent) bool {
-	if mb.IsDisabled() {
+	if mb.IsDisabled() || e.Type != vtinput.MouseEventType {
 		return false
 	}
-	if e.Type == vtinput.MouseEventType && e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
-		mx, my := int(e.MouseX), int(e.MouseY)
-		if mb.HitTest(mx, my) {
-			for i := range mb.Items {
-				x1 := mb.GetItemX(i)
-				var x2 int
-				if i < len(mb.Items)-1 {
-					x2 = mb.GetItemX(i+1) - 1
-				} else {
-					clean, _, _ := ParseAmpersandString(mb.Items[i].Label)
-					x2 = x1 + runewidth.StringWidth("  "+clean+"  ") - 1
-				}
-				if mx >= x1 && mx <= x2 {
-					mb.Active = true
-					mb.ActivateSubMenu(i)
-					return true
-				}
-			}
-			mb.Active = true
-			if len(mb.Items) > 0 {
-				mb.ActivateSubMenu(0)
-			}
+
+	mx, my := int(e.MouseX), int(e.MouseY)
+	if !mb.HitTest(mx, my) {
+		return false
+	}
+
+	itemAt := -1
+	for i := range mb.Items {
+		x1 := mb.GetItemX(i)
+		var x2 int
+		if i < len(mb.Items)-1 {
+			x2 = mb.GetItemX(i+1) - 1
+		} else {
+			clean, _, _ := ParseAmpersandString(mb.Items[i].Label)
+			x2 = x1 + runewidth.StringWidth("  "+clean+"  ") - 1
+		}
+		if mx >= x1 && mx <= x2 {
+			itemAt = i
+			break
+		}
+	}
+
+	if e.MouseEventFlags&vtinput.MouseMoved != 0 {
+		if !mb.Active || itemAt == -1 {
+			return false
+		}
+		if itemAt == mb.SelectPos && mb.activeSubMenu != nil {
 			return true
 		}
+
+		// Hovering switches an already active menu bar, but must not execute a
+		// command-only top-level item merely because the pointer crossed it.
+		if len(mb.Items[itemAt].SubItems) == 0 {
+			mb.closeSub()
+			mb.SelectPos = itemAt
+			return true
+		}
+		mb.ActivateSubMenu(itemAt)
+		return true
+	}
+
+	if e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
+		mb.Active = true
+		if itemAt == -1 && len(mb.Items) > 0 {
+			itemAt = 0
+		}
+		if itemAt != -1 {
+			mb.ActivateSubMenu(itemAt)
+		}
+		return true
 	}
 	return false
 }
