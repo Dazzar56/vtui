@@ -115,6 +115,11 @@ type frameManager struct {
 	StatusLine       *StatusLine
 	KeyBar           *KeyBar
 
+	// HideBars lets the frame on top claim the rows the global bars sit on.
+	// ScreenObject.Show forces an object visible, so a frame cannot hide the
+	// key bar on its own: it has to say so here.
+	HideBars bool
+
 	capturedFrame Frame // Points to the active screen's captured frame
 
 	// Switcher State
@@ -1251,7 +1256,14 @@ func (fm *frameManager) renderPhase() {
 			fm.scr.SetCursorVisible(false) // Hide underlying cursor when menu is active
 		}
 		if fm.KeyBar != nil {
-			fm.KeyBar.Show(fm.scr)
+			if fm.HideBars {
+				// Hide rather than merely skip the drawing: an invisible bar
+				// that still reports itself visible keeps eating clicks on
+				// the bottom row in dispatchEvent.
+				fm.KeyBar.Hide(fm.scr)
+			} else {
+				fm.KeyBar.Show(fm.scr)
+			}
 		}
 		if fm.StatusLine != nil {
 			fm.StatusLine.Show(fm.scr)
