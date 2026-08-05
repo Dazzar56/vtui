@@ -144,12 +144,10 @@ func (cb *ComboBox) ProcessMouse(e *vtinput.InputEvent) bool {
 		return false
 	}
 	if cb.editMouseCaptured {
+		cb.Edit.ProcessMouse(e)
 		if e.ButtonState == 0 {
 			cb.editMouseCaptured = false
 			return true
-		}
-		if cb.Edit.HitTest(int(e.MouseX), int(e.MouseY)) {
-			cb.Edit.ProcessMouse(e)
 		}
 		return true
 	}

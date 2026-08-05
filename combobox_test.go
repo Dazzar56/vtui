@@ -182,6 +182,39 @@ func TestComboBox_EditableClickMovesCursor(t *testing.T) {
 	}
 }
 
+func TestComboBox_EditableDragSelectsTextOutsideControl(t *testing.T) {
+	cb := NewComboBox(5, 2, 10, []string{"One", "Two"})
+	cb.Edit.SetText("abcdef")
+
+	cb.ProcessMouse(&vtinput.InputEvent{
+		Type:        vtinput.MouseEventType,
+		KeyDown:     true,
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+		MouseX:      int16(cb.X1 + 1), MouseY: int16(cb.Y1),
+	})
+	cb.ProcessMouse(&vtinput.InputEvent{
+		Type:            vtinput.MouseEventType,
+		ButtonState:     vtinput.FromLeft1stButtonPressed,
+		MouseEventFlags: vtinput.MouseMoved,
+		MouseX:          int16(cb.X2 + 5), MouseY: int16(cb.Y1 + 2),
+	})
+
+	if cb.Edit.curPos != len(cb.Edit.text) {
+		t.Fatalf("cursor position = %d, want %d after dragging right", cb.Edit.curPos, len(cb.Edit.text))
+	}
+	if cb.Edit.selStart != 1 || cb.Edit.selEnd != len(cb.Edit.text) {
+		t.Fatalf("selection = [%d,%d), want [1,%d)", cb.Edit.selStart, cb.Edit.selEnd, len(cb.Edit.text))
+	}
+
+	cb.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, ButtonState: 0,
+		MouseX: int16(cb.X2 + 5), MouseY: int16(cb.Y1 + 2),
+	})
+	if cb.Edit.mouseSelecting || cb.editMouseCaptured {
+		t.Fatal("mouse selection capture was not released")
+	}
+}
+
 func sameBackground(a, b uint64) bool {
 	if a&IsBgRGB != b&IsBgRGB {
 		return false
