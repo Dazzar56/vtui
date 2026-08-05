@@ -125,3 +125,46 @@ func TestComboBox_WantsChars(t *testing.T) {
 		t.Error("DropdownOnly ComboBox should not want chars")
 	}
 }
+
+func TestComboBox_ArrowUsesEditBackground(t *testing.T) {
+	SetDefaultPalette()
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(30, 3)
+
+	cb := NewComboBox(1, 1, 20, []string{"One", "Two"})
+	cb.Show(scr)
+
+	arrowAttr := scr.GetCell(cb.X2, cb.Y1).Attributes
+	editAttr := scr.GetCell(cb.X2-1, cb.Y1).Attributes
+	if !sameBackground(arrowAttr, editAttr) {
+		t.Fatalf("arrow background %#x does not match edit background %#x", arrowAttr, editAttr)
+	}
+}
+
+func TestComboBox_DropdownOnlyFocusedArrowUsesSelectedBackground(t *testing.T) {
+	SetDefaultPalette()
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(30, 3)
+
+	cb := NewComboBox(1, 1, 20, []string{"One", "Two"})
+	cb.DropdownOnly = true
+	cb.Edit.SetText("One")
+	cb.SetFocus(true)
+	cb.Show(scr)
+
+	arrowAttr := scr.GetCell(cb.X2, cb.Y1).Attributes
+	selectedTextAttr := scr.GetCell(cb.X1, cb.Y1).Attributes
+	if !sameBackground(arrowAttr, selectedTextAttr) {
+		t.Fatalf("arrow background %#x does not match selected edit background %#x", arrowAttr, selectedTextAttr)
+	}
+}
+
+func sameBackground(a, b uint64) bool {
+	if a&IsBgRGB != b&IsBgRGB {
+		return false
+	}
+	if a&IsBgRGB != 0 {
+		return GetRGBBack(a) == GetRGBBack(b) && a&BackgroundIntensity == b&BackgroundIntensity
+	}
+	return GetIndexBack(a) == GetIndexBack(b) && a&BackgroundIntensity == b&BackgroundIntensity
+}

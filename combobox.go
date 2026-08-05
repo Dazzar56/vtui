@@ -82,10 +82,27 @@ func (cb *ComboBox) DisplayObject(scr *ScreenBuf) {
 	}
 
 	attr := cb.GetStateAttr(ColDialogText, ColDialogSelectedButton)
+	backgroundIdx := cb.Edit.ColorTextIdx
+	if cb.DropdownOnly && cb.focused {
+		backgroundIdx = cb.Edit.ColorSelectedIdx
+	}
+	attr = withBackground(attr, cb.GetStateAttr(backgroundIdx, backgroundIdx))
 	if cb.IsDisabled() {
 		attr = DimColor(attr)
 	}
 	scr.Write(cb.X2, cb.Y1, StringToCharInfo("↓", attr))
+}
+
+// withBackground keeps the foreground and text attributes from attr while
+// taking the background from backgroundAttr. ComboBox arrows are rendered as
+// a separate cell, but visually belong to the edit field beside them.
+func withBackground(attr, backgroundAttr uint64) uint64 {
+	if backgroundAttr&IsBgRGB != 0 {
+		attr = SetRGBBack(attr, GetRGBBack(backgroundAttr))
+	} else {
+		attr = SetIndexBack(attr, GetIndexBack(backgroundAttr))
+	}
+	return attr&^BackgroundIntensity | backgroundAttr&BackgroundIntensity
 }
 
 func (cb *ComboBox) ProcessKey(e *vtinput.InputEvent) bool {
