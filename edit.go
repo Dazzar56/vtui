@@ -34,6 +34,8 @@ type Edit struct {
 	ColorSelectedIdx   int
 	HistoryID          string
 	OnTextChange       func(string)
+	mouseSelecting     bool
+	mouseSelectAnchor  int
 }
 
 // HistoryProvider is an interface for external history persistence (e.g. from f4).
@@ -835,10 +837,45 @@ func (e *Edit) ProcessMouse(ev *vtinput.InputEvent) bool {
 	if e.IsDisabled() {
 		return false
 	}
+	if e.mouseSelecting {
+		if ev.ButtonState == 0 {
+			e.mouseSelecting = false
+			return true
+		}
+		if ev.ButtonState&vtinput.FromLeft1stButtonPressed != 0 {
+			e.curPos = e.cursorPositionAtX(int(ev.MouseX))
+			e.selAnchor = e.mouseSelectAnchor
+			if e.curPos < e.selAnchor {
+				e.selStart, e.selEnd = e.curPos, e.selAnchor
+			} else {
+				e.selStart, e.selEnd = e.selAnchor, e.curPos
+			}
+			if e.selStart == e.selEnd {
+				e.ClearSelection()
+			}
+			return true
+		}
+	}
 	if ev.KeyDown {
 		if ev.ButtonState == vtinput.FromLeft1stButtonPressed {
 			if e.ShowHistoryButton && int(ev.MouseX) == e.X2 && int(ev.MouseY) == e.Y1 {
 				e.OpenHistory()
+				return true
+			}
+			if e.HitTest(int(ev.MouseX), int(ev.MouseY)) {
+				e.curPos = e.cursorPositionAtX(int(ev.MouseX))
+				if ev.MouseEventFlags&TripleClick != 0 {
+					e.SelectAll()
+					return true
+				}
+				if ev.MouseEventFlags&vtinput.DoubleClick != 0 {
+					e.selectWordAtCursor()
+					return true
+				}
+				e.ClearSelection()
+				e.clearFlag = false
+				e.mouseSelecting = true
+				e.mouseSelectAnchor = e.curPos
 				return true
 			}
 		}
@@ -850,4 +887,54 @@ func (e *Edit) ProcessMouse(ev *vtinput.InputEvent) bool {
 		}
 	}
 	return false
+}
+
+func (e *Edit) selectWordAtCursor() {
+	if e.curPos < 0 || e.curPos >= len(e.text) {
+		e.ClearSelection()
+		return
+	}
+
+	category := getCharCategory(e.text[e.curPos])
+	start, end := e.curPos, e.curPos+1
+	for start > 0 && getCharCategory(e.text[start-1]) == category {
+		start--
+	}
+	for end < len(e.text) && getCharCategory(e.text[end]) == category {
+		end++
+	}
+	e.selStart, e.selEnd = start, end
+	e.selAnchor = start
+	e.curPos = end
+	e.clearFlag = false
+}
+
+func (e *Edit) cursorPositionAtX(x int) int {
+	if x < e.X1 {
+		return 0
+	}
+	if x == e.X1 {
+		return e.leftPos
+	}
+	visibleRight := e.X2
+	if e.ShowHistoryButton {
+		visibleRight--
+	}
+	if x > visibleRight {
+		return len(e.text)
+	}
+
+	column := x - e.X1
+	width := 0
+	for i := e.leftPos; i < len(e.text); i++ {
+		runeWidth := 1
+		if !e.PasswordMode {
+			runeWidth = runewidth.RuneWidth(e.text[i])
+		}
+		if width+runeWidth > column {
+			return i
+		}
+		width += runeWidth
+	}
+	return len(e.text)
 }

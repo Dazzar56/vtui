@@ -91,8 +91,65 @@ func TestDialog_NoDragWhenClickingElement(t *testing.T) {
 	if d.isDragging {
 		t.Error("Dialog should NOT start dragging when clicking on an interactive element")
 	}
+	if clicked {
+		t.Error("Button action should not run on mouse down")
+	}
+	d.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, ButtonState: 0,
+		MouseX: 1, MouseY: 1,
+	})
 	if !clicked {
 		t.Error("Button should have handled the click")
+	}
+}
+
+func TestDialog_ComboBoxEditCapturesMouseUntilRelease(t *testing.T) {
+	FrameManager.Init(NewSilentScreenBuf())
+	d := NewDialog(0, 0, 30, 10, "Combo capture")
+	cb := NewComboBox(2, 2, 15, []string{"One", "Two"})
+	cb.Edit.SetText("abcdef")
+	d.AddItem(cb)
+
+	d.ProcessMouse(&vtinput.InputEvent{
+		Type:        vtinput.MouseEventType,
+		KeyDown:     true,
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+		MouseX:      int16(cb.X1 + 1), MouseY: int16(cb.Y1),
+	})
+
+	// Moving onto the arrow belongs to the edit gesture and must not open the menu.
+	d.ProcessMouse(&vtinput.InputEvent{
+		Type:            vtinput.MouseEventType,
+		KeyDown:         true,
+		ButtonState:     vtinput.FromLeft1stButtonPressed,
+		MouseEventFlags: vtinput.MouseMoved,
+		MouseX:          int16(cb.X2), MouseY: int16(cb.Y1),
+	})
+	if FrameManager.GetTopFrameType() == TypeMenu {
+		t.Fatal("dragging from combo edit onto arrow opened the dropdown")
+	}
+
+	// Moving onto empty dialog space must not start moving the dialog.
+	d.ProcessMouse(&vtinput.InputEvent{
+		Type:            vtinput.MouseEventType,
+		KeyDown:         false,
+		ButtonState:     vtinput.FromLeft1stButtonPressed,
+		MouseEventFlags: vtinput.MouseMoved,
+		MouseX:          20, MouseY: 6,
+	})
+	if d.isDragging {
+		t.Fatal("dragging from combo edit onto dialog started moving the dialog")
+	}
+	if d.X1 != 0 || d.Y1 != 0 {
+		t.Fatalf("dialog moved to (%d,%d) during captured combo gesture", d.X1, d.Y1)
+	}
+
+	d.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, ButtonState: 0,
+		MouseX: 20, MouseY: 6,
+	})
+	if cb.editMouseCaptured || d.rootGroup.mouseCapture != nil {
+		t.Fatal("mouse capture was not released with the button")
 	}
 }
 

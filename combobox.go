@@ -8,9 +8,10 @@ import (
 // ComboBox combines an edit field and a dropdown menu.
 type ComboBox struct {
 	ScreenObject
-	Edit         *Edit
-	Menu         *VMenu
-	DropdownOnly bool // If true, manual text entry is not allowed
+	Edit              *Edit
+	Menu              *VMenu
+	DropdownOnly      bool // If true, manual text entry is not allowed
+	editMouseCaptured bool
 }
 
 func NewComboBox(x, y, width int, items []string) *ComboBox {
@@ -82,10 +83,27 @@ func (cb *ComboBox) DisplayObject(scr *ScreenBuf) {
 	}
 
 	attr := cb.GetStateAttr(ColDialogText, ColDialogSelectedButton)
+	backgroundIdx := cb.Edit.ColorTextIdx
+	if cb.DropdownOnly && cb.focused {
+		backgroundIdx = cb.Edit.ColorSelectedIdx
+	}
+	attr = withBackground(attr, cb.GetStateAttr(backgroundIdx, backgroundIdx))
 	if cb.IsDisabled() {
 		attr = DimColor(attr)
 	}
 	scr.Write(cb.X2, cb.Y1, StringToCharInfo("↓", attr))
+}
+
+// withBackground keeps the foreground and text attributes from attr while
+// taking the background from backgroundAttr. ComboBox arrows are rendered as
+// a separate cell, but visually belong to the edit field beside them.
+func withBackground(attr, backgroundAttr uint64) uint64 {
+	if backgroundAttr&IsBgRGB != 0 {
+		attr = SetRGBBack(attr, GetRGBBack(backgroundAttr))
+	} else {
+		attr = SetIndexBack(attr, GetIndexBack(backgroundAttr))
+	}
+	return attr&^BackgroundIntensity | backgroundAttr&BackgroundIntensity
 }
 
 func (cb *ComboBox) ProcessKey(e *vtinput.InputEvent) bool {
@@ -125,12 +143,23 @@ func (cb *ComboBox) ProcessMouse(e *vtinput.InputEvent) bool {
 	if cb.IsDisabled() {
 		return false
 	}
-	if e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
+	if cb.editMouseCaptured {
+		cb.Edit.ProcessMouse(e)
+		if e.ButtonState == 0 {
+			cb.editMouseCaptured = false
+			return true
+		}
+		return true
+	}
+	if e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown && e.MouseEventFlags&vtinput.MouseMoved == 0 {
 		mx := int(e.MouseX)
 		// If arrow clicked or DropdownOnly is true and clicked anywhere within the bounds
 		if mx == cb.X2 || cb.DropdownOnly {
 			cb.Open()
 			return true
+		}
+		if cb.Edit.HitTest(mx, int(e.MouseY)) {
+			cb.editMouseCaptured = true
 		}
 	}
 	return cb.Edit.ProcessMouse(e)
@@ -180,11 +209,17 @@ func (cb *ComboBox) Open() {
 func (cb *ComboBox) SetFocus(f bool) {
 	cb.focused = f
 	cb.Edit.SetFocus(f)
+	if !f {
+		cb.editMouseCaptured = false
+	}
 }
 
 func (cb *ComboBox) SetDisabled(d bool) {
 	cb.ScreenObject.SetDisabled(d)
 	cb.Edit.SetDisabled(d)
+	if d {
+		cb.editMouseCaptured = false
+	}
 }
 func (cb *ComboBox) WantsChars() bool {
 	return !cb.DropdownOnly

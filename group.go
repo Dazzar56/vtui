@@ -14,10 +14,11 @@ type FocusDirectionSetter interface {
 }
 type Group struct {
 	ScreenObject
-	items     []UIElement
-	focusIdx  int
-	WrapFocus bool
-	links     []autoLink
+	items        []UIElement
+	focusIdx     int
+	WrapFocus    bool
+	links        []autoLink
+	mouseCapture UIElement
 }
 
 func (g *Group) SetFocusDirection(direction int) {
@@ -245,6 +246,14 @@ func (g *Group) ProcessKey(e *vtinput.InputEvent) bool {
 
 // ProcessMouse handles mouse events by hit-testing child elements.
 func (g *Group) ProcessMouse(e *vtinput.InputEvent) bool {
+	if g.mouseCapture != nil {
+		g.mouseCapture.ProcessMouse(e)
+		if e.ButtonState == 0 {
+			g.mouseCapture = nil
+		}
+		return true
+	}
+
 	mx, my := int(e.MouseX), int(e.MouseY)
 	for i := len(g.items) - 1; i >= 0; i-- {
 		item := g.items[i]
@@ -255,6 +264,9 @@ func (g *Group) ProcessMouse(e *vtinput.InputEvent) bool {
 				}
 			}
 			if item.ProcessMouse(e) {
+				if e.KeyDown && e.ButtonState != 0 && e.MouseEventFlags&vtinput.MouseMoved == 0 {
+					g.mouseCapture = item
+				}
 				return true
 			}
 
