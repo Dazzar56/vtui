@@ -25,10 +25,64 @@ func TestButton_OnClick(t *testing.T) {
 	}
 
 	clicked = false
-	// Test Mouse Click
+	// Mouse down only presses the button visually; release performs the click.
 	b.ProcessMouse(&vtinput.InputEvent{Type: vtinput.MouseEventType, KeyDown: true, ButtonState: vtinput.FromLeft1stButtonPressed})
+	if clicked {
+		t.Error("Button should not click on mouse down")
+	}
+	if !b.mousePressed {
+		t.Error("Button should be visually pressed on mouse down")
+	}
+	b.ProcessMouse(&vtinput.InputEvent{Type: vtinput.MouseEventType, ButtonState: 0})
 	if !clicked {
-		t.Error("Button should be clicked on Left Mouse Button")
+		t.Error("Button should be clicked on mouse release")
+	}
+	if b.mousePressed || b.mouseArmed {
+		t.Error("Button should reset its mouse state after release")
+	}
+}
+
+func TestButton_MouseReleaseOutsideCancelsClick(t *testing.T) {
+	b := NewButton(2, 1, "OK")
+	clicked := false
+	b.OnClick = func() { clicked = true }
+
+	b.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: true,
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+		MouseX:      3, MouseY: 1,
+	})
+	b.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, ButtonState: vtinput.FromLeft1stButtonPressed,
+		MouseEventFlags: vtinput.MouseMoved,
+		MouseX:          20, MouseY: 5,
+	})
+	if b.mousePressed {
+		t.Error("Button should not look pressed while pointer is outside")
+	}
+	b.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, ButtonState: 0,
+		MouseX: 20, MouseY: 5,
+	})
+	if clicked {
+		t.Error("Button should not click when released outside")
+	}
+}
+
+func TestButton_DragBackInsideRestoresPressedStateAndClicks(t *testing.T) {
+	b := NewButton(2, 1, "OK")
+	clicked := false
+	b.OnClick = func() { clicked = true }
+
+	b.ProcessMouse(&vtinput.InputEvent{Type: vtinput.MouseEventType, KeyDown: true, ButtonState: vtinput.FromLeft1stButtonPressed, MouseX: 3, MouseY: 1})
+	b.ProcessMouse(&vtinput.InputEvent{Type: vtinput.MouseEventType, ButtonState: vtinput.FromLeft1stButtonPressed, MouseEventFlags: vtinput.MouseMoved, MouseX: 20, MouseY: 5})
+	b.ProcessMouse(&vtinput.InputEvent{Type: vtinput.MouseEventType, ButtonState: vtinput.FromLeft1stButtonPressed, MouseEventFlags: vtinput.MouseMoved, MouseX: 3, MouseY: 1})
+	if !b.mousePressed {
+		t.Error("Button should look pressed again after dragging back inside")
+	}
+	b.ProcessMouse(&vtinput.InputEvent{Type: vtinput.MouseEventType, ButtonState: 0, MouseX: 3, MouseY: 1})
+	if !clicked {
+		t.Error("Button should click when released inside after dragging back")
 	}
 }
 

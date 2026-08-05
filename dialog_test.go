@@ -91,6 +91,13 @@ func TestDialog_NoDragWhenClickingElement(t *testing.T) {
 	if d.isDragging {
 		t.Error("Dialog should NOT start dragging when clicking on an interactive element")
 	}
+	if clicked {
+		t.Error("Button action should not run on mouse down")
+	}
+	d.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, ButtonState: 0,
+		MouseX: 1, MouseY: 1,
+	})
 	if !clicked {
 		t.Error("Button should have handled the click")
 	}

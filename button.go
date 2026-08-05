@@ -8,9 +8,11 @@ import (
 // Button represents an interactive button.
 type Button struct {
 	ScreenObject
-	OnClick   func()
-	IsDefault bool
-	caption   string
+	OnClick      func()
+	IsDefault    bool
+	caption      string
+	mouseArmed   bool
+	mousePressed bool
 }
 
 func NewButton(x, y int, text string) *Button {
@@ -49,6 +51,9 @@ func (b *Button) DisplayObject(scr *ScreenBuf) {
 		return
 	}
 	n, h := b.GetStateAttrs(ColDialogButton, ColDialogSelectedButton, ColDialogHighlightButton, ColDialogHighlightSelectedButton)
+	if b.mousePressed {
+		n, h = b.GetStateAttrs(ColDialogSelectedButton, ColDialogSelectedButton, ColDialogHighlightSelectedButton, ColDialogHighlightSelectedButton)
+	}
 	NewPainter(scr).DrawHighlightedText(b.X1, b.Y1, b.cleanText, b.hotkeyPos, n, h)
 }
 
@@ -67,10 +72,39 @@ func (b *Button) ProcessKey(e *vtinput.InputEvent) bool {
 
 func (b *Button) ProcessMouse(e *vtinput.InputEvent) bool {
 	if b.IsDisabled() {
+		b.mouseArmed = false
+		b.mousePressed = false
 		return false
 	}
-	if e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
-		return b.FireAction(b.OnClick, nil)
+
+	if b.mouseArmed {
+		inside := b.HitTest(int(e.MouseX), int(e.MouseY))
+		if e.ButtonState&vtinput.FromLeft1stButtonPressed != 0 {
+			b.mousePressed = inside
+			return true
+		}
+
+		activate := b.mousePressed && inside
+		b.mouseArmed = false
+		b.mousePressed = false
+		if activate {
+			b.FireAction(b.OnClick, nil)
+		}
+		return true
+	}
+
+	if e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown && e.MouseEventFlags&vtinput.MouseMoved == 0 && b.HitTest(int(e.MouseX), int(e.MouseY)) {
+		b.mouseArmed = true
+		b.mousePressed = true
+		return true
 	}
 	return false
+}
+
+func (b *Button) SetDisabled(d bool) {
+	b.ScreenObject.SetDisabled(d)
+	if d {
+		b.mouseArmed = false
+		b.mousePressed = false
+	}
 }
