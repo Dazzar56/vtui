@@ -2,6 +2,10 @@ package vtui
 
 import "github.com/unxed/vtinput"
 
+// TripleClick is a VTUI mouse event flag generated for the third consecutive
+// click at the same position. The native console flags only define DoubleClick.
+const TripleClick uint32 = 0x0010
+
 // Coord defines the coordinates in the console.
 type Coord struct {
 	X int16

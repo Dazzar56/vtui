@@ -215,6 +215,40 @@ func TestComboBox_EditableDragSelectsTextOutsideControl(t *testing.T) {
 	}
 }
 
+func TestComboBox_EditableDoubleClickSelectsWord(t *testing.T) {
+	cb := NewComboBox(2, 1, 20, nil)
+	cb.Edit.SetText("one two three")
+
+	cb.ProcessMouse(&vtinput.InputEvent{
+		Type:            vtinput.MouseEventType,
+		KeyDown:         true,
+		ButtonState:     vtinput.FromLeft1stButtonPressed,
+		MouseEventFlags: vtinput.DoubleClick,
+		MouseX:          int16(cb.X1 + 5), MouseY: int16(cb.Y1),
+	})
+
+	if cb.Edit.selStart != 4 || cb.Edit.selEnd != 7 {
+		t.Fatalf("double-click selection = [%d,%d), want [4,7)", cb.Edit.selStart, cb.Edit.selEnd)
+	}
+}
+
+func TestComboBox_EditableTripleClickSelectsAll(t *testing.T) {
+	cb := NewComboBox(2, 1, 20, nil)
+	cb.Edit.SetText("one two three")
+
+	cb.ProcessMouse(&vtinput.InputEvent{
+		Type:            vtinput.MouseEventType,
+		KeyDown:         true,
+		ButtonState:     vtinput.FromLeft1stButtonPressed,
+		MouseEventFlags: TripleClick,
+		MouseX:          int16(cb.X1 + 5), MouseY: int16(cb.Y1),
+	})
+
+	if cb.Edit.selStart != 0 || cb.Edit.selEnd != len(cb.Edit.text) {
+		t.Fatalf("triple-click selection = [%d,%d), want all text", cb.Edit.selStart, cb.Edit.selEnd)
+	}
+}
+
 func sameBackground(a, b uint64) bool {
 	if a&IsBgRGB != b&IsBgRGB {
 		return false

@@ -1788,19 +1788,7 @@ func TestFrameManager_DoubleClickDetection(t *testing.T) {
 	fm.Push(frame)
 
 	dispatch := func(e *vtinput.InputEvent) {
-		// Simplified dispatch from fm.Run()
-		if e.Type == vtinput.MouseEventType && e.ButtonState != 0 && e.KeyDown && (e.MouseEventFlags&vtinput.MouseMoved) == 0 {
-			now := time.Now()
-			if e.ButtonState == fm.lastMouseButton && int(e.MouseX) == fm.lastMouseX && int(e.MouseY) == fm.lastMouseY && now.Sub(fm.lastMouseClickTime) < 400*time.Millisecond {
-				e.MouseEventFlags |= vtinput.DoubleClick
-				fm.lastMouseButton = 0 // prevent triple click
-			} else {
-				fm.lastMouseButton = e.ButtonState
-				fm.lastMouseX = int(e.MouseX)
-				fm.lastMouseY = int(e.MouseY)
-				fm.lastMouseClickTime = now
-			}
-		}
+		fm.markMultiClick(e, time.Now())
 		frame.ProcessMouse(e)
 	}
 
@@ -1817,21 +1805,31 @@ func TestFrameManager_DoubleClickDetection(t *testing.T) {
 		t.Error("Fast second click was not detected as double click")
 	}
 
-	// 3. Slow third click - no double click
-	time.Sleep(500 * time.Millisecond)
+	// 3. Fast third click, same spot - IS triple click
+	time.Sleep(100 * time.Millisecond)
 	dispatch(&vtinput.InputEvent{Type: vtinput.MouseEventType, KeyDown: true, MouseX: 10, MouseY: 10, ButtonState: vtinput.FromLeft1stButtonPressed})
+	if (lastEvent.MouseEventFlags & TripleClick) == 0 {
+		t.Error("Fast third click was not detected as triple click")
+	}
 	if (lastEvent.MouseEventFlags & vtinput.DoubleClick) != 0 {
-		t.Error("Slow third click should not be a double click")
+		t.Error("Triple click should not also be marked as double click")
 	}
 
-	// 4. Fast click, different spot - no double click
+	// 4. Slow next click - no multi-click
+	time.Sleep(500 * time.Millisecond)
+	dispatch(&vtinput.InputEvent{Type: vtinput.MouseEventType, KeyDown: true, MouseX: 10, MouseY: 10, ButtonState: vtinput.FromLeft1stButtonPressed})
+	if (lastEvent.MouseEventFlags & (vtinput.DoubleClick | TripleClick)) != 0 {
+		t.Error("Slow click should not be a multi-click")
+	}
+
+	// 5. Fast click, different spot - no double click
 	time.Sleep(100 * time.Millisecond)
 	dispatch(&vtinput.InputEvent{Type: vtinput.MouseEventType, KeyDown: true, MouseX: 11, MouseY: 10, ButtonState: vtinput.FromLeft1stButtonPressed})
 	if (lastEvent.MouseEventFlags & vtinput.DoubleClick) != 0 {
 		t.Error("Click in different spot should not be a double click")
 	}
 
-	// 5. Fast click, different button - no double click
+	// 6. Fast click, different button - no double click
 	time.Sleep(100 * time.Millisecond)
 	dispatch(&vtinput.InputEvent{Type: vtinput.MouseEventType, KeyDown: true, MouseX: 11, MouseY: 10, ButtonState: vtinput.RightmostButtonPressed})
 	if (lastEvent.MouseEventFlags & vtinput.DoubleClick) != 0 {

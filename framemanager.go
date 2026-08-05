@@ -130,6 +130,7 @@ type frameManager struct {
 	lastMouseClickTime     time.Time
 	lastMouseX, lastMouseY int
 	lastMouseButton        uint32
+	lastMouseClickCount    int
 	lastMouseEventX        int
 	lastMouseEventY        int
 	mousePositionKnown     bool
@@ -1452,20 +1453,7 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 		return
 	}
 
-	// Generate DoubleClick flag from sequence of clicks
-	if ev.Type == vtinput.MouseEventType && ev.ButtonState != 0 && ev.KeyDown && (ev.MouseEventFlags&vtinput.MouseMoved) == 0 {
-		now := time.Now()
-		if ev.ButtonState == fm.lastMouseButton && int(ev.MouseX) == fm.lastMouseX && int(ev.MouseY) == fm.lastMouseY && now.Sub(fm.lastMouseClickTime) < 400*time.Millisecond {
-			ev.MouseEventFlags |= vtinput.DoubleClick
-			fm.lastMouseButton = 0 // prevent triple click
-			DebugLog("FM: DoubleClick generated at (%d,%d)", ev.MouseX, ev.MouseY)
-		} else {
-			fm.lastMouseButton = ev.ButtonState
-			fm.lastMouseX = int(ev.MouseX)
-			fm.lastMouseY = int(ev.MouseY)
-			fm.lastMouseClickTime = now
-		}
-	}
+	fm.markMultiClick(ev, time.Now())
 
 	topFrame := fm.frames[len(fm.frames)-1]
 	activeMenu := fm.GetActiveMenuBar()
@@ -1762,4 +1750,35 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 
 	// 4. Cleanup: Remove all frames that are marked as done.
 	fm.cleanupDoneFrames()
+}
+
+func (fm *frameManager) markMultiClick(ev *vtinput.InputEvent, now time.Time) {
+	if ev.Type != vtinput.MouseEventType || ev.ButtonState == 0 || !ev.KeyDown || ev.MouseEventFlags&vtinput.MouseMoved != 0 {
+		return
+	}
+
+	sameClick := ev.ButtonState == fm.lastMouseButton &&
+		int(ev.MouseX) == fm.lastMouseX && int(ev.MouseY) == fm.lastMouseY &&
+		now.Sub(fm.lastMouseClickTime) < 400*time.Millisecond
+	if sameClick {
+		fm.lastMouseClickCount++
+	} else {
+		fm.lastMouseClickCount = 1
+	}
+
+	fm.lastMouseButton = ev.ButtonState
+	fm.lastMouseX = int(ev.MouseX)
+	fm.lastMouseY = int(ev.MouseY)
+	fm.lastMouseClickTime = now
+
+	switch fm.lastMouseClickCount {
+	case 2:
+		ev.MouseEventFlags |= vtinput.DoubleClick
+		DebugLog("FM: DoubleClick generated at (%d,%d)", ev.MouseX, ev.MouseY)
+	case 3:
+		ev.MouseEventFlags &^= vtinput.DoubleClick
+		ev.MouseEventFlags |= TripleClick
+		fm.lastMouseClickCount = 0
+		DebugLog("FM: TripleClick generated at (%d,%d)", ev.MouseX, ev.MouseY)
+	}
 }

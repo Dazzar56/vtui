@@ -864,6 +864,14 @@ func (e *Edit) ProcessMouse(ev *vtinput.InputEvent) bool {
 			}
 			if e.HitTest(int(ev.MouseX), int(ev.MouseY)) {
 				e.curPos = e.cursorPositionAtX(int(ev.MouseX))
+				if ev.MouseEventFlags&TripleClick != 0 {
+					e.SelectAll()
+					return true
+				}
+				if ev.MouseEventFlags&vtinput.DoubleClick != 0 {
+					e.selectWordAtCursor()
+					return true
+				}
 				e.ClearSelection()
 				e.clearFlag = false
 				e.mouseSelecting = true
@@ -879,6 +887,26 @@ func (e *Edit) ProcessMouse(ev *vtinput.InputEvent) bool {
 		}
 	}
 	return false
+}
+
+func (e *Edit) selectWordAtCursor() {
+	if e.curPos < 0 || e.curPos >= len(e.text) {
+		e.ClearSelection()
+		return
+	}
+
+	category := getCharCategory(e.text[e.curPos])
+	start, end := e.curPos, e.curPos+1
+	for start > 0 && getCharCategory(e.text[start-1]) == category {
+		start--
+	}
+	for end < len(e.text) && getCharCategory(e.text[end]) == category {
+		end++
+	}
+	e.selStart, e.selEnd = start, end
+	e.selAnchor = start
+	e.curPos = end
+	e.clearFlag = false
 }
 
 func (e *Edit) cursorPositionAtX(x int) int {
