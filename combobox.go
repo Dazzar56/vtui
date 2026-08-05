@@ -8,9 +8,10 @@ import (
 // ComboBox combines an edit field and a dropdown menu.
 type ComboBox struct {
 	ScreenObject
-	Edit         *Edit
-	Menu         *VMenu
-	DropdownOnly bool // If true, manual text entry is not allowed
+	Edit              *Edit
+	Menu              *VMenu
+	DropdownOnly      bool // If true, manual text entry is not allowed
+	editMouseCaptured bool
 }
 
 func NewComboBox(x, y, width int, items []string) *ComboBox {
@@ -142,12 +143,25 @@ func (cb *ComboBox) ProcessMouse(e *vtinput.InputEvent) bool {
 	if cb.IsDisabled() {
 		return false
 	}
-	if e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown {
+	if cb.editMouseCaptured {
+		if e.ButtonState == 0 {
+			cb.editMouseCaptured = false
+			return true
+		}
+		if cb.Edit.HitTest(int(e.MouseX), int(e.MouseY)) {
+			cb.Edit.ProcessMouse(e)
+		}
+		return true
+	}
+	if e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown && e.MouseEventFlags&vtinput.MouseMoved == 0 {
 		mx := int(e.MouseX)
 		// If arrow clicked or DropdownOnly is true and clicked anywhere within the bounds
 		if mx == cb.X2 || cb.DropdownOnly {
 			cb.Open()
 			return true
+		}
+		if cb.Edit.HitTest(mx, int(e.MouseY)) {
+			cb.editMouseCaptured = true
 		}
 	}
 	return cb.Edit.ProcessMouse(e)
@@ -197,11 +211,17 @@ func (cb *ComboBox) Open() {
 func (cb *ComboBox) SetFocus(f bool) {
 	cb.focused = f
 	cb.Edit.SetFocus(f)
+	if !f {
+		cb.editMouseCaptured = false
+	}
 }
 
 func (cb *ComboBox) SetDisabled(d bool) {
 	cb.ScreenObject.SetDisabled(d)
 	cb.Edit.SetDisabled(d)
+	if d {
+		cb.editMouseCaptured = false
+	}
 }
 func (cb *ComboBox) WantsChars() bool {
 	return !cb.DropdownOnly

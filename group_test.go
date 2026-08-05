@@ -333,6 +333,10 @@ func TestGroup_ProcessMouse_EmptySpacePropagation(t *testing.T) {
 	if win.isDragging {
 		t.Error("Click on button should not initiate window dragging")
 	}
+	win.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, MouseX: 18, MouseY: 9,
+		ButtonState: 0, KeyDown: false,
+	})
 
 	// Тест 2: Клик по пустому пространству GroupBox должен провалиться глубже
 	// и инициировать перетаскивание родительского BaseWindow
