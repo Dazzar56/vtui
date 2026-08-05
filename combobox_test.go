@@ -159,6 +159,29 @@ func TestComboBox_DropdownOnlyFocusedArrowUsesSelectedBackground(t *testing.T) {
 	}
 }
 
+func TestComboBox_EditableClickMovesCursor(t *testing.T) {
+	cb := NewComboBox(5, 2, 20, []string{"One", "Two"})
+	cb.Edit.SetText("abcdef")
+
+	handled := cb.ProcessMouse(&vtinput.InputEvent{
+		Type:        vtinput.MouseEventType,
+		KeyDown:     true,
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+		MouseX:      int16(cb.X1 + 2),
+		MouseY:      int16(cb.Y1),
+	})
+
+	if !handled {
+		t.Fatal("editable ComboBox did not handle text click")
+	}
+	if cb.Edit.curPos != 2 {
+		t.Fatalf("cursor position = %d, want 2", cb.Edit.curPos)
+	}
+	if cb.Edit.selStart != -1 {
+		t.Fatalf("click left selection active at %d", cb.Edit.selStart)
+	}
+}
+
 func sameBackground(a, b uint64) bool {
 	if a&IsBgRGB != b&IsBgRGB {
 		return false

@@ -841,6 +841,12 @@ func (e *Edit) ProcessMouse(ev *vtinput.InputEvent) bool {
 				e.OpenHistory()
 				return true
 			}
+			if e.HitTest(int(ev.MouseX), int(ev.MouseY)) {
+				e.curPos = e.cursorPositionAtX(int(ev.MouseX))
+				e.ClearSelection()
+				e.clearFlag = false
+				return true
+			}
 		}
 		// Middle-click to paste (standard TUI/Unix behavior)
 		if ev.ButtonState == vtinput.FromLeft2ndButtonPressed {
@@ -850,4 +856,24 @@ func (e *Edit) ProcessMouse(ev *vtinput.InputEvent) bool {
 		}
 	}
 	return false
+}
+
+func (e *Edit) cursorPositionAtX(x int) int {
+	if x <= e.X1 {
+		return e.leftPos
+	}
+
+	column := x - e.X1
+	width := 0
+	for i := e.leftPos; i < len(e.text); i++ {
+		runeWidth := 1
+		if !e.PasswordMode {
+			runeWidth = runewidth.RuneWidth(e.text[i])
+		}
+		if width+runeWidth > column {
+			return i
+		}
+		width += runeWidth
+	}
+	return len(e.text)
 }
