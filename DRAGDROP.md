@@ -91,19 +91,23 @@ debug.log, and which line is *missing* says where the gesture died:
 - gogpu limitation: nothing arrives before the drop, so a target cannot
   highlight anything while the pointer is still moving. The gesture is
   replayed as one enter immediately followed by the drop
-  - gogpu limitation: the drop position arrives as 0,0, at least on X11, so
-    the position is taken from where gogpu last saw the pointer instead,
-    which is tracked through a foreign drag and is where the user aimed.
-    `VTUI_GOGPU_DROP_POINTER=0` goes back to the reported position, which
-    puts every drop in the first cell of the screen
+  - gogpu, X11, fixed in gogpu 0.50.1: the drop position used to arrive as
+    0,0, because the wait for the dropped data threw away the XdndPosition
+    that TCP batching had delivered behind the drop. Until go.mod can move
+    to a release carrying that fix, the position is taken from where gogpu
+    last saw the pointer, which is tracked through a foreign drag and is
+    where the user aimed. `VTUI_GOGPU_DROP_POINTER=0` goes back to the
+    reported position; on 0.50.0 that puts every drop in the first cell.
+    Once go.mod moves, both the switch and the pointer path can go
   - gogpu limitation: only copy is offered when dragging out, as on X11 and
       for the same reason. gogpu's DragData carries no action either, so there
       is nothing else it could be told
-    - gogpu, X11: a drag out does not reach any target. gogpu accepts the
-      files, runs a session for as long as the button is held and reports it
-      cancelled, against targets our own XDND source drops into happily. The
-      source half of x11_xdnd.go is being untied from X11Host so it can be
-      driven on a gogpu window instead; see REVIEW.md
+  - gogpu, X11, fixed in gogpu 0.50.1: a drag out used to reach no target
+    at all. Three defects stacked - XDND messages sent with a mask the
+    window manager swallowed, a stale ButtonRelease ending the session
+    before it began, and the wait for XdndFinished discarding the
+    SelectionRequest that carries the data. Both directions work once
+    go.mod carries the fix
   - gogpu limitation: a drag out begins on the first frame after it is asked
     for, since the platform side may only be touched from the main loop. The
     request wakes that loop itself, so the delay is a frame, not a wait

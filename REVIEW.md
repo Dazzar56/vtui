@@ -50,30 +50,21 @@ still down. Whether every platform really swallows that release is untested.
 `ErrDragBusy` and `ErrDragNoData` now live in dragdrop.go. They were never
 about X11, and gogpu_dnd.go builds on platforms where x11_xdnd.go does not,
 so they had to move for it to compile at all. Nothing else changed with them.
-## The drag and drop paths are instrumented rather than understood
+## Drag and drop under gogpu waits on a gogpu release
 
-Neither direction does anything under the gogpu backend on Linux while the
-X11 backend works, and the boundary between us and gogpu is where the
-gesture disappears. Both directions now log every decision they take (see
-the diagnosing section of DRAGDROP.md), and the logs are what should decide
-the fix. This section, and the per-frame counter behind
-`noteGogpuUpdateTick`, go away with it.
-The incoming half is settled: a drop arrives and is copied, and the
-position, which gogpu always reports as 0,0, now comes from its pointer,
-measured against a real desktop first.
+Both halves were gogpu's, both are fixed upstream (gogpu/gogpu#431, in
+0.50.1), and the fixes are confirmed against a real desktop. Nothing in
+this package needs changing for them. What is left is bookkeeping, in one
+step, when a release carrying the fix exists:
 
-The outgoing half is settled too, and not in gogpu's favour. It accepts an
-absolute path to a real file, runs a session for as long as the button is
-held, and reports it cancelled - against a plain directory open in
-Nautilus, into which the same f4, the same panel code and the same payload
-drop without trouble under our own X11 backend. Nothing above the backend
-differs between the two, so gogpu's X11 drag source is what does not reach
-a target, and it is not ours to fix.
+- move go.mod to it;
+- delete `gogpuDropUsePointer`, `pointerPixels` and the pointer branch of
+  `dropCellFor`, since gogpu will report the drop position itself;
+- thin out the logging added while this was being chased. The per-decision
+  lines earned their keep once and can stay, but the per-frame counter
+  behind `noteGogpuUpdateTick` answers a question that is now answered.
 
-What is ours is to stop depending on it. The source half of x11_xdnd.go
-works and wants only a connection, a window of its own and the events of
-its grab, none of which have to come from an X11Host. Untying it is the
-first of three steps: this one, then a standalone source with its own
-connection and an unmapped window, then GogpuHost.StartDrag preferring it
-whenever DISPLAY is set, with gogpu's own source left as the fallback for
-Windows, macOS and Wayland.
+The plan to drive our own XDND source on a gogpu window is dropped. The
+refactor that untied the source half of x11_xdnd.go from X11Host is done
+and harmless, so it stays; it costs nothing and would be the starting
+point if this ever comes back.
