@@ -1,0 +1,588 @@
+# Summary: Backend-agnostic drag and drop core for vtui.
+#
+# Nothing here talks to a display server: this is the contract every
+# graphical backend will implement (X11 XDND first), plus the payload
+# types and the text/uri-list codec every one of them needs.
+#
+# Plan:
+#   1. dragdrop.go: DropAction / DragPhase / DragPayload / DragEvent,
+#      DropTarget and DragBackend registration, DeliverDragEvent with a
+#      hop to the UI thread and a timeout, uri-list helpers.
+#   2. dragdrop_test.go: uri-list round trip, action arithmetic,
+#      inline delivery, backend registration.
+#   3. DRAGDROP.md: the contract a backend has to satisfy.
+
+7c1e4a92 AP 3.1
+
+7c1e4a92 FILE
+dragdrop.go
+
+7c1e4a92 CREATE
+7c1e4a92 content
+package vtui
+
+import (
+	"errors"
+	"net/url"
+	"path/filepath"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/unxed/vtinput"
+)
+
+// DropAction says what a drop would do with the payload. The values are bit
+// flags, so a set of actions a source is willing to perform travels in a
+// single value, while a decision taken by a target is a single flag.
+type DropAction uint8
+
+const (
+	DropNone DropAction = 0
+	DropCopy DropAction = 1 << 0
+	DropMove DropAction = 1 << 1
+	DropLink DropAction = 1 << 2
+)
+
+// Has reports whether every flag of other is present in a.
+func (a DropAction) Has(other DropAction) bool {
+	return other != DropNone && a&other == other
+}
+
+// String renders one action or a set of them, for logs and tests.
+func (a DropAction) String() string {
+	if a == DropNone {
+		return "none"
+	}
+	var parts []string
+	if a&DropCopy != 0 {
+		parts = append(parts, "copy")
+	}
+	if a&DropMove != 0 {
+		parts = append(parts, "move")
+	}
+	if a&DropLink != 0 {
+		parts = append(parts, "link")
+	}
+	return strings.Join(parts, "|")
+}
+
+// DragPhase is where in the gesture an event arrives. A backend sends
+// DragEnter once when the pointer carrying a payload appears over the
+// window, DragOver while it moves, and then exactly one of DragLeave or
+// DragDrop.
+type DragPhase uint8
+
+const (
+	DragEnter DragPhase = iota
+	DragOver
+	DragLeave
+	DragDrop
+)
+
+func (p DragPhase) String() string {
+	switch p {
+	case DragEnter:
+		return "enter"
+	case DragOver:
+		return "over"
+	case DragLeave:
+		return "leave"
+	case DragDrop:
+		return "drop"
+	}
+	return "unknown"
+}
+
+// DragPayload is what is being dragged. Paths hold file names on this
+// machine, already decoded from their URIs; URIs hold everything else the
+// source offered (http:, smb:, a remote file: with a foreign host), so a
+// target can still do something useful with them. Kinds lists the MIME
+// types the source announced, for targets that want to look closer.
+type DragPayload struct {
+	Kinds []string
+	Paths []string
+	URIs  []string
+	Text  string
+}
+
+// HasFiles reports whether the payload names files on this machine.
+func (p DragPayload) HasFiles() bool { return len(p.Paths) > 0 }
+
+// IsEmpty reports whether there is nothing to drop.
+func (p DragPayload) IsEmpty() bool {
+	return len(p.Paths) == 0 && len(p.URIs) == 0 && p.Text == ""
+}
+
+// DragEvent is one step of a drag gesture over our window. X and Y are cell
+// coordinates, converted by the backend from device pixels, so a target
+// reasons in the same units as a mouse event. Allowed is what the source
+// permits, Suggested is what it would do by default.
+type DragEvent struct {
+	Phase     DragPhase
+	X, Y      int
+	Modifiers vtinput.ControlKeyState
+	Allowed   DropAction
+	Suggested DropAction
+	Payload   DragPayload
+}
+
+// DropTarget is implemented by the application to answer what a drop at a
+// given place would do. The returned action is reported back to the source,
+// which is how the pointer gets its copy / move cursor. Returning DropNone
+// means "not here".
+type DropTarget interface {
+	HandleDrag(ev *DragEvent) DropAction
+}
+
+// DropTargetFunc adapts a plain function to DropTarget.
+type DropTargetFunc func(ev *DragEvent) DropAction
+
+func (f DropTargetFunc) HandleDrag(ev *DragEvent) DropAction { return f(ev) }
+
+// DragBackend is implemented by a graphical backend that speaks the drag and
+// drop protocol of its display server. Terminals do not have one, so on them
+// no backend is registered and both directions simply stay unavailable.
+type DragBackend interface {
+	// AcceptsDrops reports whether payloads from other applications can
+	// reach us at all.
+	AcceptsDrops() bool
+	// StartDrag hands a payload to the display server and blocks until the
+	// gesture is over, returning what the receiver did with it.
+	StartDrag(payload DragPayload, allowed DropAction) (DropAction, error)
+}
+
+// ErrDragUnsupported is returned when a drag is started on a backend that
+// has no drag and drop protocol (every terminal, for now).
+var ErrDragUnsupported = errors.New("drag and drop is not supported by this backend")
+
+var (
+	dragMu      sync.Mutex
+	dropTarget  DropTarget
+	dragBackend DragBackend
+)
+
+// DragDeliverTimeout bounds how long a backend waits for the UI thread to
+// answer. A display server expects a status reply quickly; a UI busy with a
+// modal dialog must not stall the whole desktop's drag.
+var DragDeliverTimeout = 250 * time.Millisecond
+
+// DragDeliverToUI routes drag events through the UI thread, which is what a
+// real backend needs, since it runs its event loop in its own goroutine.
+// Tests set it to false to call the target directly.
+var DragDeliverToUI = true
+
+// SetDropTarget installs the application's drop target, or removes it when
+// t is nil.
+func SetDropTarget(t DropTarget) {
+	dragMu.Lock()
+	dropTarget = t
+	dragMu.Unlock()
+}
+
+// CurrentDropTarget returns the installed drop target, if any.
+func CurrentDropTarget() DropTarget {
+	dragMu.Lock()
+	defer dragMu.Unlock()
+	return dropTarget
+}
+
+// SetDragBackend is called by a graphical backend once its window exists.
+func SetDragBackend(b DragBackend) {
+	dragMu.Lock()
+	dragBackend = b
+	dragMu.Unlock()
+}
+
+// CurrentDragBackend returns the registered backend, if any.
+func CurrentDragBackend() DragBackend {
+	dragMu.Lock()
+	defer dragMu.Unlock()
+	return dragBackend
+}
+
+// DropSupported reports whether drops from other applications can arrive.
+func DropSupported() bool {
+	b := CurrentDragBackend()
+	return b != nil && b.AcceptsDrops()
+}
+
+// DragOutSupported reports whether we can hand a payload to other
+// applications. It is the same condition today, but the two directions are
+// separate protocols and one may well arrive before the other.
+func DragOutSupported() bool {
+	return CurrentDragBackend() != nil
+}
+
+// StartDrag offers payload to the rest of the desktop and blocks until the
+// gesture ends.
+func StartDrag(payload DragPayload, allowed DropAction) (DropAction, error) {
+	b := CurrentDragBackend()
+	if b == nil {
+		return DropNone, ErrDragUnsupported
+	}
+	return b.StartDrag(payload, allowed)
+}
+
+// DeliverDragEvent is what a backend calls for every step of a gesture. It
+// moves the call to the UI thread, since backends run their event loops in
+// their own goroutines and a target inspects live UI state.
+func DeliverDragEvent(ev *DragEvent) DropAction {
+	if ev == nil {
+		return DropNone
+	}
+	t := CurrentDropTarget()
+	if t == nil {
+		return DropNone
+	}
+	DebugLog("DND: %s at %d,%d files=%d allowed=%s", ev.Phase, ev.X, ev.Y, len(ev.Payload.Paths), ev.Allowed)
+
+	if !DragDeliverToUI || FrameManager == nil || FrameManager.taskChanIn == nil {
+		return safeHandleDrag(t, ev)
+	}
+
+	res := make(chan DropAction, 1)
+	FrameManager.PostTask(func() { res <- safeHandleDrag(t, ev) })
+	select {
+	case action := <-res:
+		return action
+	case <-time.After(DragDeliverTimeout):
+		DebugLog("DND: UI thread silent for %s, reporting no action", DragDeliverTimeout)
+		return DropNone
+	}
+}
+
+// safeHandleDrag keeps a panicking target from taking the whole desktop's
+// drag down with it.
+func safeHandleDrag(t DropTarget, ev *DragEvent) (action DropAction) {
+	defer func() {
+		if r := recover(); r != nil {
+			DebugLog("DND: drop target panicked: %v", r)
+			action = DropNone
+		}
+	}()
+	return t.HandleDrag(ev)
+}
+
+// ParseURIList decodes a text/uri-list body (RFC 2483): one URI per line,
+// CRLF separated, lines starting with '#' are comments. This is the format
+// every desktop uses for dragged files, so every backend needs it.
+func ParseURIList(data string) DragPayload {
+	var p DragPayload
+	for _, line := range strings.Split(data, "\n") {
+		line = strings.TrimSpace(strings.TrimRight(line, "\r"))
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if path, ok := URIToLocalPath(line); ok {
+			p.Paths = append(p.Paths, path)
+			continue
+		}
+		p.URIs = append(p.URIs, line)
+	}
+	if len(p.Paths) > 0 || len(p.URIs) > 0 {
+		p.Kinds = []string{"text/uri-list"}
+	}
+	return p
+}
+
+// FormatURIList encodes local paths back into a text/uri-list body.
+func FormatURIList(paths []string) string {
+	var b strings.Builder
+	for _, p := range paths {
+		if strings.TrimSpace(p) == "" {
+			continue
+		}
+		b.WriteString(LocalPathToURI(p))
+		b.WriteString("\r\n")
+	}
+	return b.String()
+}
+
+// URIToLocalPath converts a file: URI into a path on this machine. A URI
+// with a foreign authority names a file somewhere else and is refused, so
+// the caller can pass it on as a URI instead of pretending it is local.
+func URIToLocalPath(uri string) (string, bool) {
+	if !strings.HasPrefix(strings.ToLower(uri), "file:") {
+		return "", false
+	}
+	rest := uri[len("file:"):]
+	if strings.HasPrefix(rest, "//") {
+		rest = rest[2:]
+		slash := strings.Index(rest, "/")
+		if slash < 0 {
+			return "", false
+		}
+		host := rest[:slash]
+		if host != "" && !strings.EqualFold(host, "localhost") {
+			return "", false
+		}
+		rest = rest[slash:]
+	} else if !strings.HasPrefix(rest, "/") {
+		return "", false
+	}
+	if i := strings.IndexAny(rest, "?#"); i >= 0 {
+		rest = rest[:i]
+	}
+	decoded, err := url.PathUnescape(rest)
+	if err != nil {
+		return "", false
+	}
+	return normalizeURIPath(decoded), true
+}
+
+// LocalPathToURI is the other direction, escaping whatever needs escaping.
+func LocalPathToURI(path string) string {
+	slashed := filepath.ToSlash(path)
+	if len(slashed) >= 2 && isDriveLetter(slashed[0]) && slashed[1] == ':' {
+		slashed = "/" + slashed
+	}
+	if !strings.HasPrefix(slashed, "/") {
+		slashed = "/" + slashed
+	}
+	u := url.URL{Scheme: "file", Path: slashed}
+	return u.String()
+}
+
+// normalizeURIPath turns the path part of a URI into a native one. A Windows
+// drive letter arrives as "/C:/dir" and has to lose its leading slash before
+// it means anything to the OS.
+func normalizeURIPath(p string) string {
+	if len(p) >= 3 && p[0] == '/' && isDriveLetter(p[1]) && p[2] == ':' {
+		p = p[1:]
+	}
+	return filepath.FromSlash(p)
+}
+
+func isDriveLetter(c byte) bool {
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+}
+
+7c1e4a92 FILE
+dragdrop_test.go
+
+7c1e4a92 CREATE
+7c1e4a92 content
+package vtui
+
+import (
+	"errors"
+	"path/filepath"
+	"reflect"
+	"strings"
+	"testing"
+)
+
+func TestDropActionHasAndString(t *testing.T) {
+	set := DropCopy | DropMove
+	if !set.Has(DropCopy) || !set.Has(DropMove) {
+		t.Fatalf("set %s must contain copy and move", set)
+	}
+	if set.Has(DropLink) {
+		t.Fatal("set must not contain link")
+	}
+	if set.Has(DropNone) {
+		t.Fatal("nothing is not an action a set contains")
+	}
+	if got := set.String(); got != "copy|move" {
+		t.Fatalf("String() = %q, want copy|move", got)
+	}
+	if got := DropNone.String(); got != "none" {
+		t.Fatalf("DropNone.String() = %q, want none", got)
+	}
+}
+
+func TestParseURIListSplitsLocalAndRemote(t *testing.T) {
+	body := "#comment\r\n" +
+		"file:///tmp/one%20two.txt\r\n" +
+		"file://localhost/tmp/three.txt\r\n" +
+		"\r\n" +
+		"https://example.org/x\r\n" +
+		"file://otherhost/tmp/four.txt\r\n"
+
+	p := ParseURIList(body)
+	wantPaths := []string{
+		filepath.FromSlash("/tmp/one two.txt"),
+		filepath.FromSlash("/tmp/three.txt"),
+	}
+	if !reflect.DeepEqual(p.Paths, wantPaths) {
+		t.Fatalf("Paths = %v, want %v", p.Paths, wantPaths)
+	}
+	wantURIs := []string{"https://example.org/x", "file://otherhost/tmp/four.txt"}
+	if !reflect.DeepEqual(p.URIs, wantURIs) {
+		t.Fatalf("URIs = %v, want %v", p.URIs, wantURIs)
+	}
+	if !p.HasFiles() || p.IsEmpty() {
+		t.Fatal("payload with files must report files")
+	}
+}
+
+func TestURIToLocalPathDriveLetter(t *testing.T) {
+	got, ok := URIToLocalPath("file:///C:/dir/file.txt")
+	if !ok {
+		t.Fatal("a drive letter URI names a local file")
+	}
+	if want := filepath.FromSlash("C:/dir/file.txt"); got != want {
+		t.Fatalf("path = %q, want %q", got, want)
+	}
+	if _, ok := URIToLocalPath("http://example.org/x"); ok {
+		t.Fatal("http is not a local file")
+	}
+}
+
+func TestFormatURIListRoundTrip(t *testing.T) {
+	paths := []string{
+		filepath.FromSlash("/tmp/a b.txt"),
+		filepath.FromSlash("/tmp/c#d.txt"),
+	}
+	list := FormatURIList(paths)
+	if !strings.HasSuffix(list, "\r\n") {
+		t.Fatalf("uri-list must be CRLF terminated: %q", list)
+	}
+	if strings.Contains(list, " ") {
+		t.Fatalf("spaces must be escaped: %q", list)
+	}
+	back := ParseURIList(list)
+	if !reflect.DeepEqual(back.Paths, paths) {
+		t.Fatalf("round trip = %v, want %v", back.Paths, paths)
+	}
+}
+
+func TestDeliverDragEventInline(t *testing.T) {
+	prev := DragDeliverToUI
+	DragDeliverToUI = false
+	defer func() {
+		DragDeliverToUI = prev
+		SetDropTarget(nil)
+	}()
+
+	SetDropTarget(nil)
+	if got := DeliverDragEvent(&DragEvent{Phase: DragEnter}); got != DropNone {
+		t.Fatalf("no target must mean no action, got %s", got)
+	}
+
+	var seen DragPhase
+	SetDropTarget(DropTargetFunc(func(ev *DragEvent) DropAction {
+		seen = ev.Phase
+		return DropMove
+	}))
+	if got := DeliverDragEvent(&DragEvent{Phase: DragDrop}); got != DropMove {
+		t.Fatalf("action = %s, want move", got)
+	}
+	if seen != DragDrop {
+		t.Fatalf("target saw %s, want drop", seen)
+	}
+
+	SetDropTarget(DropTargetFunc(func(ev *DragEvent) DropAction { panic("boom") }))
+	if got := DeliverDragEvent(&DragEvent{Phase: DragOver}); got != DropNone {
+		t.Fatalf("a panicking target must report no action, got %s", got)
+	}
+}
+
+type fakeDragBackend struct {
+	accepts bool
+	payload DragPayload
+	allowed DropAction
+	result  DropAction
+}
+
+func (b *fakeDragBackend) AcceptsDrops() bool { return b.accepts }
+
+func (b *fakeDragBackend) StartDrag(p DragPayload, a DropAction) (DropAction, error) {
+	b.payload, b.allowed = p, a
+	return b.result, nil
+}
+
+func TestStartDragWithoutBackend(t *testing.T) {
+	SetDragBackend(nil)
+	if _, err := StartDrag(DragPayload{}, DropCopy); !errors.Is(err, ErrDragUnsupported) {
+		t.Fatalf("err = %v, want ErrDragUnsupported", err)
+	}
+	if DropSupported() || DragOutSupported() {
+		t.Fatal("without a backend neither direction is supported")
+	}
+}
+
+func TestStartDragUsesBackend(t *testing.T) {
+	b := &fakeDragBackend{accepts: true, result: DropMove}
+	SetDragBackend(b)
+	defer SetDragBackend(nil)
+
+	if !DropSupported() || !DragOutSupported() {
+		t.Fatal("a registered backend supports both directions")
+	}
+	got, err := StartDrag(DragPayload{Paths: []string{"/tmp/x"}}, DropCopy|DropMove)
+	if err != nil {
+		t.Fatalf("StartDrag: %v", err)
+	}
+	if got != DropMove {
+		t.Fatalf("action = %s, want move", got)
+	}
+	if len(b.payload.Paths) != 1 || b.allowed != DropCopy|DropMove {
+		t.Fatalf("backend got payload %v allowed %s", b.payload.Paths, b.allowed)
+	}
+}
+
+7c1e4a92 FILE
+DRAGDROP.md
+
+7c1e4a92 CREATE
+7c1e4a92 content
+# Drag and drop in vtui
+
+`dragdrop.go` holds everything about drag and drop that is not tied to a
+display server: the payload types, the two registration points, and the
+`text/uri-list` codec every protocol needs. A backend adds the protocol; the
+application adds the policy. Neither knows about the other.
+
+## For the application
+
+Install one drop target:
+
+    vtui.SetDropTarget(myTarget)   // myTarget implements HandleDrag
+
+`HandleDrag` is called for every step of a gesture over our window and
+answers what a drop *would* do at `ev.X, ev.Y` (cell coordinates). That
+answer is what gives the pointer its copy / move cursor, so it must be quick
+and must not open dialogs. `DragDrop` is the phase where the work actually
+starts; start it in the background and return.
+
+To hand files to other applications:
+
+    action, err := vtui.StartDrag(payload, vtui.DropCopy|vtui.DropMove)
+
+`err` is `ErrDragUnsupported` on every backend without a protocol, which is
+every terminal today. Check `vtui.DropSupported()` / `vtui.DragOutSupported()`
+before offering the feature in the UI.
+
+## For a backend
+
+Implement `DragBackend` and register it once the window exists:
+
+    vtui.SetDragBackend(host)
+
+Then, for every step of an incoming gesture, build a `DragEvent` and call
+`vtui.DeliverDragEvent(ev)`. Rules a backend has to follow:
+
+- convert device pixels to cell coordinates before filling `X` and `Y`;
+- decode dragged files into `Payload.Paths` (use `ParseURIList`), leave
+  anything that is not a local file in `Payload.URIs`;
+- send exactly one `DragEnter`, any number of `DragOver`, and then one
+  `DragLeave` or one `DragDrop`;
+- report the returned `DropAction` back to the source as the protocol
+  requires.
+
+`DeliverDragEvent` may be called from the backend's own goroutine: it hops to
+the UI thread itself and gives up after `DragDeliverTimeout`, because a
+display server will not wait for a UI stuck behind a modal dialog.
+
+## Status
+
+- core, uri-list codec: done (this file's package)
+- X11 (XDND): planned, receive first, then source
+- Wayland (wl_data_device): planned
+- gogpu / Windows / macOS: planned
+- terminals: no protocol exists; nothing is registered, so both directions
+  are reported as unsupported rather than half working
+
+7c1e4a92 END
