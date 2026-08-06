@@ -26,7 +26,9 @@ not to drag and drop, so it was deliberately left alone.
 The enter and the drop are delivered separately, and each gives the UI
 thread up to `DragDeliverTimeout`. A target that answers at once, which is
 the only one we have, never notices. A target that blocks turns half a
-second of silence into a drop that did nothing.## A drag out starts on the next frame, and only if one comes
+second of silence into a drop that did nothing.
+
+## A drag out starts on the next frame, and only if one comes
 
 The request is picked up by `OnUpdate`, which the main loop runs once per
 iteration, and the loop is woken by `RequestRedraw`. That wakeup is an event
