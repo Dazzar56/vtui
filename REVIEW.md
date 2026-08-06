@@ -58,10 +58,10 @@ gesture disappears. Both directions now log every decision they take (see
 the diagnosing section of DRAGDROP.md), and the logs are what should decide
 the fix. This section, and the per-frame counter behind
 `noteGogpuUpdateTick`, go away with it.
-The first log answered half of it. A drop does arrive and is copied; only
-its position is lost, so everything lands in the first cell. A drag out is
-handed over, gogpu runs a real session for as long as the button is held,
-and then reports a result that means nobody took the files. Neither is a
-bug in what this package does with a gesture, and both are waiting on one
-more measurement each: whether gogpu's pointer is usable during a foreign
-drag, and which result it returns when nothing takes a drag out.
+The incoming half is settled: a drop arrives and is copied, and the
+position, which gogpu always reports as 0,0, now comes from its pointer,
+measured against a real desktop first. What is left is the outgoing half.
+gogpu runs a real drag session for as long as the button is held and then
+reports it cancelled, which is also what a drop on something that is not a
+drop target would report, so the target has to be ruled out before gogpu
+can be. Our own X11 backend dragging to the same place is the control.

@@ -92,11 +92,10 @@ debug.log, and which line is *missing* says where the gesture died:
   highlight anything while the pointer is still moving. The gesture is
   replayed as one enter immediately followed by the drop
   - gogpu limitation: the drop position arrives as 0,0, at least on X11, so
-    every drop lands in the first cell of the screen rather than under the
-    pointer. `VTUI_GOGPU_DROP_POINTER=1` takes the position from where gogpu
-    last saw the pointer instead; it is a measurement rather than a fix until
-    a log says the pointer is tracked while another application owns the
-    gesture
+    the position is taken from where gogpu last saw the pointer instead,
+    which is tracked through a foreign drag and is where the user aimed.
+    `VTUI_GOGPU_DROP_POINTER=0` goes back to the reported position, which
+    puts every drop in the first cell of the screen
   - gogpu limitation: only copy is offered when dragging out, as on X11 and
     for the same reason. gogpu's DragData carries no action either, so there
     is nothing else it could be told

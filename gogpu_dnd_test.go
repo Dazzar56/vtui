@@ -312,16 +312,16 @@ func TestGogpuDragResultNameCoversTheKnownOnes(t *testing.T) {
 
 func TestGogpuDropUsePointerReadsTheEnvironment(t *testing.T) {
 	t.Setenv("VTUI_GOGPU_DROP_POINTER", "")
-	if gogpuDropUsePointer() {
-		t.Fatal("unset means the position gogpu reports")
-	}
-	t.Setenv("VTUI_GOGPU_DROP_POINTER", "0")
-	if gogpuDropUsePointer() {
-		t.Fatal("0 means the position gogpu reports")
+	if !gogpuDropUsePointer() {
+		t.Fatal("unset means the pointer, which is the only usable position")
 	}
 	t.Setenv("VTUI_GOGPU_DROP_POINTER", "1")
 	if !gogpuDropUsePointer() {
-		t.Fatal("1 means the pointer")
+		t.Fatal("anything but 0 means the pointer")
+	}
+	t.Setenv("VTUI_GOGPU_DROP_POINTER", "0")
+	if gogpuDropUsePointer() {
+		t.Fatal("0 goes back to the position gogpu reports")
 	}
 }
 
@@ -333,7 +333,6 @@ func TestGogpuPointerPixelsNeedsAWindow(t *testing.T) {
 }
 
 func TestGogpuDropKeepsTheReportedPositionWithoutAWindow(t *testing.T) {
-	t.Setenv("VTUI_GOGPU_DROP_POINTER", "1")
 	var last DragEvent
 	withInlineDropTarget(t, func(ev *DragEvent) DropAction {
 		last = *ev
@@ -345,5 +344,15 @@ func TestGogpuDropKeepsTheReportedPositionWithoutAWindow(t *testing.T) {
 
 	if last.X != 5 || last.Y != 3 {
 		t.Fatalf("cell = %d,%d, want the reported 5,3 when there is no pointer to take", last.X, last.Y)
+	}
+}
+func TestGogpuDropCellForFallsBackToTheReportedPosition(t *testing.T) {
+	host := &GogpuHost{}
+	for _, v := range []string{"0", "1"} {
+		t.Setenv("VTUI_GOGPU_DROP_POINTER", v)
+		x, y := host.dropCellFor(40, 48, 8, 16)
+		if x != 5 || y != 3 {
+			t.Fatalf("cell = %d,%d with VTUI_GOGPU_DROP_POINTER=%s, want the reported 5,3", x, y, v)
+		}
 	}
 }

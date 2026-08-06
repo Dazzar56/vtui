@@ -168,9 +168,15 @@ func (h *GogpuHost) pumpDragOut() {
 		return
 	}
 
-	DebugLog("GOGPU_DND: drag out started, %d file(s)", len(req.paths))
+	DebugLog("GOGPU_DND: handing gogpu %d file(s): %q", len(req.paths), req.paths)
+	if px, py, ok := h.pointerPixels(); ok {
+		DebugLog("GOGPU_DND: the drag out begins with the pointer at %.1f,%.1f px", px, py)
+	}
+	startedAt := time.Now()
 	err := app.StartDrag(gogpu.DragData{FilePaths: req.paths}, func(r gogpu.DragResult) {
-		DebugLog("GOGPU_DND: gogpu reported the gesture as %s", gogpuDragResultName(r))
+		px, py, _ := h.pointerPixels()
+		DebugLog("GOGPU_DND: gogpu reported the gesture as %s after %s, pointer now at %.1f,%.1f px",
+			gogpuDragResultName(r), time.Since(startedAt).Round(time.Millisecond), px, py)
 		h.finishDragOut(req, gogpuDragOutcome{action: gogpuDropActionOf(r)})
 	})
 	// On Windows and X11 the callback has already fired by now, and the
@@ -257,14 +263,34 @@ func (h *GogpuHost) pointerPixels() (float64, float64, bool) {
 	return float64(mx), float64(my), true
 }
 
-// gogpuDropUsePointer switches the drop position from what gogpu reports to
-// where it last saw the pointer. gogpu reports 0,0 for every drop, at least
-// on X11, which puts every drop in the first cell; whether its pointer is
-// any better while another application owns the gesture is what this
-// measures. VTUI_GOGPU_DROP_POINTER=1 turns it on.
+// gogpuDropUsePointer reports whether a drop lands where gogpu last saw the
+// pointer rather than where it says the drop happened. It does, by default:
+// gogpu reports 0,0 for every drop, at least on X11, which would put every
+// drop in the first cell of the screen. Its pointer is tracked through a
+// foreign drag and holds the position the user aimed at, measured against
+// a real desktop before this was made the default.
+// VTUI_GOGPU_DROP_POINTER=0 goes back to the reported position.
 func gogpuDropUsePointer() bool {
-	v := os.Getenv("VTUI_GOGPU_DROP_POINTER")
-	return v != "" && v != "0"
+	return os.Getenv("VTUI_GOGPU_DROP_POINTER") != "0"
+}
+
+// dropCellFor decides which cell a drop landed on, from the pointer or from
+// the reported position, and says in the log what both of them were. The
+// reported position is what answers when there is no window to ask about a
+// pointer at all, which is every test that has no display behind it.
+func (h *GogpuHost) dropCellFor(x, y float64, cellW, cellH int) (int, int) {
+	rx, ry := gogpuDropCell(x, cellW), gogpuDropCell(y, cellH)
+	px, py, ok := h.pointerPixels()
+	if !ok {
+		return rx, ry
+	}
+	pcx, pcy := gogpuDropCell(px, cellW), gogpuDropCell(py, cellH)
+	DebugLog("GOGPU_DND: gogpu reported the drop at %.1f,%.1f px (cell %d,%d), its pointer at %.1f,%.1f px (cell %d,%d)",
+		x, y, rx, ry, px, py, pcx, pcy)
+	if !gogpuDropUsePointer() {
+		return rx, ry
+	}
+	return pcx, pcy
 }
 
 // handleFileDrop is what gogpu calls when files are dropped on the window.
@@ -293,18 +319,9 @@ func (h *GogpuHost) deliverFileDrop(paths []string, x, y float64) {
 	cols, rows := h.cols, h.rows
 	h.mu.Unlock()
 
-	cx, cy := gogpuDropCell(x, cellW), gogpuDropCell(y, cellH)
-	if px, py, ok := h.pointerPixels(); ok {
-		pcx, pcy := gogpuDropCell(px, cellW), gogpuDropCell(py, cellH)
-		DebugLog("GOGPU_DND: at the drop gogpu's pointer was at %.1f,%.1f px, which is cell %d,%d",
-			px, py, pcx, pcy)
-		if gogpuDropUsePointer() {
-			cx, cy = pcx, pcy
-			DebugLog("GOGPU_DND: taking the drop position from the pointer, as asked")
-		}
-	}
-	DebugLog("GOGPU_DND: drop at %.1f,%.1f px with a %dx%d px cell lands on cell %d,%d of a %dx%d screen",
-		x, y, cellW, cellH, cx, cy, cols, rows)
+	cx, cy := h.dropCellFor(x, y, cellW, cellH)
+	DebugLog("GOGPU_DND: the drop lands on cell %d,%d of a %dx%d screen, cell size %dx%d px",
+		cx, cy, cols, rows, cellW, cellH)
 
 	ev := DragEvent{
 		Phase:     DragEnter,
