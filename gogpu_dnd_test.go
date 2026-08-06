@@ -264,3 +264,36 @@ func TestGogpuPumpDragOutSkipsAGestureAlreadyUnderWay(t *testing.T) {
 	default:
 	}
 }
+func TestGogpuUpdateTicksCountFrames(t *testing.T) {
+	before := gogpuUpdateTickCount()
+	host := &GogpuHost{}
+	host.pumpDragOut()
+	host.pumpDragOut()
+	if got := gogpuUpdateTickCount() - before; got != 2 {
+		t.Fatalf("counted %d frame(s), want 2", got)
+	}
+}
+
+func TestGogpuQueueDragOutRemembersTheFrameCount(t *testing.T) {
+	host := &GogpuHost{}
+	host.pumpDragOut()
+	want := gogpuUpdateTickCount()
+	req, err := host.queueDragOut(DragPayload{Paths: []string{testDragPath(t, "y.txt")}})
+	if err != nil {
+		t.Fatalf("queueing the gesture: %v", err)
+	}
+	if req.ticksAtQueue != want {
+		t.Fatalf("ticksAtQueue = %d, want %d", req.ticksAtQueue, want)
+	}
+}
+
+func TestGogpuStartDragWithoutWindowIsLogged(t *testing.T) {
+	host := &GogpuHost{}
+	action, err := host.StartDrag(DragPayload{Paths: []string{testDragPath(t, "x.txt")}}, DropCopy)
+	if action != DropNone || !errors.Is(err, ErrDragUnsupported) {
+		t.Fatalf("gesture = %s, err %v, want ErrDragUnsupported", action, err)
+	}
+	if !memLogHas("no window to drag from") {
+		t.Fatal("a refused drag out must say why in the log")
+	}
+}

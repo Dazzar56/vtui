@@ -3,8 +3,11 @@
 package vtui
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gogpu/gogpu"
@@ -27,12 +30,46 @@ const gogpuDragOutActions = DropCopy
 // request has to reach the main loop, and the platform session has to end
 // after it; a drag still alive past this is not one the user is having.
 var gogpuDragTimeout = 30 * time.Second
+// gogpuUpdateTicks counts the frames the main loop has run our update
+// callback on. A drag out is handed to gogpu from that callback, so when a
+// gesture goes nowhere the first question is whether the callback runs at
+// all, and on an event driven loop that is not a question with an obvious
+// answer. One atomic add per frame is cheap enough to keep on.
+var gogpuUpdateTicks atomic.Uint64
+
+// gogpuFirstTick reports the first frame once, so a log shows the loop
+// alive even in a session where no gesture is ever started.
+var gogpuFirstTick sync.Once
+
+// noteGogpuUpdateTick records one turn of the main loop.
+func noteGogpuUpdateTick() {
+	gogpuUpdateTicks.Add(1)
+	gogpuFirstTick.Do(func() {
+		DebugLog("GOGPU_DND: main loop update callback is running")
+	})
+}
+
+// gogpuUpdateTickCount reports how many turns the main loop has taken.
+func gogpuUpdateTickCount() uint64 { return gogpuUpdateTicks.Load() }
+
+// logGogpuDragEnvironment records what the drag callbacks were registered
+// on. Which display server gogpu picks decides which of its own backends
+// answers, and a drop that never arrives is usually a question about that
+// backend rather than about ours.
+func logGogpuDragEnvironment() {
+	DebugLog("GOGPU_DND: drag callbacks registered; DISPLAY=%q WAYLAND_DISPLAY=%q XDG_SESSION_TYPE=%q",
+		os.Getenv("DISPLAY"), os.Getenv("WAYLAND_DISPLAY"), os.Getenv("XDG_SESSION_TYPE"))
+}
 
 // gogpuDragRequest is one drag out waiting for the main loop to start it.
 type gogpuDragRequest struct {
 	paths   []string
 	started bool
 	result  chan gogpuDragOutcome
+	// ticksAtQueue is the main loop's turn count when the request was
+	// left for it, so a gesture that ends in nothing can say whether the
+	// loop ever came back for it.
+	ticksAtQueue uint64
 }
 
 // gogpuDragOutcome is how the gesture ended, whoever got there first.
@@ -54,14 +91,20 @@ func (h *GogpuHost) CanStartDrag() bool { return h != nil && h.app != nil }
 // blocks until the gesture is over, while the gesture itself runs on the
 // main loop, the only thread gogpu's drag source may be used from.
 func (h *GogpuHost) StartDrag(payload DragPayload, allowed DropAction) (DropAction, error) {
+	DebugLog("GOGPU_DND: drag out asked for %d path(s), allowed=%s, loop ticks so far=%d",
+		len(payload.Paths), allowed, gogpuUpdateTickCount())
 	if h == nil || h.app == nil {
+		DebugLog("GOGPU_DND: drag out refused: no window to drag from")
 		return DropNone, ErrDragUnsupported
 	}
 	if allowed&gogpuDragOutActions == 0 {
+		DebugLog("GOGPU_DND: drag out refused: %s asked for, only %s can be offered",
+			allowed, gogpuDragOutActions)
 		return DropNone, ErrDragUnsupported
 	}
 	req, err := h.queueDragOut(payload)
 	if err != nil {
+		DebugLog("GOGPU_DND: drag out not queued: %v", err)
 		return DropNone, err
 	}
 	// The loop may be asleep waiting for input, and a redraw is what wakes
@@ -76,7 +119,11 @@ func (h *GogpuHost) queueDragOut(payload DragPayload) (*gogpuDragRequest, error)
 	if len(paths) == 0 {
 		return nil, ErrDragNoData
 	}
-	req := &gogpuDragRequest{paths: paths, result: make(chan gogpuDragOutcome, 1)}
+	req := &gogpuDragRequest{
+		paths:        paths,
+		result:       make(chan gogpuDragOutcome, 1),
+		ticksAtQueue: gogpuUpdateTickCount(),
+	}
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -93,7 +140,8 @@ func (h *GogpuHost) awaitDragOut(req *gogpuDragRequest) (DropAction, error) {
 	case out := <-req.result:
 		return out.action, out.err
 	case <-time.After(gogpuDragTimeout):
-		DebugLog("GOGPU_DND: drag out gave up after %s", gogpuDragTimeout)
+		DebugLog("GOGPU_DND: drag out gave up after %s, %d loop tick(s) since it was asked for",
+			gogpuDragTimeout, gogpuUpdateTickCount()-req.ticksAtQueue)
 		h.clearDragOut(req)
 		return DropNone, nil
 	}
@@ -102,6 +150,7 @@ func (h *GogpuHost) awaitDragOut(req *gogpuDragRequest) (DropAction, error) {
 // pumpDragOut hands a waiting request to gogpu. It runs on the main loop,
 // once per frame, and does nothing at all when there is nothing waiting.
 func (h *GogpuHost) pumpDragOut() {
+	noteGogpuUpdateTick()
 	h.mu.Lock()
 	req := h.dragOut
 	if req == nil || req.started {
@@ -125,7 +174,9 @@ func (h *GogpuHost) pumpDragOut() {
 	// send below is dropped; on Wayland and macOS it is still to come.
 	if err != nil {
 		h.finishDragOut(req, gogpuDragOutcome{err: err})
+		return
 	}
+	DebugLog("GOGPU_DND: gogpu took the drag out, waiting for the platform to end it")
 }
 
 // finishDragOut ends the gesture once, whoever gets there first: the
@@ -183,6 +234,8 @@ func gogpuDropActionOf(r gogpu.DragResult) DropAction {
 // UI thread, and this runs on the loop that draws the window, which the UI
 // is about to need.
 func (h *GogpuHost) handleFileDrop(paths []string, x, y float64) {
+	DebugLog("GOGPU_DND: OnDragDrop fired at %.1f,%.1f with %d entry/entries: %q",
+		x, y, len(paths), paths)
 	go h.deliverFileDrop(paths, x, y)
 }
 
@@ -193,17 +246,23 @@ func (h *GogpuHost) handleFileDrop(paths []string, x, y float64) {
 func (h *GogpuHost) deliverFileDrop(paths []string, x, y float64) {
 	payload := gogpuDragPayload(paths)
 	if payload.IsEmpty() {
+		DebugLog("GOGPU_DND: the drop carried nothing we could decode, ignoring it")
 		return
 	}
 
 	h.mu.Lock()
 	cellW, cellH, mods := h.cellW, h.cellH, h.currentMods
+	cols, rows := h.cols, h.rows
 	h.mu.Unlock()
+
+	cx, cy := gogpuDropCell(x, cellW), gogpuDropCell(y, cellH)
+	DebugLog("GOGPU_DND: drop at %.1f,%.1f px with a %dx%d px cell lands on cell %d,%d of a %dx%d screen",
+		x, y, cellW, cellH, cx, cy, cols, rows)
 
 	ev := DragEvent{
 		Phase:     DragEnter,
-		X:         gogpuDropCell(x, cellW),
-		Y:         gogpuDropCell(y, cellH),
+		X:         cx,
+		Y:         cy,
 		Modifiers: mods,
 		Allowed:   gogpuDropAllowed,
 		Suggested: DropCopy,

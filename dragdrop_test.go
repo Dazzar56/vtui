@@ -157,3 +157,41 @@ func TestStartDragUsesBackend(t *testing.T) {
 		t.Fatalf("backend got payload %v allowed %s", b.payload.Paths, b.allowed)
 	}
 }
+// memLogHas reports whether a line holding want reached the in-memory log
+// ring, which is where DebugLog writes whether or not a file is open.
+func memLogHas(want string) bool {
+	for _, line := range getMemLogs() {
+		if strings.Contains(line, want) {
+			return true
+		}
+	}
+	return false
+}
+
+func TestDeliverDragEventLogsAMissingTarget(t *testing.T) {
+	SetDropTarget(nil)
+	ev := &DragEvent{
+		Phase:   DragDrop,
+		X:       3,
+		Y:       4,
+		Allowed: DropCopy,
+		Payload: DragPayload{Paths: []string{filepath.FromSlash("/tmp/a.txt")}},
+	}
+	if got := DeliverDragEvent(ev); got != DropNone {
+		t.Fatalf("action = %s, want none without a target", got)
+	}
+	if !memLogHas("no drop target is installed") {
+		t.Fatal("a payload with nowhere to go must say so in the log")
+	}
+}
+
+func TestStartDragLogsAMissingBackend(t *testing.T) {
+	SetDragBackend(nil)
+	_, err := StartDrag(DragPayload{Paths: []string{"/tmp/x"}}, DropCopy)
+	if !errors.Is(err, ErrDragUnsupported) {
+		t.Fatalf("err = %v, want ErrDragUnsupported", err)
+	}
+	if !memLogHas("no backend registered") {
+		t.Fatal("a drag out with no backend must say so in the log")
+	}
+}

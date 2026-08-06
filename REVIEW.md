@@ -50,3 +50,11 @@ still down. Whether every platform really swallows that release is untested.
 `ErrDragBusy` and `ErrDragNoData` now live in dragdrop.go. They were never
 about X11, and gogpu_dnd.go builds on platforms where x11_xdnd.go does not,
 so they had to move for it to compile at all. Nothing else changed with them.
+## The drag and drop paths are instrumented rather than understood
+
+Neither direction does anything under the gogpu backend on Linux while the
+X11 backend works, and the boundary between us and gogpu is where the
+gesture disappears. Both directions now log every decision they take (see
+the diagnosing section of DRAGDROP.md), and the logs are what should decide
+the fix. This section, and the per-frame counter behind
+`noteGogpuUpdateTick`, go away with it.

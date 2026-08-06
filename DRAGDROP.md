@@ -46,6 +46,28 @@ Then, for every step of an incoming gesture, build a `DragEvent` and call
 the UI thread itself and gives up after `DragDeliverTimeout`, because a
 display server will not wait for a UI stuck behind a modal dialog.
 
+## Diagnosing a gesture that does nothing
+
+With `VTUI_DEBUG=1` every decision on both paths writes a line to
+debug.log, and which line is *missing* says where the gesture died:
+
+- `DND: drag backend is now ...` and `GOGPU_DND: drag callbacks registered`
+  appear once at startup. Without them nothing else can work, and the
+  display server named there decides which of gogpu's own backends answers.
+- `GOGPU_DND: OnDragDrop fired ...` is an incoming drop arriving from gogpu.
+  Missing means gogpu never told us, so the question is its platform side,
+  not ours.
+- `GOGPU_DND: drop ... lands on cell X,Y of a CxR screen` is the pixel to
+  cell conversion. A cell outside the screen is the HiDPI question in
+  REVIEW.md, and it looks exactly like a drop that was ignored.
+- `DND: no drop target is installed` means the payload arrived before, or
+  without, the application registering a target.
+- `GOGPU_DND: main loop update callback is running` appears on the first
+  frame. Without it no drag out can ever be handed over; the tick counts in
+  `drag out asked for ...` and in the give-up line say the same for one
+  gesture.
+- `GOGPU_DND: gogpu took the drag out ...` separates "gogpu refused the
+  gesture" from "gogpu accepted it and nothing ever came back".
 ## Status
 
 - core, uri-list codec: done (this file's package)

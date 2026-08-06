@@ -180,6 +180,7 @@ func SetDropTarget(t DropTarget) {
 	dragMu.Lock()
 	dropTarget = t
 	dragMu.Unlock()
+	DebugLog("DND: drop target is now %T", t)
 }
 
 // CurrentDropTarget returns the installed drop target, if any.
@@ -194,6 +195,7 @@ func SetDragBackend(b DragBackend) {
 	dragMu.Lock()
 	dragBackend = b
 	dragMu.Unlock()
+	DebugLog("DND: drag backend is now %T", b)
 }
 
 // CurrentDragBackend returns the registered backend, if any.
@@ -235,6 +237,7 @@ type DragSource interface {
 func StartDrag(payload DragPayload, allowed DropAction) (DropAction, error) {
 	b := CurrentDragBackend()
 	if b == nil {
+		DebugLog("DND: drag out asked for with no backend registered")
 		return DropNone, ErrDragUnsupported
 	}
 	return b.StartDrag(payload, allowed)
@@ -247,11 +250,12 @@ func DeliverDragEvent(ev *DragEvent) DropAction {
 	if ev == nil {
 		return DropNone
 	}
+	DebugLog("DND: %s at %d,%d files=%d allowed=%s", ev.Phase, ev.X, ev.Y, len(ev.Payload.Paths), ev.Allowed)
 	t := CurrentDropTarget()
 	if t == nil {
+		DebugLog("DND: no drop target is installed, the payload has nowhere to go")
 		return DropNone
 	}
-	DebugLog("DND: %s at %d,%d files=%d allowed=%s", ev.Phase, ev.X, ev.Y, len(ev.Payload.Paths), ev.Allowed)
 
 	if !DragDeliverToUI || FrameManager == nil || FrameManager.taskChanIn == nil {
 		return safeHandleDrag(t, ev)
@@ -261,6 +265,7 @@ func DeliverDragEvent(ev *DragEvent) DropAction {
 	FrameManager.PostTask(func() { res <- safeHandleDrag(t, ev) })
 	select {
 	case action := <-res:
+		DebugLog("DND: %s handled as %s", ev.Phase, action)
 		return action
 	case <-time.After(DragDeliverTimeout):
 		DebugLog("DND: UI thread silent for %s, reporting no action", DragDeliverTimeout)

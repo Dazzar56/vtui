@@ -208,6 +208,7 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 	// application registered as its target.
 	app.OnDragDrop(host.handleFileDrop)
 	SetDragBackend(host)
+	logGogpuDragEnvironment()
 	// A drag out has to begin on this loop: on Windows and X11 gogpu's
 	// drag source is a modal loop of its own, and everywhere the window
 	// belongs to this thread.
