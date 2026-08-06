@@ -122,7 +122,7 @@ func TestGogpuHostReportsDragDirections(t *testing.T) {
 	if !errors.Is(err, ErrDragUnsupported) {
 		t.Fatalf("err = %v, want ErrDragUnsupported", err)
 	}
-}// testDragPath is an absolute path on whatever this is running on, which is
+} // testDragPath is an absolute path on whatever this is running on, which is
 // what gogpu requires and what filepath.IsAbs agrees with on Windows too.
 func testDragPath(t *testing.T, name string) string {
 	t.Helper()
@@ -219,5 +219,48 @@ func TestGogpuDragOutGivesUpAndReleasesTheButton(t *testing.T) {
 	}
 	if btn != 0 {
 		t.Fatal("giving up releases the button the drag was started with")
+	}
+}
+func TestGogpuPumpDragOutHandsTheGestureOverOnce(t *testing.T) {
+	host := &GogpuHost{}
+	req, err := host.queueDragOut(DragPayload{Paths: []string{testDragPath(t, "dragged.txt")}})
+	if err != nil {
+		t.Fatalf("queueing the gesture: %v", err)
+	}
+
+	// There is no window behind this host, so the only thing the loop can
+	// report is that there is nothing to drag with. Report it it must,
+	// though: a gesture nobody answers is a UI goroutine standing still.
+	host.pumpDragOut()
+
+	action, err := host.awaitDragOut(req)
+	if action != DropNone || !errors.Is(err, ErrDragUnsupported) {
+		t.Fatalf("gesture ended as %s, err %v, want ErrDragUnsupported", action, err)
+	}
+
+	// Nothing waits any more, so a later frame does nothing at all.
+	host.pumpDragOut()
+	host.mu.Lock()
+	left := host.dragOut
+	host.mu.Unlock()
+	if left != nil {
+		t.Fatal("an empty pump leaves no gesture behind")
+	}
+}
+
+func TestGogpuPumpDragOutSkipsAGestureAlreadyUnderWay(t *testing.T) {
+	host := &GogpuHost{}
+	req, err := host.queueDragOut(DragPayload{Paths: []string{testDragPath(t, "dragged.txt")}})
+	if err != nil {
+		t.Fatalf("queueing the gesture: %v", err)
+	}
+	req.started = true
+
+	host.pumpDragOut()
+
+	select {
+	case out := <-req.result:
+		t.Fatalf("a gesture already under way was started again: %+v", out)
+	default:
 	}
 }

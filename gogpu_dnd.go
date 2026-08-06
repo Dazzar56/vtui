@@ -16,6 +16,7 @@ import (
 // source to say what we did. A move under those conditions would delete
 // somebody's files on a guess. See DRAGDROP.md.
 const gogpuDropAllowed = DropCopy
+
 // gogpuDragOutActions is what we offer when dragging files out. Copy only,
 // for the reason X11 gives in DRAGDROP.md: a move has us delete the
 // originals because a receiver said it took them. gogpu's DragData carries

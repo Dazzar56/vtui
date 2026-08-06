@@ -32,8 +32,10 @@ The request is picked up by `OnUpdate`, which the main loop runs once per
 iteration, and the loop is woken by `RequestRedraw`. That wakeup is an event
 queued on the platform's own connection everywhere gogpu runs, so it cannot
 be lost between the loop's last check and its next wait - which is exactly
-the kind of claim that deserves a test rather than a paragraph. Until there
-is one, the timeout is what stands behind it.
+the kind of claim that deserves a test rather than a paragraph. The handover
+itself is covered now, and so is the promise that one gesture is started
+once. The wakeup is not, and cannot be without a real window; the timeout is
+what stands behind it meanwhile.
 
 ## Nothing suppresses our own mouse events during a drag out
 
