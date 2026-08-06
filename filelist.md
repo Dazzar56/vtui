@@ -54,6 +54,8 @@ Last updated: 2026-08-06 03:17:44
 ├── framemanager_hidebars_test.go
 ├── framemanager_test.go
 ├── .gitignore
+├── gogpu_dnd.go
+├── gogpu_dnd_test.go
 ├── gogpu_host.go
 ├── gogpu_host_test.go
 ├── gogpu_renderer.go
@@ -114,6 +116,7 @@ Last updated: 2026-08-06 03:17:44
 ├── radiogroup.go
 ├── radiogroup_test.go
 ├── README.md
+├── REVIEW.md
 ├── runewidth.go
 ├── runewidth_test.go
 ├── screenbuf.go

@@ -200,6 +200,11 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 	app.OnClose(func() {
 		FrameManager.EmitCommand(CmQuit, nil)
 	})
+	// Files dropped on the window by other applications arrive here; the
+	// drag and drop core takes them from the backend to whatever the
+	// application registered as its target.
+	app.OnDragDrop(host.handleFileDrop)
+	SetDragBackend(host)
 
 	app.EventSource().OnKeyPress(func(key gpucontext.Key, mods gpucontext.Modifiers) {
 		vk := gogpuKeyToVK(key)

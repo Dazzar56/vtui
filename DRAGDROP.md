@@ -59,6 +59,15 @@ display server will not wait for a UI stuck behind a modal dialog.
   rather than half read, so a drop of an enormous file list currently
   fails visibly instead of silently losing entries
 - Wayland (wl_data_device): planned
-- gogpu / Windows / macOS: planned
+- gogpu (its own Windows / macOS / X11 / Wayland backends behind one API):
+  receiving done, in gogpu_dnd.go; dragging out is next
+- gogpu limitation: only copy is announced for a drop. gogpu reports a
+  finished drop and nothing before it, so neither the actions the source
+  allows nor the modifiers held are known, and nothing travels back to the
+  source either, which is the one thing a move would need
+- gogpu limitation: nothing arrives before the drop, so a target cannot
+  highlight anything while the pointer is still moving. The gesture is
+  replayed as one enter immediately followed by the drop
+- Windows / macOS outside gogpu: planned
 - terminals: no protocol exists; nothing is registered, so both directions
   are reported as unsupported rather than half working
