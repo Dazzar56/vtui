@@ -297,3 +297,53 @@ func TestGogpuStartDragWithoutWindowIsLogged(t *testing.T) {
 		t.Fatal("a refused drag out must say why in the log")
 	}
 }
+func TestGogpuDragResultNameCoversTheKnownOnes(t *testing.T) {
+	cases := map[gogpu.DragResult]string{
+		gogpu.DragCopied:    "copied",
+		gogpu.DragMoved:     "moved",
+		gogpu.DragCancelled: "cancelled",
+	}
+	for r, want := range cases {
+		if got := gogpuDragResultName(r); got != want {
+			t.Fatalf("name of %v = %q, want %q", r, got, want)
+		}
+	}
+}
+
+func TestGogpuDropUsePointerReadsTheEnvironment(t *testing.T) {
+	t.Setenv("VTUI_GOGPU_DROP_POINTER", "")
+	if gogpuDropUsePointer() {
+		t.Fatal("unset means the position gogpu reports")
+	}
+	t.Setenv("VTUI_GOGPU_DROP_POINTER", "0")
+	if gogpuDropUsePointer() {
+		t.Fatal("0 means the position gogpu reports")
+	}
+	t.Setenv("VTUI_GOGPU_DROP_POINTER", "1")
+	if !gogpuDropUsePointer() {
+		t.Fatal("1 means the pointer")
+	}
+}
+
+func TestGogpuPointerPixelsNeedsAWindow(t *testing.T) {
+	host := &GogpuHost{}
+	if _, _, ok := host.pointerPixels(); ok {
+		t.Fatal("without a window there is no pointer to ask about")
+	}
+}
+
+func TestGogpuDropKeepsTheReportedPositionWithoutAWindow(t *testing.T) {
+	t.Setenv("VTUI_GOGPU_DROP_POINTER", "1")
+	var last DragEvent
+	withInlineDropTarget(t, func(ev *DragEvent) DropAction {
+		last = *ev
+		return DropCopy
+	})
+
+	host := &GogpuHost{cellW: 8, cellH: 16}
+	host.deliverFileDrop([]string{"/tmp/a.txt"}, 40, 48)
+
+	if last.X != 5 || last.Y != 3 {
+		t.Fatalf("cell = %d,%d, want the reported 5,3 when there is no pointer to take", last.X, last.Y)
+	}
+}

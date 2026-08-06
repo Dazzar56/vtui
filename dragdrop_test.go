@@ -157,6 +157,7 @@ func TestStartDragUsesBackend(t *testing.T) {
 		t.Fatalf("backend got payload %v allowed %s", b.payload.Paths, b.allowed)
 	}
 }
+
 // memLogHas reports whether a line holding want reached the in-memory log
 // ring, which is where DebugLog writes whether or not a file is open.
 func memLogHas(want string) bool {

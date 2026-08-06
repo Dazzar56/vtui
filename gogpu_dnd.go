@@ -3,6 +3,7 @@
 package vtui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,6 +31,7 @@ const gogpuDragOutActions = DropCopy
 // request has to reach the main loop, and the platform session has to end
 // after it; a drag still alive past this is not one the user is having.
 var gogpuDragTimeout = 30 * time.Second
+
 // gogpuUpdateTicks counts the frames the main loop has run our update
 // callback on. A drag out is handed to gogpu from that callback, so when a
 // gesture goes nowhere the first question is whether the callback runs at
@@ -168,6 +170,7 @@ func (h *GogpuHost) pumpDragOut() {
 
 	DebugLog("GOGPU_DND: drag out started, %d file(s)", len(req.paths))
 	err := app.StartDrag(gogpu.DragData{FilePaths: req.paths}, func(r gogpu.DragResult) {
+		DebugLog("GOGPU_DND: gogpu reported the gesture as %s", gogpuDragResultName(r))
 		h.finishDragOut(req, gogpuDragOutcome{action: gogpuDropActionOf(r)})
 	})
 	// On Windows and X11 the callback has already fired by now, and the
@@ -229,6 +232,41 @@ func gogpuDropActionOf(r gogpu.DragResult) DropAction {
 	return DropNone
 }
 
+// gogpuDragResultName renders what gogpu reported, including a value it has
+// no name for. A gesture that ends as "none" says nothing about which of
+// the two ways it got there, and the two want different questions asked.
+func gogpuDragResultName(r gogpu.DragResult) string {
+	switch r {
+	case gogpu.DragCopied:
+		return "copied"
+	case gogpu.DragMoved:
+		return "moved"
+	case gogpu.DragCancelled:
+		return "cancelled"
+	}
+	return fmt.Sprintf("a value it has no name for (%v)", r)
+}
+
+// pointerPixels reports where gogpu last saw the pointer, in the pixels its
+// pointer callbacks use, or false when there is no window to ask.
+func (h *GogpuHost) pointerPixels() (float64, float64, bool) {
+	if h == nil || h.app == nil {
+		return 0, 0, false
+	}
+	mx, my := h.app.Input().Mouse().Position()
+	return float64(mx), float64(my), true
+}
+
+// gogpuDropUsePointer switches the drop position from what gogpu reports to
+// where it last saw the pointer. gogpu reports 0,0 for every drop, at least
+// on X11, which puts every drop in the first cell; whether its pointer is
+// any better while another application owns the gesture is what this
+// measures. VTUI_GOGPU_DROP_POINTER=1 turns it on.
+func gogpuDropUsePointer() bool {
+	v := os.Getenv("VTUI_GOGPU_DROP_POINTER")
+	return v != "" && v != "0"
+}
+
 // handleFileDrop is what gogpu calls when files are dropped on the window.
 // It returns at once and delivers in the background: delivery waits for the
 // UI thread, and this runs on the loop that draws the window, which the UI
@@ -256,6 +294,15 @@ func (h *GogpuHost) deliverFileDrop(paths []string, x, y float64) {
 	h.mu.Unlock()
 
 	cx, cy := gogpuDropCell(x, cellW), gogpuDropCell(y, cellH)
+	if px, py, ok := h.pointerPixels(); ok {
+		pcx, pcy := gogpuDropCell(px, cellW), gogpuDropCell(py, cellH)
+		DebugLog("GOGPU_DND: at the drop gogpu's pointer was at %.1f,%.1f px, which is cell %d,%d",
+			px, py, pcx, pcy)
+		if gogpuDropUsePointer() {
+			cx, cy = pcx, pcy
+			DebugLog("GOGPU_DND: taking the drop position from the pointer, as asked")
+		}
+	}
 	DebugLog("GOGPU_DND: drop at %.1f,%.1f px with a %dx%d px cell lands on cell %d,%d of a %dx%d screen",
 		x, y, cellW, cellH, cx, cy, cols, rows)
 
