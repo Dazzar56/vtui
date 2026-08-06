@@ -26,4 +26,25 @@ not to drag and drop, so it was deliberately left alone.
 The enter and the drop are delivered separately, and each gives the UI
 thread up to `DragDeliverTimeout`. A target that answers at once, which is
 the only one we have, never notices. A target that blocks turns half a
-second of silence into a drop that did nothing.
+second of silence into a drop that did nothing.## A drag out starts on the next frame, and only if one comes
+
+The request is picked up by `OnUpdate`, which the main loop runs once per
+iteration, and the loop is woken by `RequestRedraw`. That wakeup is an event
+queued on the platform's own connection everywhere gogpu runs, so it cannot
+be lost between the loop's last check and its next wait - which is exactly
+the kind of claim that deserves a test rather than a paragraph. Until there
+is one, the timeout is what stands behind it.
+
+## Nothing suppresses our own mouse events during a drag out
+
+The X11 backend drops pointer events while it is the drag source. Here the
+platform grabs the pointer itself, so nothing should reach us at all; what
+we do instead is clear the pressed button when the gesture ends, so a
+release that never arrived cannot leave the host believing the button is
+still down. Whether every platform really swallows that release is untested.
+
+## The two shared drag errors moved out of the X11 file
+
+`ErrDragBusy` and `ErrDragNoData` now live in dragdrop.go. They were never
+about X11, and gogpu_dnd.go builds on platforms where x11_xdnd.go does not,
+so they had to move for it to compile at all. Nothing else changed with them.

@@ -43,6 +43,9 @@ type GogpuHost struct {
 	// Cached sizes to prevent deadlocks and speed up GetTerminalSize
 	lastAppW, lastAppH int
 	resizePending      bool
+	// dragOut is the gesture waiting for the main loop to hand it to
+	// gogpu, or nil. One pointer, so one gesture at a time.
+	dragOut *gogpuDragRequest
 }
 
 func (h *GogpuHost) sendEvent(ev *vtinput.InputEvent) {
@@ -205,6 +208,10 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 	// application registered as its target.
 	app.OnDragDrop(host.handleFileDrop)
 	SetDragBackend(host)
+	// A drag out has to begin on this loop: on Windows and X11 gogpu's
+	// drag source is a modal loop of its own, and everywhere the window
+	// belongs to this thread.
+	app.OnUpdate(func(float64) { host.pumpDragOut() })
 
 	app.EventSource().OnKeyPress(func(key gpucontext.Key, mods gpucontext.Modifiers) {
 		vk := gogpuKeyToVK(key)

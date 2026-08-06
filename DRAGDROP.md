@@ -60,7 +60,8 @@ display server will not wait for a UI stuck behind a modal dialog.
   fails visibly instead of silently losing entries
 - Wayland (wl_data_device): planned
 - gogpu (its own Windows / macOS / X11 / Wayland backends behind one API):
-  receiving done, in gogpu_dnd.go; dragging out is next
+  both directions done, in gogpu_dnd.go. The drag source half needs gogpu
+  v0.50.0 or later
 - gogpu limitation: only copy is announced for a drop. gogpu reports a
   finished drop and nothing before it, so neither the actions the source
   allows nor the modifiers held are known, and nothing travels back to the
@@ -68,6 +69,12 @@ display server will not wait for a UI stuck behind a modal dialog.
 - gogpu limitation: nothing arrives before the drop, so a target cannot
   highlight anything while the pointer is still moving. The gesture is
   replayed as one enter immediately followed by the drop
+  - gogpu limitation: only copy is offered when dragging out, as on X11 and
+    for the same reason. gogpu's DragData carries no action either, so there
+    is nothing else it could be told
+  - gogpu limitation: a drag out begins on the first frame after it is asked
+    for, since the platform side may only be touched from the main loop. The
+    request wakes that loop itself, so the delay is a frame, not a wait
 - Windows / macOS outside gogpu: planned
 - terminals: no protocol exists; nothing is registered, so both directions
   are reported as unsupported rather than half working

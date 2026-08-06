@@ -2,7 +2,13 @@
 
 package vtui
 
-import "strings"
+import (
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/gogpu/gogpu"
+)
 
 // gogpuDropAllowed is what an incoming drop is allowed to do. Copy only:
 // gogpu hands us a finished drop and nothing else - not the actions the
@@ -10,19 +16,165 @@ import "strings"
 // source to say what we did. A move under those conditions would delete
 // somebody's files on a guess. See DRAGDROP.md.
 const gogpuDropAllowed = DropCopy
+// gogpuDragOutActions is what we offer when dragging files out. Copy only,
+// for the reason X11 gives in DRAGDROP.md: a move has us delete the
+// originals because a receiver said it took them. gogpu's DragData carries
+// no action either, so this is also all it could say.
+const gogpuDragOutActions = DropCopy
+
+// gogpuDragTimeout bounds the wait for a gesture that never comes back. The
+// request has to reach the main loop, and the platform session has to end
+// after it; a drag still alive past this is not one the user is having.
+var gogpuDragTimeout = 30 * time.Second
+
+// gogpuDragRequest is one drag out waiting for the main loop to start it.
+type gogpuDragRequest struct {
+	paths   []string
+	started bool
+	result  chan gogpuDragOutcome
+}
+
+// gogpuDragOutcome is how the gesture ended, whoever got there first.
+type gogpuDragOutcome struct {
+	action DropAction
+	err    error
+}
 
 // AcceptsDrops implements DragBackend: a gogpu window is a drop target on
 // every platform gogpu supports, as soon as the window exists.
 func (h *GogpuHost) AcceptsDrops() bool { return h != nil && h.app != nil }
 
-// CanStartDrag implements DragSource. Dragging out needs gogpu's own drag
-// source, which is a separate protocol on every platform and lands next, so
-// the direction is reported as unavailable rather than half working.
-func (h *GogpuHost) CanStartDrag() bool { return false }
+// CanStartDrag implements DragSource: gogpu's drag source needs the window,
+// and nothing else. The protocol below it is a different one on every
+// platform, which is precisely what gogpu is for.
+func (h *GogpuHost) CanStartDrag() bool { return h != nil && h.app != nil }
 
-// StartDrag implements DragBackend.
+// StartDrag implements DragBackend. It is called from the UI goroutine and
+// blocks until the gesture is over, while the gesture itself runs on the
+// main loop, the only thread gogpu's drag source may be used from.
 func (h *GogpuHost) StartDrag(payload DragPayload, allowed DropAction) (DropAction, error) {
-	return DropNone, ErrDragUnsupported
+	if h == nil || h.app == nil {
+		return DropNone, ErrDragUnsupported
+	}
+	if allowed&gogpuDragOutActions == 0 {
+		return DropNone, ErrDragUnsupported
+	}
+	req, err := h.queueDragOut(payload)
+	if err != nil {
+		return DropNone, err
+	}
+	// The loop may be asleep waiting for input, and a redraw is what wakes
+	// it; the frame it draws is also the one that starts the drag.
+	h.app.RequestRedraw()
+	return h.awaitDragOut(req)
+}
+
+// queueDragOut leaves a request for the main loop to find.
+func (h *GogpuHost) queueDragOut(payload DragPayload) (*gogpuDragRequest, error) {
+	paths := gogpuDragPaths(payload)
+	if len(paths) == 0 {
+		return nil, ErrDragNoData
+	}
+	req := &gogpuDragRequest{paths: paths, result: make(chan gogpuDragOutcome, 1)}
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.dragOut != nil {
+		return nil, ErrDragBusy
+	}
+	h.dragOut = req
+	return req, nil
+}
+
+// awaitDragOut waits for the gesture to end, or gives up on it.
+func (h *GogpuHost) awaitDragOut(req *gogpuDragRequest) (DropAction, error) {
+	select {
+	case out := <-req.result:
+		return out.action, out.err
+	case <-time.After(gogpuDragTimeout):
+		DebugLog("GOGPU_DND: drag out gave up after %s", gogpuDragTimeout)
+		h.clearDragOut(req)
+		return DropNone, nil
+	}
+}
+
+// pumpDragOut hands a waiting request to gogpu. It runs on the main loop,
+// once per frame, and does nothing at all when there is nothing waiting.
+func (h *GogpuHost) pumpDragOut() {
+	h.mu.Lock()
+	req := h.dragOut
+	if req == nil || req.started {
+		h.mu.Unlock()
+		return
+	}
+	req.started = true
+	app := h.app
+	h.mu.Unlock()
+
+	if app == nil {
+		h.finishDragOut(req, gogpuDragOutcome{err: ErrDragUnsupported})
+		return
+	}
+
+	DebugLog("GOGPU_DND: drag out started, %d file(s)", len(req.paths))
+	err := app.StartDrag(gogpu.DragData{FilePaths: req.paths}, func(r gogpu.DragResult) {
+		h.finishDragOut(req, gogpuDragOutcome{action: gogpuDropActionOf(r)})
+	})
+	// On Windows and X11 the callback has already fired by now, and the
+	// send below is dropped; on Wayland and macOS it is still to come.
+	if err != nil {
+		h.finishDragOut(req, gogpuDragOutcome{err: err})
+	}
+}
+
+// finishDragOut ends the gesture once, whoever gets there first: the
+// platform callback, an error on the way in, or the wait giving up.
+func (h *GogpuHost) finishDragOut(req *gogpuDragRequest, out gogpuDragOutcome) {
+	h.clearDragOut(req)
+	select {
+	case req.result <- out:
+		DebugLog("GOGPU_DND: drag out finished as %s, err=%v", out.action, out.err)
+	default:
+	}
+}
+
+// clearDragOut forgets the request and the button it was started with. The
+// press that began the drag belongs to the platform's own grab from then
+// on, so its release never reaches our handlers, and without this the host
+// would go on believing the button is still down.
+func (h *GogpuHost) clearDragOut(req *gogpuDragRequest) {
+	h.mu.Lock()
+	if h.dragOut == req {
+		h.dragOut = nil
+	}
+	h.mouseBtn = 0
+	h.mu.Unlock()
+}
+
+// gogpuDragPaths takes the local files out of a payload. gogpu wants
+// absolute paths and refuses anything else, and a URI naming a file on
+// another machine is not something we could hand over in any case.
+func gogpuDragPaths(payload DragPayload) []string {
+	paths := make([]string, 0, len(payload.Paths))
+	for _, p := range payload.Paths {
+		p = strings.TrimSpace(p)
+		if p == "" || !filepath.IsAbs(p) {
+			continue
+		}
+		paths = append(paths, p)
+	}
+	return paths
+}
+
+// gogpuDropActionOf translates what the receiver did into our own words.
+func gogpuDropActionOf(r gogpu.DragResult) DropAction {
+	switch r {
+	case gogpu.DragCopied:
+		return DropCopy
+	case gogpu.DragMoved:
+		return DropMove
+	}
+	return DropNone
 }
 
 // handleFileDrop is what gogpu calls when files are dropped on the window.

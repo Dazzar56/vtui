@@ -3,7 +3,6 @@
 package vtui
 
 import (
-	"errors"
 	"strings"
 	"sync"
 	"time"
@@ -17,13 +16,6 @@ import (
 // pointer is already ungrabbed by then, so the user is not held hostage
 // either way; this only decides when we stop waiting for a reply.
 const dragOutTimeout = 30 * time.Second
-
-// ErrDragBusy is returned when a drag is started while one is in flight.
-// There is one pointer, so there is one gesture.
-var ErrDragBusy = errors.New("a drag is already in progress")
-
-// ErrDragNoData is returned when the payload holds nothing we can offer.
-var ErrDragNoData = errors.New("nothing to drag")
 
 // xdndVersion is the protocol version we announce. Version 5 is what every
 // current toolkit speaks; older sources are handled by the same code, since

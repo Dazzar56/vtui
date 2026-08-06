@@ -7,6 +7,9 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+	"time"
+
+	"github.com/gogpu/gogpu"
 )
 
 // withInlineDropTarget installs a target and makes delivery inline, so a
@@ -113,10 +116,108 @@ func TestGogpuHostReportsDragDirections(t *testing.T) {
 		t.Fatal("without a window there is nothing to drop on")
 	}
 	if host.CanStartDrag() {
-		t.Fatal("dragging out of a gogpu window is not implemented yet")
+		t.Fatal("without a window there is nothing to drag out of")
 	}
 	_, err := host.StartDrag(DragPayload{Paths: []string{"/tmp/a.txt"}}, DropCopy)
 	if !errors.Is(err, ErrDragUnsupported) {
 		t.Fatalf("err = %v, want ErrDragUnsupported", err)
+	}
+}// testDragPath is an absolute path on whatever this is running on, which is
+// what gogpu requires and what filepath.IsAbs agrees with on Windows too.
+func testDragPath(t *testing.T, name string) string {
+	t.Helper()
+	p, err := filepath.Abs(name)
+	if err != nil {
+		t.Fatalf("cannot build an absolute path: %v", err)
+	}
+	return p
+}
+
+func TestGogpuDragPathsKeepsAbsoluteLocalFiles(t *testing.T) {
+	abs := testDragPath(t, "dragged.txt")
+	got := gogpuDragPaths(DragPayload{
+		Paths: []string{abs, "   ", "relative.txt"},
+		URIs:  []string{"https://example.org/x"},
+	})
+	if !reflect.DeepEqual(got, []string{abs}) {
+		t.Fatalf("paths = %v, want the absolute one alone", got)
+	}
+	if got := gogpuDragPaths(DragPayload{URIs: []string{"https://example.org/x"}}); len(got) != 0 {
+		t.Fatalf("paths = %v, want nothing draggable", got)
+	}
+}
+
+func TestGogpuDropActionOfResult(t *testing.T) {
+	cases := []struct {
+		result gogpu.DragResult
+		want   DropAction
+	}{
+		{gogpu.DragCopied, DropCopy},
+		{gogpu.DragMoved, DropMove},
+		{gogpu.DragCancelled, DropNone},
+	}
+	for _, c := range cases {
+		if got := gogpuDropActionOf(c.result); got != c.want {
+			t.Fatalf("result %v = %s, want %s", c.result, got, c.want)
+		}
+	}
+}
+
+func TestGogpuDragOutReportsWhatTheReceiverDid(t *testing.T) {
+	host := &GogpuHost{}
+	abs := testDragPath(t, "dragged.txt")
+
+	req, err := host.queueDragOut(DragPayload{Paths: []string{abs}})
+	if err != nil {
+		t.Fatalf("queueing the gesture: %v", err)
+	}
+	if _, err := host.queueDragOut(DragPayload{Paths: []string{abs}}); !errors.Is(err, ErrDragBusy) {
+		t.Fatalf("err = %v, want ErrDragBusy: there is one pointer", err)
+	}
+
+	go host.finishDragOut(req, gogpuDragOutcome{action: DropCopy})
+
+	action, err := host.awaitDragOut(req)
+	if err != nil || action != DropCopy {
+		t.Fatalf("gesture ended as %s, err %v, want copy", action, err)
+	}
+	host.mu.Lock()
+	left := host.dragOut
+	host.mu.Unlock()
+	if left != nil {
+		t.Fatal("a finished gesture leaves nothing behind")
+	}
+}
+
+func TestGogpuDragOutNeedsLocalFiles(t *testing.T) {
+	host := &GogpuHost{}
+	if _, err := host.queueDragOut(DragPayload{URIs: []string{"https://example.org/x"}}); !errors.Is(err, ErrDragNoData) {
+		t.Fatalf("err = %v, want ErrDragNoData", err)
+	}
+}
+
+func TestGogpuDragOutGivesUpAndReleasesTheButton(t *testing.T) {
+	prev := gogpuDragTimeout
+	gogpuDragTimeout = 20 * time.Millisecond
+	defer func() { gogpuDragTimeout = prev }()
+
+	host := &GogpuHost{mouseBtn: 1}
+	req, err := host.queueDragOut(DragPayload{Paths: []string{testDragPath(t, "dragged.txt")}})
+	if err != nil {
+		t.Fatalf("queueing the gesture: %v", err)
+	}
+
+	action, err := host.awaitDragOut(req)
+	if err != nil || action != DropNone {
+		t.Fatalf("gesture ended as %s, err %v, want nothing", action, err)
+	}
+	host.mu.Lock()
+	left, btn := host.dragOut, host.mouseBtn
+	host.mu.Unlock()
+	if left != nil {
+		t.Fatal("giving up forgets the gesture")
+	}
+	if btn != 0 {
+		t.Fatal("giving up releases the button the drag was started with")
 	}
 }

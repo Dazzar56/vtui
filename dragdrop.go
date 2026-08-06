@@ -150,6 +150,12 @@ type DragBackend interface {
 // ErrDragUnsupported is returned when a drag is started on a backend that
 // has no drag and drop protocol (every terminal, for now).
 var ErrDragUnsupported = errors.New("drag and drop is not supported by this backend")
+// ErrDragBusy is returned when a drag is started while one is in flight.
+// There is one pointer, so there is one gesture.
+var ErrDragBusy = errors.New("a drag is already in progress")
+
+// ErrDragNoData is returned when the payload holds nothing we can offer.
+var ErrDragNoData = errors.New("nothing to drag")
 
 var (
 	dragMu      sync.Mutex
