@@ -42,6 +42,31 @@ func ReverseLookup(val string) string {
 	return ""
 }
 
+// SnapshotStrings returns a copy of the currently loaded localization table.
+// It is mainly used by tooling that needs to temporarily switch languages
+// (for example the layout validator) and restore the original state after.
+func SnapshotStrings() map[string]string {
+	stringsMu.RLock()
+	defer stringsMu.RUnlock()
+	out := make(map[string]string, len(stringsMap))
+	for k, v := range stringsMap {
+		out[k] = v
+	}
+	return out
+}
+
+// ReplaceStrings atomically replaces the whole localization table with a copy
+// of m. Unlike AddStrings it does not merge: keys missing from m are dropped.
+func ReplaceStrings(m map[string]string) {
+	next := make(map[string]string, len(m))
+	for k, v := range m {
+		next[k] = v
+	}
+	stringsMu.Lock()
+	defer stringsMu.Unlock()
+	stringsMap = next
+}
+
 // AddStrings allows an application to add or override strings in the UI.
 func AddStrings(m map[string]string) {
 	stringsMu.Lock()

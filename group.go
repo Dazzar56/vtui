@@ -68,6 +68,12 @@ func (g *Group) SetFocusedItem(item UIElement) {
 func (g *Group) GetChildren() []UIElement {
 	return g.items
 }
+
+// GetBorderThickness reports that a plain Group draws no border of its own:
+// its whole bounding box is available to the child elements.
+func (g *Group) GetBorderThickness() int {
+	return 0
+}
 func (g *Group) GetElementAt(x, y int) UIElement {
 	for i := len(g.items) - 1; i >= 0; i-- {
 		item := g.items[i]

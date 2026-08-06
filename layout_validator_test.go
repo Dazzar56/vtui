@@ -193,3 +193,191 @@ func TestLayoutValidator_Logic(t *testing.T) {
 		}
 	})
 }
+func TestLayoutValidator_FrameClearance(t *testing.T) {
+	SetDefaultPalette()
+
+	// Dialog 0..20 x 0..10, border on x=0/x=20 and y=0/y=10,
+	// so the allowed area for children is (2,2)-(18,8).
+	newDlg := func() *Window { return NewDialog(0, 0, 20, 10, "Test") }
+
+	hasMsg := func(errs []error, substr string) bool {
+		for _, e := range errs {
+			if strings.Contains(e.Error(), substr) {
+				return true
+			}
+		}
+		return false
+	}
+
+	t.Run("Button touching the right border", func(t *testing.T) {
+		dlg := newDlg()
+		// "[ Test ]" is 8 columns: x1=12 -> x2=19, i.e. glued to the border.
+		dlg.AddItem(NewButton(12, 2, "Test"))
+
+		errs := ValidateLayout(dlg)
+		if !hasMsg(errs, "touches the frame border") {
+			t.Errorf("Failed to detect a control glued to the right border, got: %v", errs)
+		}
+	})
+
+	t.Run("Button drawn on the right border", func(t *testing.T) {
+		dlg := newDlg()
+		dlg.AddItem(NewButton(13, 2, "Test")) // x2 == 20 == border column
+
+		errs := ValidateLayout(dlg)
+		if !hasMsg(errs, "on the frame border") {
+			t.Errorf("Failed to detect a control sitting on the border, got: %v", errs)
+		}
+	})
+
+	t.Run("Button crossing the right border", func(t *testing.T) {
+		dlg := newDlg()
+		dlg.AddItem(NewButton(15, 2, "Test")) // x2 == 22, past the border
+
+		errs := ValidateLayout(dlg)
+		if !hasMsg(errs, "sticks out of the container") {
+			t.Errorf("Failed to detect a control crossing the border, got: %v", errs)
+		}
+	})
+
+	t.Run("Button touching the bottom border", func(t *testing.T) {
+		dlg := newDlg()
+		dlg.AddItem(NewButton(2, 9, "Ok")) // y == 9, border is at y == 10
+
+		errs := ValidateLayout(dlg)
+		if !hasMsg(errs, "touches the frame border") {
+			t.Errorf("Failed to detect a control glued to the bottom border, got: %v", errs)
+		}
+	})
+
+	t.Run("Button touching the left border", func(t *testing.T) {
+		dlg := newDlg()
+		dlg.AddItem(NewButton(1, 2, "Ok"))
+
+		errs := ValidateLayout(dlg)
+		if !hasMsg(errs, "touches the frame border") {
+			t.Errorf("Failed to detect a control glued to the left border, got: %v", errs)
+		}
+	})
+
+	t.Run("Properly padded dialog stays valid", func(t *testing.T) {
+		dlg := newDlg()
+		dlg.AddItem(NewButton(2, 2, "Ok")) // "[ Ok ]" -> (2,2)-(7,2)
+
+		if errs := ValidateLayout(dlg); len(errs) > 0 {
+			t.Errorf("Correctly padded dialog reported as invalid: %v", errs)
+		}
+	})
+
+	t.Run("GroupBox allows content right under its top border", func(t *testing.T) {
+		dlg := NewDialog(0, 0, 40, 20, "Test")
+		gb := NewGroupBox(2, 2, 30, 6, "Group")
+		cb := NewCheckbox(4, 3, "Flag", false) // directly under the group border
+		gb.AddItem(cb)
+		dlg.AddItem(gb)
+
+		if errs := ValidateLayout(dlg); len(errs) > 0 {
+			t.Errorf("Compact group box reported as invalid: %v", errs)
+		}
+	})
+}
+
+func TestLayoutValidator_ContentOverflow(t *testing.T) {
+	SetDefaultPalette()
+
+	hasMsg := func(errs []error, substr string) bool {
+		for _, e := range errs {
+			if strings.Contains(e.Error(), substr) {
+				return true
+			}
+		}
+		return false
+	}
+
+	t.Run("Button caption grown after layout", func(t *testing.T) {
+		dlg := NewDialog(0, 0, 16, 10, "Test")
+		btn := NewButton(2, 2, "Ok")
+		// A longer translation assigned later: SetText does not resize the box,
+		// so the button paints past its own bounds and over the frame.
+		btn.SetText("Alle ersetzen")
+		dlg.AddItem(btn)
+
+		errs := ValidateLayout(dlg)
+		if !hasMsg(errs, "outside its own box") {
+			t.Errorf("Failed to detect caption overflowing its own box, got: %v", errs)
+		}
+		if !hasMsg(errs, "sticks out of the container") {
+			t.Errorf("Failed to detect caption overflowing the frame, got: %v", errs)
+		}
+	})
+
+	t.Run("Checkbox caption grown after layout", func(t *testing.T) {
+		dlg := NewDialog(0, 0, 20, 10, "Test")
+		cb := NewCheckbox(2, 2, "On", false)
+		cb.SetText("Unterverzeichnisse einschliessen")
+		dlg.AddItem(cb)
+
+		if errs := ValidateLayout(dlg); !hasMsg(errs, "outside its own box") {
+			t.Errorf("Failed to detect checkbox caption overflow, got: %v", errs)
+		}
+	})
+
+	t.Run("Clipped label is reported", func(t *testing.T) {
+		dlg := NewDialog(0, 0, 30, 10, "Test")
+		txt := NewText(2, 2, "Short", Palette[ColDialogText])
+		txt.SetText("A much longer localized label")
+		dlg.AddItem(txt)
+
+		if errs := ValidateLayout(dlg); !hasMsg(errs, "content is clipped") {
+			t.Errorf("Failed to detect a clipped label, got: %v", errs)
+		}
+	})
+
+	t.Run("No false positive for a fitting caption", func(t *testing.T) {
+		dlg := NewDialog(0, 0, 30, 10, "Test")
+		dlg.AddItem(NewButton(2, 2, "Ok"))
+		dlg.AddItem(NewCheckbox(2, 4, "Flag", false))
+
+		if errs := ValidateLayout(dlg); len(errs) > 0 {
+			t.Errorf("Fitting captions reported as invalid: %v", errs)
+		}
+	})
+}
+
+func TestLayoutValidator_AllLanguages(t *testing.T) {
+	SetDefaultPalette()
+
+	packs := []LanguagePack{
+		{Name: "en", Strings: map[string]string{"test.Overwrite": "&Overwrite"}},
+		{Name: "de", Strings: map[string]string{"test.Overwrite": "&Alle vorhandenen Dateien ersetzen"}},
+	}
+
+	build := func() Container {
+		dlg := NewDialog(0, 0, 30, 10, "Test")
+		dlg.AddItem(NewButton(2, 2, Msg("test.Overwrite")))
+		return dlg
+	}
+
+	errs := ValidateLayoutInLanguages(packs, build)
+	if len(errs) == 0 {
+		t.Fatal("Failed to detect a layout that only breaks in a non-default language")
+	}
+
+	sawDE := false
+	for _, e := range errs {
+		if strings.Contains(e.Error(), "[lang:de]") {
+			sawDE = true
+		}
+		if strings.Contains(e.Error(), "[lang:en]") {
+			t.Errorf("English layout should be valid, got: %v", e)
+		}
+	}
+	if !sawDE {
+		t.Errorf("Expected the German layout to be reported, got: %v", errs)
+	}
+
+	// The localization table must be restored after validation.
+	if Msg("test.Overwrite") == "&Alle vorhandenen Dateien ersetzen" {
+		t.Error("ValidateLayoutInLanguages leaked the last language pack into the global table")
+	}
+}

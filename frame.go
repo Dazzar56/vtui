@@ -32,6 +32,15 @@ func (f *BorderedFrame) SetTitle(title string) {
 func (f *BorderedFrame) GetTitle() string {
 	return f.title
 }
+
+// GetBorderThickness reports how many cells of the frame bounds are taken by
+// the border itself. It implements BorderedContainer.
+func (f *BorderedFrame) GetBorderThickness() int {
+	if f.boxType == NoBox {
+		return 0
+	}
+	return 1
+}
 func (f *BorderedFrame) getControlOffset() int {
 	offset := 4
 	if FrameManager != nil && FrameManager.scr != nil && len(FrameManager.Screens) > 1 {

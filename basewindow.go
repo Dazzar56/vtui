@@ -32,6 +32,16 @@ func (bw *BaseWindow) GetFocusedItem() UIElement {
 func (bw *BaseWindow) GetChildren() []UIElement {
 	return bw.rootGroup.GetChildren()
 }
+
+// GetBorderThickness reports how many cells of the window bounds are taken by
+// its own frame. It implements BorderedContainer for the layout validator and
+// is inherited by every application type embedding BaseWindow.
+func (bw *BaseWindow) GetBorderThickness() int {
+	if bw.frame == nil {
+		return 0
+	}
+	return bw.frame.GetBorderThickness()
+}
 func (bw *BaseWindow) SetFocusedItem(item UIElement) {
 	bw.rootGroup.SetFocusedItem(item)
 }

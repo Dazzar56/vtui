@@ -23,6 +23,12 @@ func NewGroupBox(x1, y1, x2, y2 int, title string) *GroupBox {
 	return gb
 }
 
+// GetBorderThickness reports that a GroupBox does draw a border on its own
+// bounds, overriding the borderless Group it embeds.
+func (gb *GroupBox) GetBorderThickness() int {
+	return 1
+}
+
 func (gb *GroupBox) Show(scr *ScreenBuf) {
 	gb.ScreenObject.Show(scr)
 	gb.DisplayObject(scr)
