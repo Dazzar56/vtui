@@ -1,5 +1,5 @@
 # Project Structure
-Last updated: 2026-08-05 18:50:31
+Last updated: 2026-08-06 03:17:44
 
 ```text
 .
@@ -104,6 +104,8 @@ Last updated: 2026-08-05 18:50:31
 ├── localization_test.go
 ├── menubar.go
 ├── menubar_test.go
+├── multilineedit.go
+├── multilineedit_test.go
 ├── painter.go
 ├── palette.go
 ├── palette_test.go
@@ -180,5 +182,5 @@ Last updated: 2026-08-05 18:50:31
 ├── xlat_tables.go
 └── xlat_test.go
 
-3 directories, 174 files
+3 directories, 176 files
 ```
