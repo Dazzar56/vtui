@@ -71,16 +71,16 @@ type x11Dnd struct {
 	conn *xgb.Conn
 	a    x11DndAtoms
 
-	source   xproto.Window
-	version  int
-	chosen   xproto.Atom
-	allowed  DropAction
-	accepted DropAction
-	inside   bool
-	waiting  bool
-	lastX    int
-	lastY    int
-	lastMods vtinput.ControlKeyState
+	source     xproto.Window
+	version    int
+	chosen     xproto.Atom
+	allowed    DropAction
+	accepted   DropAction
+	inside     bool
+	waiting    bool
+	lastX      int
+	lastY      int
+	lastMods   vtinput.ControlKeyState
 	srcMu      sync.Mutex
 	srcActive  bool
 	srcData    []byte
