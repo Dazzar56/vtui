@@ -49,7 +49,10 @@ display server will not wait for a UI stuck behind a modal dialog.
 ## Status
 
 - core, uri-list codec: done (this file's package)
-- X11 (XDND): planned, receive first, then source
+- X11 (XDND): receiving side done, in x11_xdnd.go; source side next
+- X11 limitation: an INCR (incremental) selection transfer is refused
+  rather than half read, so a drop of an enormous file list currently
+  fails visibly instead of silently losing entries
 - Wayland (wl_data_device): planned
 - gogpu / Windows / macOS: planned
 - terminals: no protocol exists; nothing is registered, so both directions

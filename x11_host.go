@@ -37,6 +37,7 @@ type X11Host struct {
 	cols, rows int
 	closeChan  chan struct{}
 	atomDelete xproto.Atom
+	dnd        *x11Dnd
 	dirtyLines []bool
 
 	translator     keytrans.Translator
@@ -177,6 +178,10 @@ func NewX11Host(cols, rows, cellW, cellH int) (*X11Host, error) {
 
 	xproto.MapWindow(conn, host.wid)
 	_, _ = xproto.GetInputFocus(conn).Reply()
+	host.dnd = newX11Dnd(host)
+	if host.dnd != nil {
+		SetDragBackend(host)
+	}
 
 	go func() {
 		info := keytrans.OSInfo{
@@ -217,6 +222,10 @@ func (h *X11Host) sendEvent(ev *vtinput.InputEvent) {
 }
 
 func (h *X11Host) Close() {
+	if h.dnd != nil {
+		SetDragBackend(nil)
+		SetDropTarget(nil)
+	}
 	if h.shmSeg != 0 {
 		x11shmDetach(h.conn, h.shmSeg)
 	}
@@ -302,8 +311,16 @@ func (h *X11Host) RunEventLoop() {
 			})
 
 		case xproto.ClientMessageEvent:
+			if h.dnd != nil && h.dnd.handleClientMessage(&e) {
+				continue
+			}
 			if e.Data.Data32[0] == uint32(h.atomDelete) {
 				FrameManager.EmitCommand(CmQuit, nil)
+			}
+
+		case xproto.SelectionNotifyEvent:
+			if h.dnd != nil {
+				h.dnd.handleSelectionNotify(&e)
 			}
 		}
 	}

@@ -88,6 +88,22 @@ type DragPayload struct {
 // HasFiles reports whether the payload names files on this machine.
 func (p DragPayload) HasFiles() bool { return len(p.Paths) > 0 }
 
+// OffersFiles reports whether the payload either names files or announces
+// that it will. A target has to answer "yes, drop here" while the pointer is
+// still moving, but XDND (and Wayland after it) hand the data over only
+// after the drop, so until then all a target has to go on is the type list.
+func (p DragPayload) OffersFiles() bool {
+	if p.HasFiles() {
+		return true
+	}
+	for _, k := range p.Kinds {
+		if strings.EqualFold(k, "text/uri-list") {
+			return true
+		}
+	}
+	return false
+}
+
 // IsEmpty reports whether there is nothing to drop.
 func (p DragPayload) IsEmpty() bool {
 	return len(p.Paths) == 0 && len(p.URIs) == 0 && p.Text == ""
@@ -190,7 +206,21 @@ func DropSupported() bool {
 // applications. It is the same condition today, but the two directions are
 // separate protocols and one may well arrive before the other.
 func DragOutSupported() bool {
-	return CurrentDragBackend() != nil
+	b := CurrentDragBackend()
+	if b == nil {
+		return false
+	}
+	if s, ok := b.(DragSource); ok {
+		return s.CanStartDrag()
+	}
+	return true
+}
+
+// DragSource is implemented by a backend that receives drops but cannot
+// start them yet. The two directions are separate protocols and one of them
+// usually lands first, so a backend has to be able to say so.
+type DragSource interface {
+	CanStartDrag() bool
 }
 
 // StartDrag offers payload to the rest of the desktop and blocks until the
