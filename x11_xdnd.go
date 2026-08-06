@@ -83,6 +83,18 @@ type x11Dnd struct {
 	srcVersion int
 	srcStatus  DropAction
 	srcDropped bool
+
+	// srcWindow owns the selection and the pointer grab of a drag out,
+	// and srcRoot is the root it walks looking for a target. Here they
+	// are the host's window and screen, but the source half wants nothing
+	// else from a host, so a backend with no X11Host of its own can drive
+	// the same code with a window of its own making.
+	srcWindow xproto.Window
+	srcRoot   xproto.Window
+	// srcReleased is called once the pointer has been handed back, for a
+	// host that has to be told the button it never saw released is up. A
+	// source that owns no UI leaves it nil.
+	srcReleased func()
 }
 
 // newX11Dnd interns the atoms and marks the window as a drop target. It
@@ -92,10 +104,27 @@ func newX11Dnd(h *X11Host) *x11Dnd {
 	if h == nil || h.conn == nil {
 		return nil
 	}
-	d := &x11Dnd{host: h, conn: h.conn}
+	d := &x11Dnd{host: h, conn: h.conn, srcWindow: h.wid}
 	if !d.internAtoms() {
 		DebugLog("XDND: could not intern the required atoms, drops disabled")
 		return nil
+	}
+	if h.screen != nil {
+		d.srcRoot = h.screen.Root
+	}
+	d.srcReleased = func() {
+		h.mu.Lock()
+		h.mouseBtn = 0
+		h.mu.Unlock()
+		x, y, mods := d.pointer(0, 0)
+		h.sendEvent(&vtinput.InputEvent{
+			Type:            vtinput.MouseEventType,
+			MouseX:          int16(x),
+			MouseY:          int16(y),
+			ButtonState:     0,
+			KeyDown:         false,
+			ControlKeyState: mods,
+		})
 	}
 	data := make([]byte, 4)
 	xgb.Put32(data, xdndVersion)
@@ -528,12 +557,12 @@ func (d *x11Dnd) startDrag(payload DragPayload, allowed DropAction) (DropAction,
 
 	acts := make([]byte, 4)
 	xgb.Put32(acts, uint32(d.a.actCopy))
-	xproto.ChangeProperty(d.conn, xproto.PropModeReplace, d.host.wid, d.a.actList,
+	xproto.ChangeProperty(d.conn, xproto.PropModeReplace, d.srcWindow, d.a.actList,
 		xproto.AtomAtom, 32, 1, acts)
-	xproto.SetSelectionOwner(d.conn, d.host.wid, d.a.selection, xproto.TimeCurrentTime)
+	xproto.SetSelectionOwner(d.conn, d.srcWindow, d.a.selection, xproto.TimeCurrentTime)
 
 	mask := uint16(xproto.EventMaskButtonRelease | xproto.EventMaskPointerMotion)
-	if _, err := xproto.GrabPointer(d.conn, false, d.host.wid, mask,
+	if _, err := xproto.GrabPointer(d.conn, false, d.srcWindow, mask,
 		xproto.GrabModeAsync, xproto.GrabModeAsync,
 		xproto.Window(0), xproto.Cursor(0), xproto.TimeCurrentTime).Reply(); err != nil {
 		d.finishSource(DropNone)
@@ -587,7 +616,7 @@ func (d *x11Dnd) srcMotion(rootX, rootY int, t xproto.Timestamp) {
 		return
 	}
 	var data [5]uint32
-	data[0] = uint32(d.host.wid)
+	data[0] = uint32(d.srcWindow)
 	data[2] = uint32(uint16(rootX))<<16 | uint32(uint16(rootY))
 	data[3] = uint32(t)
 	data[4] = uint32(d.a.actCopy)
@@ -600,24 +629,14 @@ func (d *x11Dnd) srcMotion(rootX, rootY int, t xproto.Timestamp) {
 func (d *x11Dnd) srcRelease(t xproto.Timestamp) {
 	xproto.UngrabPointer(d.conn, t)
 
-	h := d.host
-	h.mu.Lock()
-	h.mouseBtn = 0
-	h.mu.Unlock()
-	x, y, mods := d.pointer(0, 0)
-	h.sendEvent(&vtinput.InputEvent{
-		Type:            vtinput.MouseEventType,
-		MouseX:          int16(x),
-		MouseY:          int16(y),
-		ButtonState:     0,
-		KeyDown:         false,
-		ControlKeyState: mods,
-	})
+	if d.srcReleased != nil {
+		d.srcReleased()
+	}
 
 	if d.srcTarget != 0 && d.srcStatus != DropNone {
 		d.srcDropped = true
 		var data [5]uint32
-		data[0] = uint32(d.host.wid)
+		data[0] = uint32(d.srcWindow)
 		data[2] = uint32(t)
 		d.send(d.srcTarget, d.a.drop, data)
 		DebugLog("XDND: drop sent to %d as %s", d.srcTarget, d.srcStatus)
@@ -662,7 +681,7 @@ func (d *x11Dnd) onSourceFinished(e *xproto.ClientMessageEvent) {
 
 func (d *x11Dnd) sendSourceEnter() {
 	var data [5]uint32
-	data[0] = uint32(d.host.wid)
+	data[0] = uint32(d.srcWindow)
 	data[1] = uint32(xdndVersion) << 24
 	data[2] = uint32(d.a.uriList)
 	d.send(d.srcTarget, d.a.enter, data)
@@ -670,7 +689,7 @@ func (d *x11Dnd) sendSourceEnter() {
 
 func (d *x11Dnd) sendSourceLeave() {
 	var data [5]uint32
-	data[0] = uint32(d.host.wid)
+	data[0] = uint32(d.srcWindow)
 	d.send(d.srcTarget, d.a.leave, data)
 }
 
@@ -707,10 +726,10 @@ func (d *x11Dnd) finishSource(action DropAction) {
 // XdndAware. The window manager's frame sits between the root and the real
 // client window, so the first candidate is rarely the right one.
 func (d *x11Dnd) findTarget(rootX, rootY int) (xproto.Window, int) {
-	if d.host.screen == nil {
+	if d.srcRoot == 0 {
 		return 0, 0
 	}
-	root := d.host.screen.Root
+	root := d.srcRoot
 	w := root
 	for i := 0; i < 16; i++ {
 		reply, err := xproto.TranslateCoordinates(d.conn, root, w,

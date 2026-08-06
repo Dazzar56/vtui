@@ -173,3 +173,15 @@ func TestHostStartDragWithoutDnd(t *testing.T) {
 		t.Fatalf("err = %v, want ErrDragUnsupported", err)
 	}
 }
+func TestFindTargetNeedsNoHost(t *testing.T) {
+	d := &x11Dnd{}
+	if w, v := d.findTarget(10, 10); w != 0 || v != 0 {
+		t.Fatalf("target = %d version %d, want nothing without a root", w, v)
+	}
+}
+
+func TestNewX11DndFillsTheSourceWindow(t *testing.T) {
+	if d := newX11Dnd(nil); d != nil {
+		t.Fatal("without a host there is no window to be a source on")
+	}
+}

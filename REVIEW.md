@@ -60,8 +60,20 @@ the fix. This section, and the per-frame counter behind
 `noteGogpuUpdateTick`, go away with it.
 The incoming half is settled: a drop arrives and is copied, and the
 position, which gogpu always reports as 0,0, now comes from its pointer,
-measured against a real desktop first. What is left is the outgoing half.
-gogpu runs a real drag session for as long as the button is held and then
-reports it cancelled, which is also what a drop on something that is not a
-drop target would report, so the target has to be ruled out before gogpu
-can be. Our own X11 backend dragging to the same place is the control.
+measured against a real desktop first.
+
+The outgoing half is settled too, and not in gogpu's favour. It accepts an
+absolute path to a real file, runs a session for as long as the button is
+held, and reports it cancelled - against a plain directory open in
+Nautilus, into which the same f4, the same panel code and the same payload
+drop without trouble under our own X11 backend. Nothing above the backend
+differs between the two, so gogpu's X11 drag source is what does not reach
+a target, and it is not ours to fix.
+
+What is ours is to stop depending on it. The source half of x11_xdnd.go
+works and wants only a connection, a window of its own and the events of
+its grab, none of which have to come from an X11Host. Untying it is the
+first of three steps: this one, then a standalone source with its own
+connection and an unmapped window, then GogpuHost.StartDrag preferring it
+whenever DISPLAY is set, with gogpu's own source left as the fallback for
+Windows, macOS and Wayland.

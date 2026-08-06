@@ -97,8 +97,13 @@ debug.log, and which line is *missing* says where the gesture died:
     `VTUI_GOGPU_DROP_POINTER=0` goes back to the reported position, which
     puts every drop in the first cell of the screen
   - gogpu limitation: only copy is offered when dragging out, as on X11 and
-    for the same reason. gogpu's DragData carries no action either, so there
-    is nothing else it could be told
+      for the same reason. gogpu's DragData carries no action either, so there
+      is nothing else it could be told
+    - gogpu, X11: a drag out does not reach any target. gogpu accepts the
+      files, runs a session for as long as the button is held and reports it
+      cancelled, against targets our own XDND source drops into happily. The
+      source half of x11_xdnd.go is being untied from X11Host so it can be
+      driven on a gogpu window instead; see REVIEW.md
   - gogpu limitation: a drag out begins on the first frame after it is asked
     for, since the platform side may only be touched from the main loop. The
     request wakes that loop itself, so the delay is a frame, not a wait
