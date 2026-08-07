@@ -266,3 +266,25 @@ func TestHelpView_MultiLinkLineRendering(t *testing.T) {
 	checkCell(t, scr, 1, 1, 'L', Palette[ColHelpLink])
 	checkCell(t, scr, 8, 1, 'L', Palette[ColHelpSelectedLink])
 }
+func TestHelpView_BorderColors(t *testing.T) {
+	SetDefaultPalette()
+	engine := NewHelpEngine(&mockHelpVFS{})
+	engine.topics["Test"] = &HelpTopic{
+		Name:  "Test",
+		Lines: []string{"Text"},
+	}
+	hv := NewHelpView(engine, "Test")
+	hv.SetPosition(0, 0, 30, 5)
+
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(32, 7)
+	hv.Show(scr)
+
+	// Verify that the frame borders use ColHelpBox (which maps to ColHelpText)
+	checkCell(t, scr, 0, 0, '╔', Palette[ColHelpBox])
+
+	// Verify that the title uses ColHelpBoxTitle
+	// Expected title: " Help: Test " (len 12) centered in width 30.
+	// Offset: (30-12)/2 = 9. So character 'H' should be at X=10 (X1+10).
+	checkCell(t, scr, 10, 0, 'H', Palette[ColHelpBoxTitle])
+}

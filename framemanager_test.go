@@ -2161,3 +2161,68 @@ func TestFrameManager_TranslatorTool(t *testing.T) {
 		t.Errorf("Clipboard missing help context stack. Got:\n%s", clip)
 	}
 }
+func TestFrameManager_FocusLossResetsModifiers(t *testing.T) {
+	fm := &frameManager{}
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	fm.Init(scr)
+	fm.KeyBar = NewKeyBar()
+
+	// Push a mock frame to prevent dispatchEvent from returning early
+	fm.Push(&mockFrame{})
+
+	// 1. Set modifiers to active via a key event
+	fm.dispatchEvent(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		ControlKeyState: vtinput.ShiftPressed | vtinput.LeftCtrlPressed,
+	}, false)
+
+	if !fm.KeyBar.shiftState || !fm.KeyBar.ctrlState {
+		t.Fatal("Modifiers were not set by Key event")
+	}
+
+	// 2. Dispatch FocusOut event
+	fm.dispatchEvent(&vtinput.InputEvent{
+		Type:     vtinput.FocusEventType,
+		SetFocus: false,
+	}, false)
+
+	if fm.KeyBar.shiftState || fm.KeyBar.ctrlState || fm.KeyBar.altState {
+		t.Error("FocusOut event did not reset KeyBar modifiers")
+	}
+}
+func TestFrameManager_ModifierKeyPressState(t *testing.T) {
+	fm := &frameManager{}
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	fm.Init(scr)
+	fm.KeyBar = NewKeyBar()
+
+	// Push a mock frame to prevent early return
+	fm.Push(&mockFrame{})
+
+	// 1. Simulate Shift KeyDown (with ControlKeyState showing it as unpressed initially, i.e., 0)
+	fm.dispatchEvent(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_SHIFT,
+		ControlKeyState: 0,
+	}, false)
+
+	if !fm.KeyBar.shiftState {
+		t.Error("Expected shiftState to be true on Shift KeyDown despite empty ControlKeyState")
+	}
+
+	// 2. Simulate Shift KeyUp (with ControlKeyState still showing it as pressed, i.e., ShiftPressed)
+	fm.dispatchEvent(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         false,
+		VirtualKeyCode:  vtinput.VK_SHIFT,
+		ControlKeyState: vtinput.ShiftPressed,
+	}, false)
+
+	if fm.KeyBar.shiftState {
+		t.Error("Expected shiftState to be false on Shift KeyUp despite active ControlKeyState")
+	}
+}

@@ -35,6 +35,11 @@ func NewKeyBar() *KeyBar {
 	return kb
 }
 
+// SetModifiers updates the current active modifier state of the KeyBar.
+// We trust standard Key/Mouse events to convey the exact, current system state of modifiers:
+// if an event (like a letter) is received and a modifier is missing from its state, it is
+// considered released. Left and right variations of the same modifier (e.g. Left/Right Ctrl)
+// are treated as equivalent (we do not support or require independent left/right states).
 func (kb *KeyBar) SetModifiers(shift, ctrl, alt bool) {
 	if kb.shiftState != shift || kb.ctrlState != ctrl || kb.altState != alt {
 		kb.shiftState = shift

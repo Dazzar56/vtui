@@ -564,8 +564,9 @@ func TestDialog_ShadowAndFocusColors(t *testing.T) {
 	// 1. Test inactive dialog color (d1)
 	checkCell(t, scr, 4, 2, 'D', Palette[ColDialogBoxTitle])
 
-	// 2. Test active dialog color (d2)
-	checkCell(t, scr, 12, 10, 'D', Palette[ColDialogHighlightBoxTitle])
+	// 2. The active dialog keeps the same title colour: far2l does not
+	// recolour a title on focus.
+	checkCell(t, scr, 12, 10, 'D', Palette[ColDialogBoxTitle])
 
 	// 3. Test shadow rendering of d2
 	baseAttr := Palette[ColDesktopBackground]
@@ -594,11 +595,10 @@ func TestBaseWindow_FocusVisualFeedback(t *testing.T) {
 	// Старт текста: 5 + 4 = 9. Буква 'A' на позиции 10.
 	win := NewWindow(5, 5, 20, 10, "Active")
 
-	// 1. Тестируем активное состояние
+	// 1. Focused: the title uses Dialog.Box.Title
 	win.SetFocus(true)
 	win.Show(scr)
-	// Заголовок должен быть ярким (ColDialogHighlightBoxTitle)
-	checkCell(t, scr, 10, 5, 'A', Palette[ColDialogHighlightBoxTitle])
+	checkCell(t, scr, 10, 5, 'A', Palette[ColDialogBoxTitle])
 
 	// 2. Тестируем потерю фокуса
 	win.ProcessKey(&vtinput.InputEvent{Type: vtinput.FocusEventType, SetFocus: false})

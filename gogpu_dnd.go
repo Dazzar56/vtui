@@ -7,8 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/gogpu/gogpu"
@@ -32,27 +30,9 @@ const gogpuDragOutActions = DropCopy
 // after it; a drag still alive past this is not one the user is having.
 var gogpuDragTimeout = 30 * time.Second
 
-// gogpuUpdateTicks counts the frames the main loop has run our update
-// callback on. A drag out is handed to gogpu from that callback, so when a
-// gesture goes nowhere the first question is whether the callback runs at
-// all, and on an event driven loop that is not a question with an obvious
-// answer. One atomic add per frame is cheap enough to keep on.
-var gogpuUpdateTicks atomic.Uint64
-
-// gogpuFirstTick reports the first frame once, so a log shows the loop
-// alive even in a session where no gesture is ever started.
-var gogpuFirstTick sync.Once
-
-// noteGogpuUpdateTick records one turn of the main loop.
-func noteGogpuUpdateTick() {
-	gogpuUpdateTicks.Add(1)
-	gogpuFirstTick.Do(func() {
-		DebugLog("GOGPU_DND: main loop update callback is running")
-	})
-}
-
-// gogpuUpdateTickCount reports how many turns the main loop has taken.
-func gogpuUpdateTickCount() uint64 { return gogpuUpdateTicks.Load() }
+// (The per-frame counter that used to live here answered one question -
+// whether the main loop runs the update callback a drag out is handed
+// over from - and the answer was yes.)
 
 // logGogpuDragEnvironment records what the drag callbacks were registered
 // on. Which display server gogpu picks decides which of its own backends
@@ -68,10 +48,6 @@ type gogpuDragRequest struct {
 	paths   []string
 	started bool
 	result  chan gogpuDragOutcome
-	// ticksAtQueue is the main loop's turn count when the request was
-	// left for it, so a gesture that ends in nothing can say whether the
-	// loop ever came back for it.
-	ticksAtQueue uint64
 }
 
 // gogpuDragOutcome is how the gesture ended, whoever got there first.
@@ -93,8 +69,8 @@ func (h *GogpuHost) CanStartDrag() bool { return h != nil && h.app != nil }
 // blocks until the gesture is over, while the gesture itself runs on the
 // main loop, the only thread gogpu's drag source may be used from.
 func (h *GogpuHost) StartDrag(payload DragPayload, allowed DropAction) (DropAction, error) {
-	DebugLog("GOGPU_DND: drag out asked for %d path(s), allowed=%s, loop ticks so far=%d",
-		len(payload.Paths), allowed, gogpuUpdateTickCount())
+	DebugLog("GOGPU_DND: drag out asked for %d path(s), allowed=%s",
+		len(payload.Paths), allowed)
 	if h == nil || h.app == nil {
 		DebugLog("GOGPU_DND: drag out refused: no window to drag from")
 		return DropNone, ErrDragUnsupported
@@ -121,11 +97,7 @@ func (h *GogpuHost) queueDragOut(payload DragPayload) (*gogpuDragRequest, error)
 	if len(paths) == 0 {
 		return nil, ErrDragNoData
 	}
-	req := &gogpuDragRequest{
-		paths:        paths,
-		result:       make(chan gogpuDragOutcome, 1),
-		ticksAtQueue: gogpuUpdateTickCount(),
-	}
+	req := &gogpuDragRequest{paths: paths, result: make(chan gogpuDragOutcome, 1)}
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -142,8 +114,7 @@ func (h *GogpuHost) awaitDragOut(req *gogpuDragRequest) (DropAction, error) {
 	case out := <-req.result:
 		return out.action, out.err
 	case <-time.After(gogpuDragTimeout):
-		DebugLog("GOGPU_DND: drag out gave up after %s, %d loop tick(s) since it was asked for",
-			gogpuDragTimeout, gogpuUpdateTickCount()-req.ticksAtQueue)
+		DebugLog("GOGPU_DND: drag out gave up after %s", gogpuDragTimeout)
 		h.clearDragOut(req)
 		return DropNone, nil
 	}
@@ -152,7 +123,6 @@ func (h *GogpuHost) awaitDragOut(req *gogpuDragRequest) (DropAction, error) {
 // pumpDragOut hands a waiting request to gogpu. It runs on the main loop,
 // once per frame, and does nothing at all when there is nothing waiting.
 func (h *GogpuHost) pumpDragOut() {
-	noteGogpuUpdateTick()
 	h.mu.Lock()
 	req := h.dragOut
 	if req == nil || req.started {
@@ -169,14 +139,10 @@ func (h *GogpuHost) pumpDragOut() {
 	}
 
 	DebugLog("GOGPU_DND: handing gogpu %d file(s): %q", len(req.paths), req.paths)
-	if px, py, ok := h.pointerPixels(); ok {
-		DebugLog("GOGPU_DND: the drag out begins with the pointer at %.1f,%.1f px", px, py)
-	}
 	startedAt := time.Now()
 	err := app.StartDrag(gogpu.DragData{FilePaths: req.paths}, func(r gogpu.DragResult) {
-		px, py, _ := h.pointerPixels()
-		DebugLog("GOGPU_DND: gogpu reported the gesture as %s after %s, pointer now at %.1f,%.1f px",
-			gogpuDragResultName(r), time.Since(startedAt).Round(time.Millisecond), px, py)
+		DebugLog("GOGPU_DND: gogpu reported the gesture as %s after %s",
+			gogpuDragResultName(r), time.Since(startedAt).Round(time.Millisecond))
 		h.finishDragOut(req, gogpuDragOutcome{action: gogpuDropActionOf(r)})
 	})
 	// On Windows and X11 the callback has already fired by now, and the
@@ -253,8 +219,8 @@ func gogpuDragResultName(r gogpu.DragResult) string {
 	return fmt.Sprintf("a value it has no name for (%v)", r)
 }
 
-// pointerPixels reports where gogpu last saw the pointer, in the pixels its
-// pointer callbacks use, or false when there is no window to ask.
+// pointerPixels reports where gogpu last saw the pointer, in the pixels
+// its pointer callbacks use, or false when there is no window to ask.
 func (h *GogpuHost) pointerPixels() (float64, float64, bool) {
 	if h == nil || h.app == nil {
 		return 0, 0, false
@@ -263,34 +229,24 @@ func (h *GogpuHost) pointerPixels() (float64, float64, bool) {
 	return float64(mx), float64(my), true
 }
 
-// gogpuDropUsePointer reports whether a drop lands where gogpu last saw the
-// pointer rather than where it says the drop happened. It does, by default:
-// gogpu reports 0,0 for every drop, at least on X11, which would put every
-// drop in the first cell of the screen. Its pointer is tracked through a
-// foreign drag and holds the position the user aimed at, measured against
-// a real desktop before this was made the default.
-// VTUI_GOGPU_DROP_POINTER=0 goes back to the reported position.
-func gogpuDropUsePointer() bool {
-	return os.Getenv("VTUI_GOGPU_DROP_POINTER") != "0"
-}
-
-// dropCellFor decides which cell a drop landed on, from the pointer or from
-// the reported position, and says in the log what both of them were. The
-// reported position is what answers when there is no window to ask about a
-// pointer at all, which is every test that has no display behind it.
-func (h *GogpuHost) dropCellFor(x, y float64, cellW, cellH int) (int, int) {
-	rx, ry := gogpuDropCell(x, cellW), gogpuDropCell(y, cellH)
+// dropPixels decides which position a drop happened at. Normally it is the
+// one gogpu reports, but gogpu before 0.50.1 reported every drop at the
+// origin, and that is also what any future loss of the position would look
+// like: an exact 0,0 while the pointer is somewhere else entirely. When the
+// two disagree that way the pointer is believed, because it is tracked
+// through a foreign drag and is where the user was actually aiming. A real
+// drop on the first cell reaches the same cell either way, so nothing is
+// lost by not trusting the origin.
+func (h *GogpuHost) dropPixels(x, y float64) (float64, float64) {
+	if x != 0 || y != 0 {
+		return x, y
+	}
 	px, py, ok := h.pointerPixels()
-	if !ok {
-		return rx, ry
+	if !ok || (px == 0 && py == 0) {
+		return x, y
 	}
-	pcx, pcy := gogpuDropCell(px, cellW), gogpuDropCell(py, cellH)
-	DebugLog("GOGPU_DND: gogpu reported the drop at %.1f,%.1f px (cell %d,%d), its pointer at %.1f,%.1f px (cell %d,%d)",
-		x, y, rx, ry, px, py, pcx, pcy)
-	if !gogpuDropUsePointer() {
-		return rx, ry
-	}
-	return pcx, pcy
+	DebugLog("GOGPU_DND: the drop was reported at the origin, taking the pointer at %.1f,%.1f px instead", px, py)
+	return px, py
 }
 
 // handleFileDrop is what gogpu calls when files are dropped on the window.
@@ -319,7 +275,8 @@ func (h *GogpuHost) deliverFileDrop(paths []string, x, y float64) {
 	cols, rows := h.cols, h.rows
 	h.mu.Unlock()
 
-	cx, cy := h.dropCellFor(x, y, cellW, cellH)
+	dx, dy := h.dropPixels(x, y)
+	cx, cy := gogpuDropCell(dx, cellW), gogpuDropCell(dy, cellH)
 	DebugLog("GOGPU_DND: the drop lands on cell %d,%d of a %dx%d screen, cell size %dx%d px",
 		cx, cy, cols, rows, cellW, cellH)
 

@@ -9,21 +9,25 @@ import (
 // BaseWindow provides generic windowing logic (moving, resizing, focus cycle).
 type BaseWindow struct {
 	BaseFrame
-	rootGroup   *Group
-	frame       *BorderedFrame
-	isDragging  bool
-	isResizing  bool
-	dragOffX    int
-	dragOffY    int
-	lastW       int
-	lastH       int
-	MinW        int
-	MinH        int
-	ShowClose   bool
-	ShowZoom    bool
-	SavedBounds *Rect
-	progress    int
-	IsWarning   bool
+	rootGroup          *Group
+	frame              *BorderedFrame
+	isDragging         bool
+	isResizing         bool
+	dragOffX           int
+	dragOffY           int
+	lastW              int
+	lastH              int
+	MinW               int
+	MinH               int
+	ShowClose          bool
+	ShowZoom           bool
+	SavedBounds        *Rect
+	progress           int
+	IsWarning          bool
+	ColorBoxIdx        int
+	ColorTitleIdx      int
+	ColorBackgroundIdx int
+	initialFocusItem   UIElement
 }
 
 func (bw *BaseWindow) GetFocusedItem() UIElement {
@@ -48,10 +52,13 @@ func (bw *BaseWindow) SetFocusedItem(item UIElement) {
 
 func NewBaseWindow(x1, y1, x2, y2 int, title string) *BaseWindow {
 	bw := &BaseWindow{
-		frame:    NewBorderedFrame(x1, y1, x2, y2, DoubleBox, title),
-		MinW:     x2 - x1 + 1,
-		MinH:     y2 - y1 + 1,
-		progress: -1,
+		frame:              NewBorderedFrame(x1, y1, x2, y2, DoubleBox, title),
+		MinW:               x2 - x1 + 1,
+		MinH:               y2 - y1 + 1,
+		progress:           -1,
+		ColorBoxIdx:        ColDialogBox,
+		ColorTitleIdx:      ColDialogBoxTitle,
+		ColorBackgroundIdx: ColDialogText,
 	}
 	// The root group lives inside the frame
 	bw.rootGroup = NewGroup(x1+1, y1+1, x2-x1-1, y2-y1-1)
@@ -62,6 +69,17 @@ func NewBaseWindow(x1, y1, x2, y2 int, title string) *BaseWindow {
 	bw.lastW = x2 - x1 + 1
 	bw.lastH = y2 - y1 + 1
 	return bw
+}
+func (bw *BaseWindow) SetPosition(x1, y1, x2, y2 int) {
+	bw.ScreenObject.SetPosition(x1, y1, x2, y2)
+	if bw.frame != nil {
+		bw.frame.SetPosition(x1, y1, x2, y2)
+	}
+	if bw.rootGroup != nil {
+		bw.rootGroup.SetPosition(x1+1, y1+1, x2-1, y2-1)
+	}
+	bw.lastW = x2 - x1 + 1
+	bw.lastH = y2 - y1 + 1
 }
 
 func (bw *BaseWindow) GetPaletteIndex(baseIdx int) int {
@@ -96,6 +114,9 @@ func (bw *BaseWindow) GetPaletteIndex(baseIdx int) int {
 func (bw *BaseWindow) SetFocus(f bool) {
 	bw.ScreenObject.SetFocus(f)
 	bw.rootGroup.SetFocus(f)
+	if f && bw.initialFocusItem == nil {
+		bw.initialFocusItem = bw.GetFocusedItem()
+	}
 }
 func (bw *BaseWindow) AddItem(item UIElement) {
 	bw.rootGroup.AddItem(item)
@@ -120,15 +141,26 @@ func (bw *BaseWindow) Show(scr *ScreenBuf) {
 	bw.ScreenObject.Show(scr)
 	bw.frame.ShowClose = bw.ShowClose
 
-	// Draw active frame color if this window has focus
-	if bw.IsFocused() {
-		bw.frame.ColorBoxIdx = bw.GetPaletteIndex(ColDialogBox)
-		bw.frame.ColorTitleIdx = bw.GetPaletteIndex(ColDialogHighlightBoxTitle)
-	} else {
-		bw.frame.ColorBoxIdx = bw.GetPaletteIndex(ColDialogBox)
-		bw.frame.ColorTitleIdx = bw.GetPaletteIndex(ColDialogBoxTitle)
+	boxIdx := bw.ColorBoxIdx
+	if boxIdx == 0 {
+		boxIdx = ColDialogBox
 	}
-	bw.frame.ColorBackgroundIdx = bw.GetPaletteIndex(ColDialogText)
+	titleIdx := bw.ColorTitleIdx
+	if titleIdx == 0 {
+		titleIdx = ColDialogBoxTitle
+	}
+	bgIdx := bw.ColorBackgroundIdx
+	if bgIdx == 0 {
+		bgIdx = ColDialogText
+	}
+
+	// far2l paints a dialog title with Dialog.Box.Title no matter which window
+	// holds focus; Dialog.Box.Title.Highlight is the hotkey colour inside a
+	// title, not a focused variant. Panels track focus through their own frame
+	// colours instead.
+	bw.frame.ColorBoxIdx = bw.GetPaletteIndex(boxIdx)
+	bw.frame.ColorTitleIdx = bw.GetPaletteIndex(titleIdx)
+	bw.frame.ColorBackgroundIdx = bw.GetPaletteIndex(bgIdx)
 
 	bw.frame.DisplayObject(scr)
 
@@ -171,8 +203,25 @@ func (bw *BaseWindow) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 
 	switch e.VirtualKeyCode {
+	case vtinput.VK_PRIOR:
+		// Jump to initial focus item (PgUp)
+		if bw.initialFocusItem != nil {
+			for i, item := range bw.rootGroup.items {
+				if item == bw.initialFocusItem {
+					bw.rootGroup.setFocus(i)
+					return true
+				}
+			}
+		}
+		// Fallback: jump to the first focusable element
+		for i, item := range bw.rootGroup.items {
+			if item.CanFocus() && !item.IsDisabled() {
+				bw.rootGroup.setFocus(i)
+				return true
+			}
+		}
 	case vtinput.VK_NEXT:
-		// Jump to default button
+		// Jump to default button (PgDn)
 		for i, item := range bw.rootGroup.items {
 			if btn, ok := item.(*Button); ok && btn.IsDefault && !btn.IsDisabled() {
 				bw.rootGroup.setFocus(i)

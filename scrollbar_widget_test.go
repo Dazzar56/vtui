@@ -111,3 +111,20 @@ func TestScrollBar_Dragging(t *testing.T) {
 		t.Error("Dragging should stop on release")
 	}
 }
+func TestScrollBar_CustomColorIdx(t *testing.T) {
+	SetDefaultPalette()
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(5, 10)
+
+	customColorIdx := ColMenuBox // Use a different palette index for verification
+	sb := NewScrollBar(0, 0, 5)
+	sb.ColorIdx = customColorIdx
+	sb.SetParams(1, 0, 10)
+	sb.SetVisible(true)
+
+	sb.Show(scr)
+
+	expectedAttr := Palette[customColorIdx]
+	// Verify that the top arrow is drawn with our custom attribute
+	checkCell(t, scr, 0, 0, ScrollUpArrow, expectedAttr)
+}

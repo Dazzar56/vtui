@@ -47,6 +47,10 @@ the UI thread itself and gives up after `DragDeliverTimeout`, because a
 display server will not wait for a UI stuck behind a modal dialog.
 
 ## Diagnosing a gesture that does nothing
+Note that vtui redirects stderr to a file in its crash directory, so
+anything gogpu itself reports goes there rather than to the terminal, and
+piping the application's output will not catch it. The path is named in
+debug.log at startup; the file is deleted on exit if it stayed empty.
 
 With `VTUI_DEBUG=1` every decision on both paths writes a line to
 debug.log, and which line is *missing* says where the gesture died:
@@ -91,14 +95,16 @@ debug.log, and which line is *missing* says where the gesture died:
 - gogpu limitation: nothing arrives before the drop, so a target cannot
   highlight anything while the pointer is still moving. The gesture is
   replayed as one enter immediately followed by the drop
-  - gogpu, X11, fixed in gogpu 0.50.1: the drop position used to arrive as
-    0,0, because the wait for the dropped data threw away the XdndPosition
-    that TCP batching had delivered behind the drop. Until go.mod can move
-    to a release carrying that fix, the position is taken from where gogpu
-    last saw the pointer, which is tracked through a foreign drag and is
-    where the user aimed. `VTUI_GOGPU_DROP_POINTER=0` goes back to the
-    reported position; on 0.50.0 that puts every drop in the first cell.
-    Once go.mod moves, both the switch and the pointer path can go
+  - gogpu, X11, unfixed as of 0.50.1: a drop from another application is
+    lost more often than it arrives - measured at 4 callbacks in 10 attempts
+    - and the position of the ones that do arrive is always 0,0. Both come
+    from gogpu's connection layer rather than its XDND code: a synchronous
+    round trip discards every event that arrives while it waits for its
+    reply, and the incoming drop path makes one at exactly the wrong moment
+    (gogpu/gogpu#431). The position is worked around by taking it from the
+    pointer whenever a drop is reported at exactly the origin while the
+    pointer is elsewhere; the lost drops cannot be worked around from here,
+    because the window belongs to gogpu
   - gogpu limitation: only copy is offered when dragging out, as on X11 and
       for the same reason. gogpu's DragData carries no action either, so there
       is nothing else it could be told

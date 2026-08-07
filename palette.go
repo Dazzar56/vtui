@@ -14,6 +14,7 @@ const (
 	ColTableTitle
 	ColTableBox
 	ColTableColumnTitle
+	ColScrollBar
 
 	ColDialogText
 	ColDialogHighlightText
@@ -55,6 +56,17 @@ const (
 	ColWarnHighlightButton
 	ColWarnHighlightSelectedButton
 
+	// Combo box dropdowns carry their own set so that a dropdown does not
+	// vanish into the dialog behind it. Names follow far2l's Dialog.Combo.*
+	// group (COL_DIALOGCBOX*).
+	ColDialogComboText
+	ColDialogComboSelectedText
+	ColDialogComboHighlight
+	ColDialogComboSelectedHighlight
+	ColDialogComboBox
+	ColDialogComboTitle
+	ColDialogComboScrollbar
+
 	// Helper for array size
 	LastPaletteColor
 )
@@ -91,6 +103,7 @@ func SetDefaultPalette() {
 	Palette[ColTableTitle] = SetRGBBoth(0, white, blue)
 	Palette[ColTableBox] = SetRGBBoth(0, lightGray, blue)
 	Palette[ColTableColumnTitle] = SetRGBBoth(0, yellow, blue)
+	Palette[ColScrollBar] = SetRGBBoth(0, lightGray, blue)
 
 	// Dialogs (Black on LightGray)
 	Palette[ColDialogText] = SetRGBBoth(0, black, lightGray)
@@ -109,6 +122,15 @@ func SetDefaultPalette() {
 	Palette[ColDialogHighlightButton] = SetRGBBoth(0, yellow, lightGray)
 	Palette[ColDialogSelectedButton] = SetRGBBoth(0, black, cyan)
 	Palette[ColDialogHighlightSelectedButton] = SetRGBBoth(0, yellow, cyan)
+
+	// Combo dropdowns (far2l defaults: White on Cyan, inverted when selected)
+	Palette[ColDialogComboText] = SetRGBBoth(0, white, cyan)
+	Palette[ColDialogComboSelectedText] = SetRGBBoth(0, white, black)
+	Palette[ColDialogComboHighlight] = SetRGBBoth(0, yellow, cyan)
+	Palette[ColDialogComboSelectedHighlight] = SetRGBBoth(0, yellow, black)
+	Palette[ColDialogComboBox] = SetRGBBoth(0, white, cyan)
+	Palette[ColDialogComboTitle] = SetRGBBoth(0, white, cyan)
+	Palette[ColDialogComboScrollbar] = SetRGBBoth(0, white, cyan)
 
 	// Desktop (Classic Blue)
 	Palette[ColDesktopBackground] = SetRGBBoth(0, lightGray, blue)

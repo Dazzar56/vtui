@@ -119,6 +119,44 @@ func TestBaseWindow_DataMapping_EdgeCases(t *testing.T) {
 		t.Error("GetData should not set field when types are incompatible")
 	}
 }
+func TestBaseWindow_PgUpFocus(t *testing.T) {
+	bw := NewBaseWindow(0, 0, 40, 10, "PgUp Test")
+	edit1 := NewEdit(1, 1, 20, "one")
+	edit2 := NewEdit(1, 2, 20, "two")
+
+	bw.AddItem(edit1)
+	bw.AddItem(edit2)
+
+	// Set initial focus to edit2 (index 1) manually before opening
+	bw.rootGroup.setFocus(1)
+
+	// Simulate window getting focus (opening)
+	bw.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.FocusEventType, SetFocus: true,
+	})
+
+	if bw.initialFocusItem != edit2 {
+		t.Fatalf("Expected initialFocusItem to be edit2, got %v", bw.initialFocusItem)
+	}
+
+	// Change focus to edit1
+	bw.rootGroup.setFocus(0)
+	if !edit1.IsFocused() {
+		t.Fatal("Setup failed: edit1 not focused")
+	}
+
+	// Press PgUp (VK_PRIOR)
+	bw.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_PRIOR,
+	})
+
+	if !edit2.IsFocused() {
+		t.Error("PgUp failed to restore focus to the initial focus item (edit2)")
+	}
+	if edit1.IsFocused() {
+		t.Error("Focus remained on edit1 after PgUp")
+	}
+}
 
 type broadcastMockElement struct {
 	ScreenObject

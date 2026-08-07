@@ -52,21 +52,31 @@ still down. Whether every platform really swallows that release is untested.
 `ErrDragBusy` and `ErrDragNoData` now live in dragdrop.go. They were never
 about X11, and gogpu_dnd.go builds on platforms where x11_xdnd.go does not,
 so they had to move for it to compile at all. Nothing else changed with them.
-## Drag and drop under gogpu waits on a gogpu release
+## Drag and drop under gogpu leaned on a gogpu release
 
-Both halves were gogpu's, both are fixed upstream (gogpu/gogpu#431, in
-0.50.1), and the fixes are confirmed against a real desktop. Nothing in
-this package needs changing for them. What is left is bookkeeping, in one
-step, when a release carrying the fix exists:
+Both halves were gogpu's and both were fixed upstream in 0.50.1
+(gogpu/gogpu#431): a drop position lost to a discarded XdndPosition, and a
+drag out that reached no target because of an event mask the window
+manager swallowed, a stale ButtonRelease, and a discarded SelectionRequest.
+go.mod now carries the fix, and the workarounds and the instrumentation
+that was chasing them are gone.
 
-- move go.mod to it;
-- delete `gogpuDropUsePointer`, `pointerPixels` and the pointer branch of
-  `dropCellFor`, since gogpu will report the drop position itself;
-- thin out the logging added while this was being chased. The per-decision
-  lines earned their keep once and can stay, but the per-frame counter
-  behind `noteGogpuUpdateTick` answers a question that is now answered.
+What remains from that hunt, on purpose: the per-decision logging on both
+paths, which is what made the second half of the investigation quick, and
+the line naming the display server at startup. Both cost nothing unless
+VTUI_DEBUG is set. The refactor that untied the source half of x11_xdnd.go
+from X11Host also stays; it was the first step of a plan that is no longer
+needed, but it is harmless and would be where to start if this returns.
 
-The plan to drive our own XDND source on a gogpu window is dropped. The
-refactor that untied the source half of x11_xdnd.go from X11Host is done
-and harmless, so it stays; it costs nothing and would be the starting
-point if this ever comes back.
+The thing that was seen and never measured has now been measured, and it
+is worse than it looked: a drag from a file manager into the window
+arrives 4 times in 10. The cause is in gogpu's connection layer, where a
+synchronous round trip reads the socket itself and discards every event
+that is not the reply it wants - and the incoming drop path makes one on
+every drag, before any position has been recorded. That also explains the
+position, which is 0,0 on every drop that does arrive, because the handler
+that would record it never runs.
+
+None of it is ours to work around. The position guard in `dropPixels` is
+the exception and stays until the fix ships. Work on the fix itself is
+happening upstream in gogpu/gogpu#431.

@@ -53,11 +53,10 @@ func TestVMenu_FocusVisualization(t *testing.T) {
 	// Title " Menu " should use ColMenuTitle
 	checkCell(t, scr, 3, 0, 'M', Palette[ColMenuTitle])
 
-	// 2. Focused state
+	// 2. Focused state: the title stays on ColMenuTitle, as in far2l
 	m.SetFocus(true)
 	m.Show(scr)
-	// Title should now use ColDialogHighlightBoxTitle
-	checkCell(t, scr, 3, 0, 'M', Palette[ColDialogHighlightBoxTitle])
+	checkCell(t, scr, 3, 0, 'M', Palette[ColMenuTitle])
 }
 
 func TestVMenu_OnKeyDownHook(t *testing.T) {
