@@ -1462,12 +1462,18 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 		GlobalXlator.Track(ev.Char)
 	}
 
-	// Update KeyBar modifiers automatically if present
+	// Update KeyBar modifiers automatically if present.
+	// Reset modifiers to a clean state on FocusEvents to prevent modifiers
+	// from getting stuck during focus transitions (such as system layout switching).
 	if fm.KeyBar != nil {
-		shift := (ev.ControlKeyState & vtinput.ShiftPressed) != 0
-		ctrl := (ev.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
-		alt := (ev.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
-		fm.KeyBar.SetModifiers(shift, ctrl, alt)
+		if ev.Type == vtinput.FocusEventType {
+			fm.KeyBar.SetModifiers(false, false, false)
+		} else {
+			shift := (ev.ControlKeyState & vtinput.ShiftPressed) != 0
+			ctrl := (ev.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
+			alt := (ev.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
+			fm.KeyBar.SetModifiers(shift, ctrl, alt)
+		}
 	}
 
 	// User-defined filter has first say

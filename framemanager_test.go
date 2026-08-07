@@ -2161,3 +2161,31 @@ func TestFrameManager_TranslatorTool(t *testing.T) {
 		t.Errorf("Clipboard missing help context stack. Got:\n%s", clip)
 	}
 }
+func TestFrameManager_FocusLossResetsModifiers(t *testing.T) {
+	fm := &frameManager{}
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	fm.Init(scr)
+	fm.KeyBar = NewKeyBar()
+
+	// 1. Set modifiers to active via a key event
+	fm.dispatchEvent(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		ControlKeyState: vtinput.ShiftPressed | vtinput.LeftCtrlPressed,
+	}, false)
+
+	if !fm.KeyBar.shiftState || !fm.KeyBar.ctrlState {
+		t.Fatal("Modifiers were not set by Key event")
+	}
+
+	// 2. Dispatch FocusOut event
+	fm.dispatchEvent(&vtinput.InputEvent{
+		Type:     vtinput.FocusEventType,
+		SetFocus: false,
+	}, false)
+
+	if fm.KeyBar.shiftState || fm.KeyBar.ctrlState || fm.KeyBar.altState {
+		t.Error("FocusOut event did not reset KeyBar modifiers")
+	}
+}
