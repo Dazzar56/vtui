@@ -50,6 +50,9 @@ func (d *DemoWindow) HandleCommand(cmd int, args any) bool {
 	case 1002: // Showcase dialog
 		showShowcaseDialog()
 		return true
+	case 1003: // Table demo dialog
+		showTableDialog()
+		return true
 	}
 	// Fallback to default window behavior (e.g. CmClose, CmZoom)
 	return d.Window.HandleCommand(cmd, args)
@@ -139,6 +142,81 @@ func showShowcaseDialog() {
 	vtui.FrameManager.Push(dlg)
 }
 
+type demoTableRow struct {
+	name, typ, size, modified, desc string
+}
+
+func (r demoTableRow) GetCellText(col int) string {
+	switch col {
+	case 0:
+		return r.name
+	case 1:
+		return r.typ
+	case 2:
+		return r.size
+	case 3:
+		return r.modified
+	case 4:
+		return r.desc
+	}
+	return ""
+}
+
+func showTableDialog() {
+	vtui.FrameManager.Push(buildTableDialog())
+}
+
+func buildTableDialog() *vtui.Window {
+	w, h := 78, 22
+	dlg := vtui.NewCenteredDialog(w, h, " Table Demo ")
+	dlg.ShowClose = true
+
+	// Name and Description are flexible columns (Width 0): they share the
+	// space left after the fixed columns and follow the dialog on resize.
+	// Name additionally demonstrates MinWidth; without it the title width
+	// would be the minimum.
+	table := vtui.NewTable(dlg.X1+2, dlg.Y1+2, w-4, h-8, []vtui.TableColumn{
+		{Title: "Name", MinWidth: 12},
+		{Title: "Type", Width: 8},
+		{Title: "Size", Width: 9, Alignment: vtui.AlignRight},
+		{Title: "Modified", Width: 16},
+		{Title: "Description"},
+	})
+	table.Sortable = true    // click a column header to sort, again to reverse
+	table.QuickSearch = true // type to fuzzy-filter (Myers bit-vector)
+	table.ShowScrollBar = true
+	table.SetRows([]vtui.TableRow{
+		demoTableRow{"README.md", "doc", "2 KB", "2026-07-30 10:12", "Project overview and build instructions"},
+		demoTableRow{"LICENSE", "doc", "1 KB", "2025-11-02 09:00", "MIT license text"},
+		demoTableRow{"rocket_launcher.sh", "script", "128 KB", "2026-06-14 22:41", "Starts the demo environment"},
+		demoTableRow{"data.json", "data", "10 MB", "2026-08-01 08:15", "Exported metrics, updated hourly"},
+		demoTableRow{"main.go", "source", "18 KB", "2026-08-05 19:03", "Demo application entry point"},
+		demoTableRow{"table.go", "source", "24 KB", "2026-08-06 17:45", "Table widget: sort, flex columns, search"},
+		demoTableRow{"fuzzy.go", "source", "6 KB", "2026-08-06 18:20", "Myers bit-vector fuzzy matcher"},
+		demoTableRow{"notes.txt", "doc", "4 KB", "2026-05-19 14:27", "Random ideas and TODO items"},
+		demoTableRow{"backup_2026.tar", "archive", "812 MB", "2026-01-11 03:30", "Full backup of the project"},
+		demoTableRow{"photo_cat.png", "image", "340 KB", "2026-04-02 12:05", "The office cat, demanding attention"},
+		demoTableRow{"Отчёт.xlsx", "sheet", "96 KB", "2026-07-21 16:50", "Квартальный отчёт по проекту"},
+		demoTableRow{"Документы", "dir", "-", "2026-07-25 11:11", "Папка с рабочими документами"},
+		demoTableRow{"installer.exe", "binary", "54 MB", "2026-03-17 09:44", "Windows installer for the demo"},
+		demoTableRow{"config.yaml", "config", "3 KB", "2026-08-03 13:37", "Runtime configuration overrides"},
+		demoTableRow{"changelog.md", "doc", "11 KB", "2026-08-04 15:58", "Release notes since v0.1"},
+	})
+	table.SetGrowMode(vtui.GrowHiX | vtui.GrowHiY)
+	dlg.AddItem(table)
+
+	hint := vtui.NewLabel(dlg.X1+2, dlg.Y1+h-5, "Type to fuzzy-filter, click a header to sort, Esc clears the filter", nil)
+	hint.SetGrowMode(vtui.GrowLoY | vtui.GrowHiY)
+	dlg.AddItem(hint)
+
+	btnClose := vtui.NewButton(dlg.X1+w/2-5, dlg.Y1+h-3, "&Close")
+	btnClose.OnClick = func() { dlg.Close() }
+	btnClose.SetGrowMode(vtui.GrowLoY | vtui.GrowHiY | vtui.GrowLoX | vtui.GrowHiX)
+	dlg.AddItem(btnClose)
+
+	return dlg
+}
+
 func main() {
 	guiMode := false
 	guiBackend := ""
@@ -216,6 +294,7 @@ func main() {
 				{Text: "&Colors"},
 				{Separator: true},
 				{Text: "UI S&howcase", Command: 1002},
+				{Text: "&Table Demo", Command: 1003},
 			}},
 			{Label: "&Right", SubItems: []vtui.MenuItem{{Text: "Command &2"}}},
 		}
