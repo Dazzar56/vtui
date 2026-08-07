@@ -27,6 +27,7 @@ type BaseWindow struct {
 	ColorBoxIdx        int
 	ColorTitleIdx      int
 	ColorBackgroundIdx int
+	initialFocusItem   UIElement
 }
 
 func (bw *BaseWindow) GetFocusedItem() UIElement {
@@ -113,6 +114,9 @@ func (bw *BaseWindow) GetPaletteIndex(baseIdx int) int {
 func (bw *BaseWindow) SetFocus(f bool) {
 	bw.ScreenObject.SetFocus(f)
 	bw.rootGroup.SetFocus(f)
+	if f && bw.initialFocusItem == nil {
+		bw.initialFocusItem = bw.GetFocusedItem()
+	}
 }
 func (bw *BaseWindow) AddItem(item UIElement) {
 	bw.rootGroup.AddItem(item)
@@ -199,8 +203,25 @@ func (bw *BaseWindow) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 
 	switch e.VirtualKeyCode {
+	case vtinput.VK_PRIOR:
+		// Jump to initial focus item (PgUp)
+		if bw.initialFocusItem != nil {
+			for i, item := range bw.rootGroup.items {
+				if item == bw.initialFocusItem {
+					bw.rootGroup.setFocus(i)
+					return true
+				}
+			}
+		}
+		// Fallback: jump to the first focusable element
+		for i, item := range bw.rootGroup.items {
+			if item.CanFocus() && !item.IsDisabled() {
+				bw.rootGroup.setFocus(i)
+				return true
+			}
+		}
 	case vtinput.VK_NEXT:
-		// Jump to default button
+		// Jump to default button (PgDn)
 		for i, item := range bw.rootGroup.items {
 			if btn, ok := item.(*Button); ok && btn.IsDefault && !btn.IsDisabled() {
 				bw.rootGroup.setFocus(i)
