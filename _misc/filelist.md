@@ -50,7 +50,6 @@
     ├── edit_test.go
     ├── far2l_extensions.go
     ├── far2l_extensions_test.go
-    ├── filelist.md
     ├── filelist_update.sh
     ├── frame.go
     ├── framemanager.go
@@ -191,4 +190,4 @@
     ├── xlat_tables.go
     └── xlat_test.go
     
-    3 directories, 187 files
+    3 directories, 186 files
