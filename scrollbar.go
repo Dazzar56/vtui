@@ -130,10 +130,11 @@ type ScrollBar struct {
 
 	repeatTimer  *time.Timer
 	repeatAction int // -1, 1, -2, 2
+	ColorIdx     int // Palette index for the scrollbar colors (defaults to ColTableBox)
 }
 
 func NewScrollBar(x, y, h int) *ScrollBar {
-	sb := &ScrollBar{PgStep: h}
+	sb := &ScrollBar{PgStep: h, ColorIdx: ColTableBox}
 	sb.SetPosition(x, y, x, y+h-1)
 	return sb
 }
@@ -152,7 +153,11 @@ func (sb *ScrollBar) Show(scr *ScreenBuf) {
 		return
 	}
 
-	attr := Palette[ColTableBox]
+	colorIdx := sb.ColorIdx
+	if colorIdx == 0 {
+		colorIdx = ColTableBox
+	}
+	attr := Palette[colorIdx]
 	// Using itemsCount calculation: maxTop = total - viewHeight => total = maxTop + viewHeight
 	DrawScrollBar(scr, sb.X1, sb.Y1, h, sb.Value, sb.Max+h, attr)
 }
