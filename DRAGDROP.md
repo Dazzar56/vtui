@@ -47,6 +47,10 @@ the UI thread itself and gives up after `DragDeliverTimeout`, because a
 display server will not wait for a UI stuck behind a modal dialog.
 
 ## Diagnosing a gesture that does nothing
+Note that vtui redirects stderr to a file in its crash directory, so
+anything gogpu itself reports goes there rather than to the terminal, and
+piping the application's output will not catch it. The path is named in
+debug.log at startup; the file is deleted on exit if it stayed empty.
 
 With `VTUI_DEBUG=1` every decision on both paths writes a line to
 debug.log, and which line is *missing* says where the gesture died:

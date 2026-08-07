@@ -119,6 +119,11 @@ func SetupStderrLog() {
 	if err == nil {
 		stderrLogFile = f
 		RedirectStderr(f)
+		// Everything a library writes to stderr - gogpu's slog among them -
+		// lands here rather than on the terminal, which is a surprise worth
+		// one line when someone goes looking for it. The file is removed on
+		// exit if nothing was written to it.
+		DebugLog("CRASH: stderr goes to %s from here on", stderrLogPath)
 	}
 }
 
