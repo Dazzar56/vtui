@@ -1,7 +1,6 @@
 # Project Structure
 
     .
-    ├── 2.diff
     ├── ansi_writer.go
     ├── ARCHITECTURE.md
     ├── autocomplete.go
@@ -135,6 +134,7 @@
     ├── semantic.go
     ├── semantic_test.go
     ├── separator.go
+    ├── standard_dialogs_layout_test.go
     ├── statusline.go
     ├── statusline_test.go
     ├── strings.go
