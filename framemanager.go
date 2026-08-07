@@ -1472,6 +1472,21 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 			shift := (ev.ControlKeyState & vtinput.ShiftPressed) != 0
 			ctrl := (ev.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
 			alt := (ev.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
+
+			// Workaround for X11/macOS where the event's modifier state reflects the
+			// logical state *prior* to the keypress/keyrelease of the modifier itself.
+			if ev.Type == vtinput.KeyEventType {
+				if ev.VirtualKeyCode == vtinput.VK_SHIFT || ev.VirtualKeyCode == vtinput.VK_LSHIFT || ev.VirtualKeyCode == vtinput.VK_RSHIFT {
+					shift = ev.KeyDown
+				}
+				if ev.VirtualKeyCode == vtinput.VK_CONTROL || ev.VirtualKeyCode == vtinput.VK_LCONTROL || ev.VirtualKeyCode == vtinput.VK_RCONTROL {
+					ctrl = ev.KeyDown
+				}
+				if ev.VirtualKeyCode == vtinput.VK_MENU || ev.VirtualKeyCode == vtinput.VK_LMENU || ev.VirtualKeyCode == vtinput.VK_RMENU {
+					alt = ev.KeyDown
+				}
+			}
+
 			fm.KeyBar.SetModifiers(shift, ctrl, alt)
 		}
 	}
@@ -1487,7 +1502,11 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 
 	// Track Ctrl state for Switcher logic
 	if ev.Type == vtinput.KeyEventType {
-		fm.ctrlPressed = (ev.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
+		ctrl := (ev.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
+		if ev.VirtualKeyCode == vtinput.VK_CONTROL || ev.VirtualKeyCode == vtinput.VK_LCONTROL || ev.VirtualKeyCode == vtinput.VK_RCONTROL {
+			ctrl = ev.KeyDown
+		}
+		fm.ctrlPressed = ctrl
 
 		// Commit Switcher selection on Ctrl release
 		if !fm.ctrlPressed && fm.switcherMenu != nil {

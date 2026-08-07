@@ -2192,3 +2192,37 @@ func TestFrameManager_FocusLossResetsModifiers(t *testing.T) {
 		t.Error("FocusOut event did not reset KeyBar modifiers")
 	}
 }
+func TestFrameManager_ModifierKeyPressState(t *testing.T) {
+	fm := &frameManager{}
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	fm.Init(scr)
+	fm.KeyBar = NewKeyBar()
+
+	// Push a mock frame to prevent early return
+	fm.Push(&mockFrame{})
+
+	// 1. Simulate Shift KeyDown (with ControlKeyState showing it as unpressed initially, i.e., 0)
+	fm.dispatchEvent(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_SHIFT,
+		ControlKeyState: 0,
+	}, false)
+
+	if !fm.KeyBar.shiftState {
+		t.Error("Expected shiftState to be true on Shift KeyDown despite empty ControlKeyState")
+	}
+
+	// 2. Simulate Shift KeyUp (with ControlKeyState still showing it as pressed, i.e., ShiftPressed)
+	fm.dispatchEvent(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         false,
+		VirtualKeyCode:  vtinput.VK_SHIFT,
+		ControlKeyState: vtinput.ShiftPressed,
+	}, false)
+
+	if fm.KeyBar.shiftState {
+		t.Error("Expected shiftState to be false on Shift KeyUp despite active ControlKeyState")
+	}
+}
