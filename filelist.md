@@ -28,6 +28,7 @@
 │       └── main.go
 ├── colors.go
 ├── colors_test.go
+├── combobox_color_test.go
 ├── combobox.go
 ├── combobox_test.go
 ├── commands.go
@@ -189,5 +190,5 @@
 ├── xlat_tables.go
 └── xlat_test.go
 
-3 directories, 184 files
+3 directories, 185 files
 ```
