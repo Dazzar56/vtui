@@ -14,6 +14,7 @@ const (
 	ColTableTitle
 	ColTableBox
 	ColTableColumnTitle
+	ColScrollBar
 
 	ColDialogText
 	ColDialogHighlightText
@@ -91,6 +92,7 @@ func SetDefaultPalette() {
 	Palette[ColTableTitle] = SetRGBBoth(0, white, blue)
 	Palette[ColTableBox] = SetRGBBoth(0, lightGray, blue)
 	Palette[ColTableColumnTitle] = SetRGBBoth(0, yellow, blue)
+	Palette[ColScrollBar] = SetRGBBoth(0, lightGray, blue)
 
 	// Dialogs (Black on LightGray)
 	Palette[ColDialogText] = SetRGBBoth(0, black, lightGray)

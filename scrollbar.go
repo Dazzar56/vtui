@@ -134,7 +134,7 @@ type ScrollBar struct {
 }
 
 func NewScrollBar(x, y, h int) *ScrollBar {
-	sb := &ScrollBar{PgStep: h, ColorIdx: ColTableBox}
+	sb := &ScrollBar{PgStep: h, ColorIdx: ColScrollBar}
 	sb.SetPosition(x, y, x, y+h-1)
 	return sb
 }
@@ -155,7 +155,7 @@ func (sb *ScrollBar) Show(scr *ScreenBuf) {
 
 	colorIdx := sb.ColorIdx
 	if colorIdx == 0 {
-		colorIdx = ColTableBox
+		colorIdx = ColScrollBar
 	}
 	attr := Palette[colorIdx]
 	// Using itemsCount calculation: maxTop = total - viewHeight => total = maxTop + viewHeight

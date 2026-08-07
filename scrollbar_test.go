@@ -39,7 +39,7 @@ func TestDrawScrollBar(t *testing.T) {
 	scr := NewSilentScreenBuf()
 	scr.AllocBuf(10, 10)
 
-	attr := Palette[ColTableBox]
+	attr := Palette[ColScrollBar]
 
 	// Draw scrollbar at X=5, Y=2, length 6. 20 items, at 0.
 	drawn := DrawScrollBar(scr, 5, 2, 6, 0, 20, attr)
