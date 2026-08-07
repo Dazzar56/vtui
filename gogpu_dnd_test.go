@@ -312,3 +312,17 @@ func TestGogpuDropUsesThePositionGogpuReports(t *testing.T) {
 		t.Fatalf("cell = %d,%d, want 5,3 from the reported 40,48", last.X, last.Y)
 	}
 }
+
+func TestGogpuDropPixelsKeepAPositionThatWasReported(t *testing.T) {
+	host := &GogpuHost{}
+	if x, y := host.dropPixels(40, 48); x != 40 || y != 48 {
+		t.Fatalf("position = %.1f,%.1f, want the reported 40,48", x, y)
+	}
+}
+
+func TestGogpuDropPixelsKeepTheOriginWithNoPointerToTake(t *testing.T) {
+	host := &GogpuHost{}
+	if x, y := host.dropPixels(0, 0); x != 0 || y != 0 {
+		t.Fatalf("position = %.1f,%.1f, want the origin when there is no window to ask", x, y)
+	}
+}

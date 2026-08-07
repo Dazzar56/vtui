@@ -92,8 +92,12 @@ debug.log, and which line is *missing* says where the gesture died:
   highlight anything while the pointer is still moving. The gesture is
   replayed as one enter immediately followed by the drop
   - gogpu before 0.50.1 reported every drop position as 0,0, which put every
-    drop in the first cell of the screen. Fixed upstream; the position now
-    comes from gogpu, as it does from X11
+    drop in the first cell of the screen. Fixed upstream, and the position
+    now comes from gogpu as it does from X11 - but a drop reported at exactly
+    the origin while the pointer is elsewhere is still treated as a lost
+    position and the pointer is used instead. That guard costs nothing and
+    keeps an old gogpu, or a future regression, from quietly sending every
+    drop to the first panel
   - gogpu limitation: only copy is offered when dragging out, as on X11 and
       for the same reason. gogpu's DragData carries no action either, so there
       is nothing else it could be told

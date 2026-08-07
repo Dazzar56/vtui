@@ -219,8 +219,35 @@ func gogpuDragResultName(r gogpu.DragResult) string {
 	return fmt.Sprintf("a value it has no name for (%v)", r)
 }
 
-// (The pointer position stood in for the drop position while gogpu
-// reported every drop at 0,0. It reports the real one from 0.50.1 on.)
+// pointerPixels reports where gogpu last saw the pointer, in the pixels
+// its pointer callbacks use, or false when there is no window to ask.
+func (h *GogpuHost) pointerPixels() (float64, float64, bool) {
+	if h == nil || h.app == nil {
+		return 0, 0, false
+	}
+	mx, my := h.app.Input().Mouse().Position()
+	return float64(mx), float64(my), true
+}
+
+// dropPixels decides which position a drop happened at. Normally it is the
+// one gogpu reports, but gogpu before 0.50.1 reported every drop at the
+// origin, and that is also what any future loss of the position would look
+// like: an exact 0,0 while the pointer is somewhere else entirely. When the
+// two disagree that way the pointer is believed, because it is tracked
+// through a foreign drag and is where the user was actually aiming. A real
+// drop on the first cell reaches the same cell either way, so nothing is
+// lost by not trusting the origin.
+func (h *GogpuHost) dropPixels(x, y float64) (float64, float64) {
+	if x != 0 || y != 0 {
+		return x, y
+	}
+	px, py, ok := h.pointerPixels()
+	if !ok || (px == 0 && py == 0) {
+		return x, y
+	}
+	DebugLog("GOGPU_DND: the drop was reported at the origin, taking the pointer at %.1f,%.1f px instead", px, py)
+	return px, py
+}
 
 // handleFileDrop is what gogpu calls when files are dropped on the window.
 // It returns at once and delivers in the background: delivery waits for the
@@ -248,7 +275,8 @@ func (h *GogpuHost) deliverFileDrop(paths []string, x, y float64) {
 	cols, rows := h.cols, h.rows
 	h.mu.Unlock()
 
-	cx, cy := gogpuDropCell(x, cellW), gogpuDropCell(y, cellH)
+	dx, dy := h.dropPixels(x, y)
+	cx, cy := gogpuDropCell(dx, cellW), gogpuDropCell(dy, cellH)
 	DebugLog("GOGPU_DND: the drop lands on cell %d,%d of a %dx%d screen, cell size %dx%d px",
 		cx, cy, cols, rows, cellW, cellH)
 
