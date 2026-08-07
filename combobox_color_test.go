@@ -38,6 +38,7 @@ func TestComboBox_DropdownStandsApartFromDialog(t *testing.T) {
 	SetDefaultPalette()
 	Palette[ColDialogText] = SetRGBBoth(0, 0x2E3436, 0xD3D7CF)
 	Palette[ColDialogComboText] = SetRGBBoth(0, 0xEEEEEC, 0x06989A)
+	Palette[ColDialogComboSelectedText] = SetRGBBoth(0, 0xEEEEEC, 0x2E3436)
 
 	scr := NewSilentScreenBuf()
 	scr.AllocBuf(20, 8)
@@ -46,8 +47,14 @@ func TestComboBox_DropdownStandsApartFromDialog(t *testing.T) {
 	cb.Menu.SetPosition(0, 0, 10, 4)
 	cb.Menu.Show(scr)
 
-	if got := GetRGBBack(scr.GetCell(2, 1).Attributes); got != 0x06989A {
+	// A menu selects its first item on construction, so row 1 is the selected
+	// one and row 2 an ordinary item. Both must come from the combo group;
+	// neither may fall back to the dialog background behind the dropdown.
+	if got := GetRGBBack(scr.GetCell(2, 2).Attributes); got != 0x06989A {
 		t.Errorf("dropdown background = #%06x, want the combo colour #06989a", got)
+	}
+	if got := GetRGBBack(scr.GetCell(2, 1).Attributes); got != 0x2E3436 {
+		t.Errorf("selected row background = #%06x, want #2e3436", got)
 	}
 }
 
