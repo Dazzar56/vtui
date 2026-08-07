@@ -70,6 +70,27 @@ func SetIndexBoth(attr uint64, idxFore, idxBack uint8) uint64 {
 	return SetIndexBack(SetIndexFore(attr, idxFore), idxBack)
 }
 
+// InvertColors swaps the foreground and background colors of the attribute,
+// preserving each color's mode (palette index vs 24-bit RGB). Style flags
+// (bold, underscore, etc.) are kept as-is.
+func InvertColors(attr uint64) uint64 {
+	fgIdx, bgIdx := GetIndexFore(attr), GetIndexBack(attr)
+	fgRGB, bgRGB := GetRGBFore(attr), GetRGBBack(attr)
+	fgIsRGB := attr&IsFgRGB != 0
+	bgIsRGB := attr&IsBgRGB != 0
+	if bgIsRGB {
+		attr = SetRGBFore(attr, bgRGB)
+	} else {
+		attr = SetIndexFore(attr, bgIdx)
+	}
+	if fgIsRGB {
+		attr = SetRGBBack(attr, fgRGB)
+	} else {
+		attr = SetIndexBack(attr, fgIdx)
+	}
+	return attr
+}
+
 // DimColor reduces the brightness of the foreground color to visually indicate a disabled state.
 func DimColor(attr uint64) uint64 {
 	if attr&IsFgRGB != 0 {
