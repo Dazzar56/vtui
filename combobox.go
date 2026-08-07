@@ -25,6 +25,15 @@ func NewComboBox(x, y, width int, items []string) *ComboBox {
 		cb.Menu.AddItem(MenuItem{Text: item})
 	}
 
+	cb.Menu.ColorTextIdx = ColDialogComboText
+	cb.Menu.ColorSelectedTextIdx = ColDialogComboSelectedText
+	cb.Menu.ColorHighlightIdx = ColDialogComboHighlight
+	cb.Menu.ColorSelectedHighlightIdx = ColDialogComboSelectedHighlight
+	cb.Menu.ColorBoxIdx = ColDialogComboBox
+	cb.Menu.ColorTitleIdx = ColDialogComboTitle
+	if cb.Menu.ScrollBar != nil {
+		cb.Menu.ScrollBar.ColorIdx = ColDialogComboScrollbar
+	}
 	cb.Menu.SetOwner(cb)
 	cb.Menu.OnAction = func(idx int) {
 		cb.Edit.SetText(cb.Menu.Items[idx].Text)

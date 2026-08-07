@@ -27,7 +27,6 @@ func NewHelpView(engine *HelpEngine, startTopic string) *HelpView {
 	}
 	hv.ColorBoxIdx = ColHelpBox
 	hv.ColorTitleIdx = ColHelpBoxTitle
-	hv.ColorHighlightTitleIdx = ColHelpBoxTitle
 	hv.ColorBackgroundIdx = ColHelpText
 
 	hv.rootGroup.SetOwner(hv)

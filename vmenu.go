@@ -27,14 +27,30 @@ type VMenu struct {
 	OnAction   func(int)
 	OnKeyDown  func(*vtinput.InputEvent) bool
 	HideShadow bool
+
+	// Palette entries the menu paints with. They default to the Menu.* group;
+	// a ComboBox points them at Dialog.Combo.* so its dropdown stands apart
+	// from the dialog underneath it.
+	ColorTextIdx              int
+	ColorSelectedTextIdx      int
+	ColorHighlightIdx         int
+	ColorSelectedHighlightIdx int
+	ColorBoxIdx               int
+	ColorTitleIdx             int
 }
 
 // NewVMenu creates a new vertical menu instance.
 func NewVMenu(title string) *VMenu {
 	clean, _, _ := ParseAmpersandString(title)
 	m := &VMenu{
-		title: clean,
-		Items: []MenuItem{},
+		title:                     clean,
+		Items:                     []MenuItem{},
+		ColorTextIdx:              ColMenuText,
+		ColorSelectedTextIdx:      ColMenuSelectedText,
+		ColorHighlightIdx:         ColMenuHighlight,
+		ColorSelectedHighlightIdx: ColMenuSelectedHighlight,
+		ColorBoxIdx:               ColMenuBox,
+		ColorTitleIdx:             ColMenuTitle,
 	}
 	m.canFocus = true
 	m.Wrap = true
@@ -282,25 +298,23 @@ func (m *VMenu) DisplayObject(scr *ScreenBuf) {
 	p := NewPainter(scr)
 
 	// 1. Frame and Background
-	p.Fill(m.X1, m.Y1, m.X2, m.Y2, ' ', Palette[ColMenuText])
-	p.DrawBox(m.X1, m.Y1, m.X2, m.Y2, Palette[ColMenuBox], DoubleBox)
+	p.Fill(m.X1, m.Y1, m.X2, m.Y2, ' ', Palette[m.ColorTextIdx])
+	p.DrawBox(m.X1, m.Y1, m.X2, m.Y2, Palette[m.ColorBoxIdx], DoubleBox)
 
-	titleAttr := Palette[ColMenuTitle]
-	if m.IsFocused() {
-		titleAttr = Palette[ColDialogHighlightBoxTitle]
-	}
-	p.DrawTitle(m.X1, m.Y1, m.X2, m.title, titleAttr)
+	// far2l paints a menu title with Menu.Title whether the menu holds focus
+	// or not, so there is no separate focused variant here.
+	p.DrawTitle(m.X1, m.Y1, m.X2, m.title, Palette[m.ColorTitleIdx])
 
-	colText := Palette[ColMenuText]
-	colSel := Palette[ColMenuSelectedText]
-	colBox := Palette[ColMenuBox]
+	colText := Palette[m.ColorTextIdx]
+	colSel := Palette[m.ColorSelectedTextIdx]
+	colBox := Palette[m.ColorBoxIdx]
 	height := m.Y2 - m.Y1 - 1
 	if height < 0 {
 		height = 0
 	}
 
-	colHigh := Palette[ColMenuHighlight]
-	colSelHigh := Palette[ColMenuSelectedHighlight]
+	colHigh := Palette[m.ColorHighlightIdx]
+	colSelHigh := Palette[m.ColorSelectedHighlightIdx]
 
 	// 3. Rendering items
 	for i := 0; i < height; i++ {
