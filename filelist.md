@@ -1,5 +1,4 @@
 # Project Structure
-Last updated: 2026-08-06 03:17:44
 
 ```text
 .
@@ -42,6 +41,9 @@ Last updated: 2026-08-06 03:17:44
 ├── desktop.go
 ├── desktop_test.go
 ├── dialog_test.go
+├── dragdrop.go
+├── DRAGDROP.md
+├── dragdrop_test.go
 ├── dynamictext.go
 ├── dynamictext_test.go
 ├── edit.go
@@ -181,9 +183,11 @@ Last updated: 2026-08-06 03:17:44
 ├── x11_renderer.go
 ├── x11_shm_fallback.go
 ├── x11_shm_unix.go
+├── x11_xdnd.go
+├── x11_xdnd_test.go
 ├── xlat.go
 ├── xlat_tables.go
 └── xlat_test.go
 
-3 directories, 176 files
+3 directories, 184 files
 ```
