@@ -25,6 +25,11 @@ func NewHelpView(engine *HelpEngine, startTopic string) *HelpView {
 		engine:      engine,
 		selectedIdx: -1,
 	}
+	hv.ColorBoxIdx = ColHelpBox
+	hv.ColorTitleIdx = ColHelpBoxTitle
+	hv.ColorHighlightTitleIdx = ColHelpBoxTitle
+	hv.ColorBackgroundIdx = ColHelpText
+
 	hv.rootGroup.SetOwner(hv)
 	hv.scrollBar = NewScrollBar(0, 0, 0)
 	hv.scrollBar.SetOwner(hv)

@@ -9,21 +9,25 @@ import (
 // BaseWindow provides generic windowing logic (moving, resizing, focus cycle).
 type BaseWindow struct {
 	BaseFrame
-	rootGroup   *Group
-	frame       *BorderedFrame
-	isDragging  bool
-	isResizing  bool
-	dragOffX    int
-	dragOffY    int
-	lastW       int
-	lastH       int
-	MinW        int
-	MinH        int
-	ShowClose   bool
-	ShowZoom    bool
-	SavedBounds *Rect
-	progress    int
-	IsWarning   bool
+	rootGroup              *Group
+	frame                  *BorderedFrame
+	isDragging             bool
+	isResizing             bool
+	dragOffX               int
+	dragOffY               int
+	lastW                  int
+	lastH                  int
+	MinW                   int
+	MinH                   int
+	ShowClose              bool
+	ShowZoom               bool
+	SavedBounds            *Rect
+	progress               int
+	IsWarning              bool
+	ColorBoxIdx            int
+	ColorTitleIdx          int
+	ColorHighlightTitleIdx int
+	ColorBackgroundIdx     int
 }
 
 func (bw *BaseWindow) GetFocusedItem() UIElement {
@@ -48,10 +52,14 @@ func (bw *BaseWindow) SetFocusedItem(item UIElement) {
 
 func NewBaseWindow(x1, y1, x2, y2 int, title string) *BaseWindow {
 	bw := &BaseWindow{
-		frame:    NewBorderedFrame(x1, y1, x2, y2, DoubleBox, title),
-		MinW:     x2 - x1 + 1,
-		MinH:     y2 - y1 + 1,
-		progress: -1,
+		frame:                  NewBorderedFrame(x1, y1, x2, y2, DoubleBox, title),
+		MinW:                   x2 - x1 + 1,
+		MinH:                   y2 - y1 + 1,
+		progress:               -1,
+		ColorBoxIdx:            ColDialogBox,
+		ColorTitleIdx:          ColDialogBoxTitle,
+		ColorHighlightTitleIdx: ColDialogHighlightBoxTitle,
+		ColorBackgroundIdx:     ColDialogText,
 	}
 	// The root group lives inside the frame
 	bw.rootGroup = NewGroup(x1+1, y1+1, x2-x1-1, y2-y1-1)
@@ -62,6 +70,17 @@ func NewBaseWindow(x1, y1, x2, y2 int, title string) *BaseWindow {
 	bw.lastW = x2 - x1 + 1
 	bw.lastH = y2 - y1 + 1
 	return bw
+}
+func (bw *BaseWindow) SetPosition(x1, y1, x2, y2 int) {
+	bw.ScreenObject.SetPosition(x1, y1, x2, y2)
+	if bw.frame != nil {
+		bw.frame.SetPosition(x1, y1, x2, y2)
+	}
+	if bw.rootGroup != nil {
+		bw.rootGroup.SetPosition(x1+1, y1+1, x2-1, y2-1)
+	}
+	bw.lastW = x2 - x1 + 1
+	bw.lastH = y2 - y1 + 1
 }
 
 func (bw *BaseWindow) GetPaletteIndex(baseIdx int) int {
@@ -120,15 +139,32 @@ func (bw *BaseWindow) Show(scr *ScreenBuf) {
 	bw.ScreenObject.Show(scr)
 	bw.frame.ShowClose = bw.ShowClose
 
+	boxIdx := bw.ColorBoxIdx
+	if boxIdx == 0 {
+		boxIdx = ColDialogBox
+	}
+	titleIdx := bw.ColorTitleIdx
+	if titleIdx == 0 {
+		titleIdx = ColDialogBoxTitle
+	}
+	hlTitleIdx := bw.ColorHighlightTitleIdx
+	if hlTitleIdx == 0 {
+		hlTitleIdx = ColDialogHighlightBoxTitle
+	}
+	bgIdx := bw.ColorBackgroundIdx
+	if bgIdx == 0 {
+		bgIdx = ColDialogText
+	}
+
 	// Draw active frame color if this window has focus
 	if bw.IsFocused() {
-		bw.frame.ColorBoxIdx = bw.GetPaletteIndex(ColDialogBox)
-		bw.frame.ColorTitleIdx = bw.GetPaletteIndex(ColDialogHighlightBoxTitle)
+		bw.frame.ColorBoxIdx = bw.GetPaletteIndex(boxIdx)
+		bw.frame.ColorTitleIdx = bw.GetPaletteIndex(hlTitleIdx)
 	} else {
-		bw.frame.ColorBoxIdx = bw.GetPaletteIndex(ColDialogBox)
-		bw.frame.ColorTitleIdx = bw.GetPaletteIndex(ColDialogBoxTitle)
+		bw.frame.ColorBoxIdx = bw.GetPaletteIndex(boxIdx)
+		bw.frame.ColorTitleIdx = bw.GetPaletteIndex(titleIdx)
 	}
-	bw.frame.ColorBackgroundIdx = bw.GetPaletteIndex(ColDialogText)
+	bw.frame.ColorBackgroundIdx = bw.GetPaletteIndex(bgIdx)
 
 	bw.frame.DisplayObject(scr)
 
