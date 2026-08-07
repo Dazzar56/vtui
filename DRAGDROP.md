@@ -91,14 +91,9 @@ debug.log, and which line is *missing* says where the gesture died:
 - gogpu limitation: nothing arrives before the drop, so a target cannot
   highlight anything while the pointer is still moving. The gesture is
   replayed as one enter immediately followed by the drop
-  - gogpu, X11, fixed in gogpu 0.50.1: the drop position used to arrive as
-    0,0, because the wait for the dropped data threw away the XdndPosition
-    that TCP batching had delivered behind the drop. Until go.mod can move
-    to a release carrying that fix, the position is taken from where gogpu
-    last saw the pointer, which is tracked through a foreign drag and is
-    where the user aimed. `VTUI_GOGPU_DROP_POINTER=0` goes back to the
-    reported position; on 0.50.0 that puts every drop in the first cell.
-    Once go.mod moves, both the switch and the pointer path can go
+  - gogpu before 0.50.1 reported every drop position as 0,0, which put every
+    drop in the first cell of the screen. Fixed upstream; the position now
+    comes from gogpu, as it does from X11
   - gogpu limitation: only copy is offered when dragging out, as on X11 and
       for the same reason. gogpu's DragData carries no action either, so there
       is nothing else it could be told
