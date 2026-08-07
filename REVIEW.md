@@ -68,8 +68,15 @@ VTUI_DEBUG is set. The refactor that untied the source half of x11_xdnd.go
 from X11Host also stays; it was the first step of a plan that is no longer
 needed, but it is harmless and would be where to start if this returns.
 
-One thing was seen and never measured: a drag from a file manager into the
-window occasionally does not arrive at all, with no callback and nothing
-in the log, and succeeds on a later try. It was seen before the gogpu fix
-and has not been looked at since. A count of failures against attempts is
-the first thing it needs.
+The thing that was seen and never measured has now been measured, and it
+is worse than it looked: a drag from a file manager into the window
+arrives 4 times in 10. The cause is in gogpu's connection layer, where a
+synchronous round trip reads the socket itself and discards every event
+that is not the reply it wants - and the incoming drop path makes one on
+every drag, before any position has been recorded. That also explains the
+position, which is 0,0 on every drop that does arrive, because the handler
+that would record it never runs.
+
+None of it is ours to work around. The position guard in `dropPixels` is
+the exception and stays until the fix ships. Work on the fix itself is
+happening upstream in gogpu/gogpu#431.

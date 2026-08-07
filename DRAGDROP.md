@@ -95,13 +95,16 @@ debug.log, and which line is *missing* says where the gesture died:
 - gogpu limitation: nothing arrives before the drop, so a target cannot
   highlight anything while the pointer is still moving. The gesture is
   replayed as one enter immediately followed by the drop
-  - gogpu before 0.50.1 reported every drop position as 0,0, which put every
-    drop in the first cell of the screen. Fixed upstream, and the position
-    now comes from gogpu as it does from X11 - but a drop reported at exactly
-    the origin while the pointer is elsewhere is still treated as a lost
-    position and the pointer is used instead. That guard costs nothing and
-    keeps an old gogpu, or a future regression, from quietly sending every
-    drop to the first panel
+  - gogpu, X11, unfixed as of 0.50.1: a drop from another application is
+    lost more often than it arrives - measured at 4 callbacks in 10 attempts
+    - and the position of the ones that do arrive is always 0,0. Both come
+    from gogpu's connection layer rather than its XDND code: a synchronous
+    round trip discards every event that arrives while it waits for its
+    reply, and the incoming drop path makes one at exactly the wrong moment
+    (gogpu/gogpu#431). The position is worked around by taking it from the
+    pointer whenever a drop is reported at exactly the origin while the
+    pointer is elsewhere; the lost drops cannot be worked around from here,
+    because the window belongs to gogpu
   - gogpu limitation: only copy is offered when dragging out, as on X11 and
       for the same reason. gogpu's DragData carries no action either, so there
       is nothing else it could be told
