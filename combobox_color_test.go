@@ -66,9 +66,9 @@ func TestVMenu_DefaultsToMenuPalette(t *testing.T) {
 			m.ColorTextIdx, m.ColorBoxIdx, m.ColorTitleIdx)
 	}
 }
-func TestComboBox_DropdownOnlyFocusedFillsSelectionContinuously(t *testing.T) {
+func TestComboBox_DropdownOnlyFocusedColorsOnlyTextPortion(t *testing.T) {
 	SetDefaultPalette()
-	Palette[ColDialogComboText] = SetRGBBoth(0, 0xEEEEEC, 0x06989A)
+	Palette[ColDialogComboText] = SetRGBBoth(0, 0xEEEEEC, 0x37322C)
 	Palette[ColDialogComboSelectedText] = SetRGBBoth(0, 0x1E1A16, 0xE6B450)
 	Palette[ColDialogComboSelectedHighlight] = SetRGBBoth(0, 0xA04020, 0xE6B450)
 
@@ -81,13 +81,26 @@ func TestComboBox_DropdownOnlyFocusedFillsSelectionContinuously(t *testing.T) {
 	cb.SetFocus(true)
 	cb.Show(scr)
 
+	normalBg := GetRGBBack(Palette[ColDialogComboText])
 	selectedBg := GetRGBBack(Palette[ColDialogComboSelectedText])
 
-	for x := cb.X1; x <= cb.X2; x++ {
+	for x := cb.X1; x < cb.X1+3; x++ {
 		cellBg := GetRGBBack(scr.GetCell(x, cb.Y1).Attributes)
 		if cellBg != selectedBg {
-			t.Errorf("cell X=%d background = #%06x, want selected background #%06x", x, cellBg, selectedBg)
+			t.Errorf("text cell X=%d background = #%06x, want selected background #%06x", x, cellBg, selectedBg)
 		}
+	}
+
+	for x := cb.X1 + 3; x < cb.X2; x++ {
+		cellBg := GetRGBBack(scr.GetCell(x, cb.Y1).Attributes)
+		if cellBg != normalBg {
+			t.Errorf("trailing cell X=%d background = #%06x, want normal combo background #%06x", x, cellBg, normalBg)
+		}
+	}
+
+	arrowBg := GetRGBBack(scr.GetCell(cb.X2, cb.Y1).Attributes)
+	if arrowBg != selectedBg {
+		t.Errorf("arrow cell X=%d background = #%06x, want selected background #%06x", cb.X2, arrowBg, selectedBg)
 	}
 }
 

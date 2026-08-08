@@ -87,16 +87,13 @@ func (cb *ComboBox) DisplayObject(scr *ScreenBuf) {
 			bgIdx = cb.Edit.ColorSelectedIdx
 			fgIdx = ColDialogComboSelectedHighlight
 
-			origTextIdx := cb.Edit.ColorTextIdx
 			oldStart, oldEnd := cb.Edit.selStart, cb.Edit.selEnd
 
-			cb.Edit.ColorTextIdx = cb.Edit.ColorSelectedIdx
 			cb.Edit.selStart = 0
 			cb.Edit.selEnd = len(cb.Edit.text)
 
 			cb.Edit.Show(scr)
 
-			cb.Edit.ColorTextIdx = origTextIdx
 			cb.Edit.selStart, cb.Edit.selEnd = oldStart, oldEnd
 		} else {
 			cb.Edit.Show(scr)
