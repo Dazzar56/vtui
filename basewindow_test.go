@@ -265,3 +265,29 @@ func TestBaseWindow_PgDnFocus(t *testing.T) {
 		t.Error("Focus remained on the edit field after PgDn")
 	}
 }
+func TestBaseWindow_GetPaletteIndex_WarningMapping(t *testing.T) {
+	bw := NewBaseWindow(0, 0, 10, 10, "Warn")
+	bw.IsWarning = true
+
+	cases := []struct {
+		base int
+		want int
+	}{
+		{ColDialogText, ColWarnText},
+		{ColDialogBox, ColWarnBox},
+		{ColDialogButton, ColWarnButton},
+		{ColDialogSelectedButton, ColWarnSelectedButton},
+		{ColDialogHighlightButton, ColWarnHighlightButton},
+		{ColDialogHighlightSelectedButton, ColWarnHighlightSelectedButton},
+		{ColDialogEdit, ColWarnEdit},
+		{ColDialogComboText, ColWarnEdit},
+		{ColDialogComboSelectedText, ColWarnEdit},
+		{ColDialogComboHighlight, ColWarnHighlightText},
+		{ColDialogComboBox, ColWarnBox},
+	}
+	for _, tc := range cases {
+		if got := bw.GetPaletteIndex(tc.base); got != tc.want {
+			t.Errorf("GetPaletteIndex(%d) = %d, want %d", tc.base, got, tc.want)
+		}
+	}
+}

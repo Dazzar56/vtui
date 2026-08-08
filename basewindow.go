@@ -97,8 +97,12 @@ func (bw *BaseWindow) GetPaletteIndex(baseIdx int) int {
 		return ColWarnBoxTitle
 	case ColDialogHighlightBoxTitle:
 		return ColWarnHighlightBoxTitle
-	case ColDialogEdit:
+	case ColDialogEdit, ColDialogEditUnchanged, ColDialogEditSelected, ColDialogComboText, ColDialogComboSelectedText:
 		return ColWarnEdit
+	case ColDialogComboHighlight, ColDialogComboSelectedHighlight:
+		return ColWarnHighlightText
+	case ColDialogComboBox:
+		return ColWarnBox
 	case ColDialogButton:
 		return ColWarnButton
 	case ColDialogSelectedButton:
