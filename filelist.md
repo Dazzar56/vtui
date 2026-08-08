@@ -24,7 +24,8 @@
     ├── clusters_test.go
     ├── cmd
     │   └── test-app
-    │       └── main.go
+    │       ├── main.go
+    │       └── main_test.go
     ├── colors.go
     ├── colors_test.go
     ├── combobox_color_test.go
@@ -55,6 +56,8 @@
     ├── framemanager.go
     ├── framemanager_hidebars_test.go
     ├── framemanager_test.go
+    ├── fuzzy.go
+    ├── fuzzy_test.go
     ├── .gitignore
     ├── gogpu_dnd.go
     ├── gogpu_dnd_test.go
@@ -190,4 +193,4 @@
     ├── xlat_tables.go
     └── xlat_test.go
     
-    3 directories, 186 files
+    3 directories, 189 files
