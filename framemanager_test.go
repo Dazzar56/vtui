@@ -771,6 +771,42 @@ func TestFrameManager_ModalOutsideClicks(t *testing.T) {
 	}
 }
 
+// TestFrameManager_ModalOutsideClicks_MenuDismissesOnRMB pins the fix
+// for unxed/f4#396: the RMB-outside → ENTER shortcut is Far-style
+// muscle memory for confirming a dialog's default button, but for a
+// drop-down / context menu it silently activates whichever row happens
+// to be under the cursor (typically the first item, e.g. "Other panel"
+// for the f4 drive menu). RMB outside a TypeMenu should dismiss it
+// like LMB does.
+func TestFrameManager_ModalOutsideClicks_MenuDismissesOnRMB(t *testing.T) {
+	SetDefaultPalette()
+	fm := &frameManager{}
+	fm.Init(NewSilentScreenBuf())
+	fm.Push(NewDesktop())
+
+	menu := NewVMenu(" Test ")
+	menu.SetPosition(10, 10, 30, 20)
+	menu.AddItem(MenuItem{Text: "Would-be default action"})
+	fm.Push(menu)
+
+	fm.dispatchEvent(&vtinput.InputEvent{
+		Type:        vtinput.MouseEventType,
+		KeyDown:     true,
+		MouseX:      5,
+		MouseY:      5,
+		ButtonState: vtinput.RightmostButtonPressed,
+	}, false)
+
+	if !menu.IsDone() {
+		t.Error("RMB outside a menu did not dismiss it")
+	}
+	if menu.exitCode != -1 {
+		t.Errorf("RMB outside menu: expected ExitCode -1 (dismissed), got %d — "+
+			"row 0 was activated instead, which is exactly what unxed/f4#396 reported",
+			menu.exitCode)
+	}
+}
+
 func TestFrameManager_ModalPriorityOverMenu(t *testing.T) {
 	fm := &frameManager{}
 	scr := NewSilentScreenBuf()
