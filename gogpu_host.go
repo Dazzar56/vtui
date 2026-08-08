@@ -513,6 +513,9 @@ func loadGogpuFont(fontName string, size float64) (text.Face, int, int) {
 	if size <= 0 {
 		size = 18.0
 	}
+	var primaryFace text.Face
+	var cellW, cellH int
+
 	for _, p := range getFontCandidates(fontName) {
 		if _, err := os.Stat(p); err == nil {
 			src, err := text.NewFontSourceFromFile(p)
@@ -520,8 +523,8 @@ func loadGogpuFont(fontName string, size float64) (text.Face, int, int) {
 				face := src.Face(size)
 				metrics := face.Metrics()
 				adv := face.Advance("A")
-				cellH := int(metrics.Ascent + metrics.Descent + 0.5)
-				cellW := int(adv + 0.5)
+				cellH = int(metrics.Ascent + metrics.Descent + 0.5)
+				cellW = int(adv + 0.5)
 				if cellW == 0 {
 					cellW = 8
 				}
@@ -533,11 +536,36 @@ func loadGogpuFont(fontName string, size float64) (text.Face, int, int) {
 				DebugLog("GOGPU_DIAG_FONT: Metrics: Ascent=%.2f Descent=%.2f LineGap=%.2f AdvanceA=%.2f",
 					float64(metrics.Ascent), float64(metrics.Descent), float64(metrics.LineGap), adv)
 				DebugLog("GOGPU_DIAG_FONT: Calculated Cell: %dx%d", cellW, cellH)
-				return face, cellW, cellH
+				primaryFace = face
+				break
 			}
 		}
 	}
-	return nil, 8, 16
+
+	if primaryFace == nil {
+		return nil, 8, 16
+	}
+
+	var faces []text.Face
+	faces = append(faces, primaryFace)
+
+	for _, p := range fallbackFontPaths {
+		if _, err := os.Stat(p); err == nil {
+			src, err := text.NewFontSourceFromFile(p)
+			if err == nil {
+				faces = append(faces, src.Face(size))
+			}
+		}
+	}
+
+	if len(faces) > 1 {
+		multiFace, err := text.NewMultiFace(faces...)
+		if err == nil {
+			return multiFace, cellW, cellH
+		}
+	}
+
+	return primaryFace, cellW, cellH
 }
 
 func gogpuKeyToVK(k gpucontext.Key) uint16 {

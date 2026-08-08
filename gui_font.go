@@ -4,6 +4,7 @@ package vtui
 
 import (
 	"fmt"
+	"image"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,7 +12,116 @@ import (
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/basicfont"
 	"golang.org/x/image/font/opentype"
+	"golang.org/x/image/math/fixed"
 )
+
+var fallbackFontPaths = []string{
+	// Linux CJK & Emoji
+	"/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
+	"/usr/share/fonts/noto/NotoSansCJK-Regular.ttc",
+	"/usr/share/fonts/noto/NotoColorEmoji.ttf",
+	"/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
+	"/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+	"/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+	"/usr/share/fonts/wqy-microhei/wqy-microhei.ttc",
+	"/usr/share/fonts/truetype/arphic/uming.ttc",
+	"/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+	"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+	"/usr/share/fonts/TTF/DejaVuSans.ttf",
+	// Windows
+	`C:\Windows\Fonts\msgothic.ttc`,
+	`C:\Windows\Fonts\msmincho.ttc`,
+	`C:\Windows\Fonts\segoeui.ttf`,
+	`C:\Windows\Fonts\seguiemj.ttf`,
+	`C:\Windows\Fonts\meiryo.ttc`,
+	// macOS
+	"/System/Library/Fonts/PingFang.ttc",
+	"/System/Library/Fonts/Apple Color Emoji.ttc",
+	"/System/Library/Fonts/STHeiti Light.ttc",
+	"/Library/Fonts/Arial Unicode.ttf",
+}
+
+func parseFontBytes(data []byte) (*opentype.Font, error) {
+	f, err := opentype.Parse(data)
+	if err == nil {
+		return f, nil
+	}
+	col, err2 := opentype.ParseCollection(data)
+	if err2 == nil && col.NumFonts() > 0 {
+		f, err3 := col.Font(0)
+		if err3 == nil {
+			return f, nil
+		}
+	}
+	return nil, err
+}
+
+type fallbackFace struct {
+	faces []font.Face
+}
+
+func (f *fallbackFace) Close() error {
+	var err error
+	for _, face := range f.faces {
+		if e := face.Close(); e != nil {
+			err = e
+		}
+	}
+	return err
+}
+
+func (f *fallbackFace) Metrics() font.Metrics {
+	if len(f.faces) > 0 {
+		return f.faces[0].Metrics()
+	}
+	return font.Metrics{}
+}
+
+func (f *fallbackFace) Kern(r0, r1 rune) fixed.Int26_6 {
+	if len(f.faces) > 0 {
+		return f.faces[0].Kern(r0, r1)
+	}
+	return 0
+}
+
+func (f *fallbackFace) GlyphBounds(r rune) (bounds fixed.Rectangle26_6, advance fixed.Int26_6, ok bool) {
+	for _, face := range f.faces {
+		bounds, advance, ok = face.GlyphBounds(r)
+		if ok {
+			return bounds, advance, ok
+		}
+	}
+	if len(f.faces) > 0 {
+		return f.faces[0].GlyphBounds(r)
+	}
+	return fixed.Rectangle26_6{}, 0, false
+}
+
+func (f *fallbackFace) GlyphAdvance(r rune) (advance fixed.Int26_6, ok bool) {
+	for _, face := range f.faces {
+		advance, ok = face.GlyphAdvance(r)
+		if ok {
+			return advance, ok
+		}
+	}
+	if len(f.faces) > 0 {
+		return f.faces[0].GlyphAdvance(r)
+	}
+	return 0, false
+}
+
+func (f *fallbackFace) Glyph(dot fixed.Point26_6, r rune) (dr image.Rectangle, mask image.Image, maskp image.Point, advance fixed.Int26_6, ok bool) {
+	for _, face := range f.faces {
+		dr, mask, maskp, advance, ok = face.Glyph(dot, r)
+		if ok {
+			return dr, mask, maskp, advance, ok
+		}
+	}
+	if len(f.faces) > 0 {
+		return f.faces[0].Glyph(dot, r)
+	}
+	return image.Rectangle{}, nil, image.Point{}, 0, false
+}
 
 func getFontCandidates(fontName string) []string {
 	var candidates []string
@@ -70,13 +180,16 @@ func loadBestFont(fontName string, size float64, dpi float64) (font.Face, int, i
 		size = 18.0
 	}
 
+	var primaryFace font.Face
+	var cellW, cellH int
+
 	for _, path := range getFontCandidates(fontName) {
 		data, err := os.ReadFile(path)
 		if err != nil {
 			continue
 		}
 
-		f, err := opentype.Parse(data)
+		f, err := parseFontBytes(data)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "GUI_FONT: Error parsing %s: %v\n", path, err)
 			continue
@@ -93,17 +206,44 @@ func loadBestFont(fontName string, size float64, dpi float64) (font.Face, int, i
 		}
 
 		metrics := face.Metrics()
-		cellH := (metrics.Ascent + metrics.Descent).Ceil()
+		cellH = (metrics.Ascent + metrics.Descent).Ceil()
 		advance, _ := face.GlyphAdvance('A')
-		cellW := advance.Ceil()
+		cellW = advance.Ceil()
 
 		msg := fmt.Sprintf("GUI_FONT: Successfully loaded %s (%dx%d)", path, cellW, cellH)
 		fmt.Fprintln(os.Stderr, msg)
 		DebugLog("%s", msg)
-		return face, cellW, cellH
+		primaryFace = face
+		break
 	}
 
-	// Fallback to basicfont if no TTF found
-	DebugLog("GUI_FONT: CRITICAL - No TTF font found! Falling back to basicfont 7x13 (ASCII only!)")
-	return basicfont.Face7x13, 7, 13
+	if primaryFace == nil {
+		// Fallback to basicfont if no TTF found
+		DebugLog("GUI_FONT: CRITICAL - No TTF font found! Falling back to basicfont 7x13 (ASCII only!)")
+		return basicfont.Face7x13, 7, 13
+	}
+
+	faces := []font.Face{primaryFace}
+
+	for _, path := range fallbackFontPaths {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		f, err := parseFontBytes(data)
+		if err != nil {
+			continue
+		}
+		face, err := opentype.NewFace(f, &opentype.FaceOptions{
+			Size:    size,
+			DPI:     dpi,
+			Hinting: font.HintingFull,
+		})
+		if err != nil {
+			continue
+		}
+		faces = append(faces, face)
+	}
+
+	return &fallbackFace{faces: faces}, cellW, cellH
 }
