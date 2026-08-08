@@ -135,9 +135,6 @@ func (e *Edit) DisplayObject(scr *ScreenBuf) {
 
 	// Pre-fill the entire line with background to avoid artifacts
 	defaultAttr := e.GetStateAttr(e.ColorTextIdx, e.ColorTextIdx)
-	if e.clearFlag {
-		defaultAttr = e.GetStateAttr(e.ColorUnchangedIdx, e.ColorUnchangedIdx)
-	}
 	scr.FillRect(e.X1, e.Y1, e.X2, e.Y1, ' ', defaultAttr)
 
 	currX := 0
@@ -155,7 +152,11 @@ func (e *Edit) DisplayObject(scr *ScreenBuf) {
 
 		attr := defaultAttr
 		if e.selStart != -1 && i >= e.selStart && i < e.selEnd {
-			attr = e.GetStateAttr(e.ColorSelectedIdx, e.ColorSelectedIdx)
+			selectedIdx := e.ColorSelectedIdx
+			if e.clearFlag {
+				selectedIdx = e.ColorUnchangedIdx
+			}
+			attr = e.GetStateAttr(selectedIdx, selectedIdx)
 		}
 		if e.IsDisabled() {
 			attr = DimColor(attr)

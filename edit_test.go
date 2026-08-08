@@ -627,3 +627,32 @@ func TestEdit_RightArrow_FullSelection_StaysInFocus(t *testing.T) {
 		t.Errorf("Cursor moved unexpectedly: %d", e.curPos)
 	}
 }
+func TestEdit_FullSelectionColorsOnlyTextPortion(t *testing.T) {
+	SetDefaultPalette()
+	Palette[ColDialogEdit] = SetRGBBoth(0, 0xEEEEEC, 0x37322C)
+	Palette[ColDialogEditUnchanged] = SetRGBBoth(0, 0x2E2A24, 0xE6B450)
+
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(20, 1)
+
+	e := NewEdit(0, 0, 20, "abc")
+	e.SelectAll()
+	e.Show(scr)
+
+	normalBg := GetRGBBack(Palette[ColDialogEdit])
+	selectedBg := GetRGBBack(Palette[ColDialogEditUnchanged])
+
+	for x := 0; x < 3; x++ {
+		cellBg := GetRGBBack(scr.GetCell(x, 0).Attributes)
+		if cellBg != selectedBg {
+			t.Errorf("text cell X=%d background = #%06x, want selected background #%06x", x, cellBg, selectedBg)
+		}
+	}
+
+	for x := 3; x < 20; x++ {
+		cellBg := GetRGBBack(scr.GetCell(x, 0).Attributes)
+		if cellBg != normalBg {
+			t.Errorf("trailing cell X=%d background = #%06x, want normal edit background #%06x", x, cellBg, normalBg)
+		}
+	}
+}
