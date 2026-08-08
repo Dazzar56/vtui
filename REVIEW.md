@@ -80,3 +80,16 @@ that would record it never runs.
 None of it is ours to work around. The position guard in `dropPixels` is
 the exception and stays until the fix ships. Work on the fix itself is
 happening upstream in gogpu/gogpu#431.
+## Font Fallback Hardcoded Paths and Startup I/O
+
+To resolve broken Unicode/CJK/Emoji rendering in X11, Wayland, and gogpu,
+we introduced a sequential search through standard system paths for fallback
+fonts. While this operates as a self-sufficient solution, it comes with a
+few trade-offs:
+1. **Startup I/O Overhead:** Sequential `os.ReadFile` or `os.Stat` calls on a long list
+   of candidate paths can introduce minor startup latency, especially on slow disks.
+2. **Hardcoded Paths:** System font paths are highly distribution-dependent. If a
+   user installs fonts in a non-standard directory, the fallbacks will not be found.
+*Future improvement:* Introduce a configurable font path list in the application
+settings or delegate font discovery to system tools like `fontconfig` on Unix-like
+systems.

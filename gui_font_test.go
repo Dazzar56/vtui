@@ -3,7 +3,27 @@ package vtui
 import (
 	"strings"
 	"testing"
+
+	"golang.org/x/image/font"
+	"golang.org/x/image/font/basicfont"
 )
+
+func TestFallbackFace_Delegation(t *testing.T) {
+	face := &fallbackFace{
+		faces: []font.Face{basicfont.Face7x13},
+	}
+	defer face.Close()
+
+	adv, ok := face.GlyphAdvance('A')
+	if !ok || adv <= 0 {
+		t.Errorf("Expected positive glyph advance for 'A', got %v, ok=%v", adv, ok)
+	}
+
+	metrics := face.Metrics()
+	if metrics.Height <= 0 {
+		t.Errorf("Expected valid font metrics height, got %v", metrics.Height)
+	}
+}
 
 func TestGetFontCandidates(t *testing.T) {
 	// 1. Тестируем пустой шрифт (должен вернуть встроенные дефолты)
