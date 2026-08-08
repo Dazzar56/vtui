@@ -314,7 +314,7 @@ func TestLayout_StandardDialogs_Validity(t *testing.T) {
 	})
 
 	t.Run("MessageDialog", func(t *testing.T) {
-		dlg := createMessageDialog("Title", "Multi\nLine\nText", []string{"&Ok", "&Cancel"})
+		dlg := createMessageDialog("Title", "Multi\nLine\nText", []string{"&Ok", "&Cancel"}, MessageInfo)
 		AssertLayout(t, dlg)
 	})
 
@@ -342,7 +342,7 @@ func TestShowMessage_WideButtons_Layout(t *testing.T) {
 
 	// Create dialog. Logic: 1 line text + 4 padding/borders + 14 (7 buttons * 2).
 	// Expected Height = 19.
-	dlg := createMessageDialog(" Stacking Test ", "Testing vertical button stacking logic.", buttons)
+	dlg := createMessageDialog(" Stacking Test ", "Testing vertical button stacking logic.", buttons, MessageInfo)
 
 	// Layout validation (includes width/overlap/padding checks)
 	AssertLayout(t, dlg)
@@ -372,7 +372,7 @@ func TestShowMessage_HeightTruncation(t *testing.T) {
 		text += "Line\n"
 	}
 
-	dlg := createMessageDialog(" Overflow Test ", text, []string{"&Ok"})
+	dlg := createMessageDialog(" Overflow Test ", text, []string{"&Ok"}, MessageInfo)
 
 	// Expected height is exactly screen height - 2 (23)
 	height := dlg.Y2 - dlg.Y1 + 1
@@ -414,11 +414,11 @@ func TestCommonDialogs_WarningMapping(t *testing.T) {
 	SetDefaultPalette()
 	FrameManager.Init(NewSilentScreenBuf())
 
-	// 1. Create a warning dialog
-	dlg := createMessageDialog(" Warning ", "This is a test warning.", []string{"&Ok"})
+	// 1. Create a warning dialog with the explicit kind (recommended API).
+	dlg := createMessageDialog(" Warning ", "This is a test warning.", []string{"&Ok"}, MessageWarn)
 
 	if !dlg.IsWarning {
-		t.Error("Expected IsWarning to be true for ' Warning ' title")
+		t.Error("Expected IsWarning to be true for MessageWarn kind")
 	}
 
 	// 2. Check that the frame's ColorBackgroundIdx maps to ColWarnText after rendering
@@ -481,5 +481,54 @@ func TestShowMessage_Structure(t *testing.T) {
 		if dlg.ExitCode != i {
 			t.Errorf("Button %d failed to set exit code. Got %d", i, dlg.ExitCode)
 		}
+	}
+}
+
+// TestShowMessage_LegacyTitleInference guards the backward-compat path:
+// pre-existing callers pass no MessageKind and rely on the title being
+// one of "Warning" / "Error" / "Confirm" to get the warning palette.
+// New code should use ShowMessageEx with an explicit MessageWarn, but
+// the legacy inference must keep working for existing call sites.
+func TestShowMessage_LegacyTitleInference(t *testing.T) {
+	SetDefaultPalette()
+	FrameManager.Init(NewSilentScreenBuf())
+
+	cases := []struct {
+		title string
+		warn  bool
+	}{
+		{" Warning ", true},
+		{"Error", true},
+		{" Confirm ", true},
+		{" Info ", false},
+		{" File already open ", false},
+		{"", false},
+	}
+	for _, tc := range cases {
+		dlg := ShowMessage(tc.title, "body", []string{"&Ok"})
+		if dlg.IsWarning != tc.warn {
+			t.Errorf("ShowMessage(%q).IsWarning = %v, want %v", tc.title, dlg.IsWarning, tc.warn)
+		}
+	}
+}
+
+// TestShowMessageEx_ExplicitKindOverridesTitle is the whole point of the
+// new API: the caller decides the palette, not the title. A "Warning"
+// title with MessageInfo stays blue; a benign title with MessageWarn
+// goes red. This decouples wording (which is localised) from styling.
+func TestShowMessageEx_ExplicitKindOverridesTitle(t *testing.T) {
+	SetDefaultPalette()
+	FrameManager.Init(NewSilentScreenBuf())
+
+	// Title looks like a warning; caller says no — stay blue.
+	dlg := ShowMessageEx(" Warning ", "not really a warning", []string{"&Ok"}, MessageInfo)
+	if dlg.IsWarning {
+		t.Error("ShowMessageEx(MessageInfo) must not set IsWarning regardless of title")
+	}
+
+	// Title is neutral; caller says warn — go red.
+	dlg = ShowMessageEx(" File already open ", "reopen?", []string{"&Ok"}, MessageWarn)
+	if !dlg.IsWarning {
+		t.Error("ShowMessageEx(MessageWarn) must set IsWarning regardless of title")
 	}
 }
