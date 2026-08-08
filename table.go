@@ -454,61 +454,32 @@ func (t *Table) drawRow(scr *ScreenBuf, y int, rowIdx int, attr uint64) {
 
 		isCursorHere := rowIdx == t.SelectPos && (!t.CellSelection || colIdx == t.SelectCol)
 
-		cellAttr := attr
+		stateAttr := attr
 		if rowIdx != -1 {
-			baseAttr := Palette[t.ColorTextIdx]
-			if cr, ok := t.Rows[rowIdx].(CellColorableRow); ok {
-				baseAttr = cr.GetCellAttr(colIdx, baseAttr)
-			}
-			cellAttr = baseAttr
-
-			if isSelected {
-				cellAttr = Palette[t.ColorItemSelectTextIdx]
-			}
 			if isCursorHere {
 				if t.IsFocused() {
 					if isSelected {
-						cellAttr = Palette[t.ColorItemSelectCursorIdx]
+						stateAttr = Palette[t.ColorItemSelectCursorIdx]
 					} else {
-						cursorAttr := Palette[t.ColorSelectedTextIdx]
-						standardAttr := Palette[t.ColorTextIdx]
-						if baseAttr != standardAttr {
-							if baseAttr&IsFgRGB != 0 {
-								cellAttr = SetRGBFore(cursorAttr, GetRGBFore(baseAttr))
-							} else {
-								cellAttr = SetIndexFore(cursorAttr, GetIndexFore(baseAttr))
-							}
-							const styleMask = ForegroundIntensity | ForegroundDim | CommonLvbUnderscore | CommonLvbStrikeout
-							cellAttr |= (baseAttr & styleMask)
-						} else {
-							cellAttr = cursorAttr
-						}
+						stateAttr = Palette[t.ColorSelectedTextIdx]
 					}
 				} else {
 					if isSelected {
-						cellAttr = Palette[t.ColorItemSelectTextIdx]
-					} else {
-						if t.AlwaysShowCursor {
-							cursorAttr := Palette[t.ColorSelectedTextIdx]
-							standardAttr := Palette[t.ColorTextIdx]
-							if baseAttr != standardAttr {
-								if baseAttr&IsFgRGB != 0 {
-									cellAttr = SetRGBFore(cursorAttr, GetRGBFore(baseAttr))
-								} else {
-									cellAttr = SetIndexFore(cursorAttr, GetIndexFore(baseAttr))
-								}
-								const styleMask = ForegroundIntensity | ForegroundDim | CommonLvbUnderscore | CommonLvbStrikeout
-								cellAttr |= (baseAttr & styleMask)
-							} else {
-								cellAttr = cursorAttr
-							}
-						} else {
-							cellAttr = baseAttr
-						}
+						stateAttr = Palette[t.ColorItemSelectTextIdx]
+					} else if t.AlwaysShowCursor {
+						stateAttr = Palette[t.ColorSelectedTextIdx]
 					}
 				}
+			} else if isSelected {
+				stateAttr = Palette[t.ColorItemSelectTextIdx]
+			}
+
+			if cr, ok := t.Rows[rowIdx].(CellColorableRow); ok {
+				stateAttr = cr.GetCellAttr(colIdx, stateAttr)
 			}
 		}
+
+		cellAttr := stateAttr
 
 		// Prepare cell text with alignment. The sorted column's header gets a
 		// direction arrow appended at the right edge of the cell.
