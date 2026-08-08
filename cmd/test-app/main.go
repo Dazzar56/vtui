@@ -379,7 +379,7 @@ func main() {
 		dlg.AddItem(btnOk)
 
 		btnMsg := vtui.NewButton(x1+26, btnY, "Show &Msg")
-		btnMsg.OnClick = func() { vtui.ShowMessage(" MessageBox ", "Resizing works!", []string{"&Got it"}) }
+		btnMsg.OnClick = func() { vtui.ShowMessage(" MessageBox ", "你好！", []string{"&Got it"}) }
 		btnMsg.SetGrowMode(vtui.GrowLoY | vtui.GrowHiY)
 		dlg.AddItem(btnMsg)
 
