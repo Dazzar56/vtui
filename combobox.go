@@ -21,6 +21,9 @@ func NewComboBox(x, y, width int, items []string) *ComboBox {
 	}
 	cb.canFocus = true
 
+	cb.Edit.ColorTextIdx = ColDialogComboText
+	cb.Edit.ColorSelectedIdx = ColDialogComboSelectedText
+
 	for _, item := range items {
 		cb.Menu.AddItem(MenuItem{Text: item})
 	}
@@ -74,14 +77,26 @@ func (cb *ComboBox) DisplayObject(scr *ScreenBuf) {
 	}
 
 	cb.Edit.focused = cb.focused
+
+	bgIdx := cb.Edit.ColorTextIdx
+	fgIdx := ColDialogComboHighlight
+
 	if cb.DropdownOnly {
 		cb.Edit.HideCursor = true
 		if cb.focused {
-			// Visually highlight the entire field as selected when focused
+			bgIdx = cb.Edit.ColorSelectedIdx
+			fgIdx = ColDialogComboSelectedHighlight
+
+			origTextIdx := cb.Edit.ColorTextIdx
 			oldStart, oldEnd := cb.Edit.selStart, cb.Edit.selEnd
+
+			cb.Edit.ColorTextIdx = cb.Edit.ColorSelectedIdx
 			cb.Edit.selStart = 0
 			cb.Edit.selEnd = len(cb.Edit.text)
+
 			cb.Edit.Show(scr)
+
+			cb.Edit.ColorTextIdx = origTextIdx
 			cb.Edit.selStart, cb.Edit.selEnd = oldStart, oldEnd
 		} else {
 			cb.Edit.Show(scr)
@@ -91,16 +106,11 @@ func (cb *ComboBox) DisplayObject(scr *ScreenBuf) {
 		cb.Edit.Show(scr)
 	}
 
-	attr := cb.GetStateAttr(ColDialogText, ColDialogSelectedButton)
-	backgroundIdx := cb.Edit.ColorTextIdx
-	if cb.DropdownOnly && cb.focused {
-		backgroundIdx = cb.Edit.ColorSelectedIdx
-	}
-	attr = withBackground(attr, cb.GetStateAttr(backgroundIdx, backgroundIdx))
+	arrowAttr := withBackground(Palette[fgIdx], Palette[bgIdx])
 	if cb.IsDisabled() {
-		attr = DimColor(attr)
+		arrowAttr = DimColor(arrowAttr)
 	}
-	scr.Write(cb.X2, cb.Y1, StringToCharInfo("↓", attr))
+	scr.Write(cb.X2, cb.Y1, StringToCharInfo("↓", arrowAttr))
 }
 
 // withBackground keeps the foreground and text attributes from attr while

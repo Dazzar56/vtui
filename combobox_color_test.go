@@ -66,3 +66,53 @@ func TestVMenu_DefaultsToMenuPalette(t *testing.T) {
 			m.ColorTextIdx, m.ColorBoxIdx, m.ColorTitleIdx)
 	}
 }
+func TestComboBox_DropdownOnlyFocusedFillsSelectionContinuously(t *testing.T) {
+	SetDefaultPalette()
+	Palette[ColDialogComboText] = SetRGBBoth(0, 0xEEEEEC, 0x06989A)
+	Palette[ColDialogComboSelectedText] = SetRGBBoth(0, 0x1E1A16, 0xE6B450)
+	Palette[ColDialogComboSelectedHighlight] = SetRGBBoth(0, 0xA04020, 0xE6B450)
+
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(30, 3)
+
+	cb := NewComboBox(1, 1, 20, []string{"One", "Two"})
+	cb.DropdownOnly = true
+	cb.Edit.SetText("One")
+	cb.SetFocus(true)
+	cb.Show(scr)
+
+	selectedBg := GetRGBBack(Palette[ColDialogComboSelectedText])
+
+	for x := cb.X1; x <= cb.X2; x++ {
+		cellBg := GetRGBBack(scr.GetCell(x, cb.Y1).Attributes)
+		if cellBg != selectedBg {
+			t.Errorf("cell X=%d background = #%06x, want selected background #%06x", x, cellBg, selectedBg)
+		}
+	}
+}
+
+func TestComboBox_UnfocusedArrowIsVisible(t *testing.T) {
+	SetDefaultPalette()
+	Palette[ColDialogComboText] = SetRGBBoth(0, 0xEEEEEC, 0x37322C)
+	Palette[ColDialogComboHighlight] = SetRGBBoth(0, 0xE6CF70, 0x37322C)
+
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(30, 3)
+
+	cb := NewComboBox(1, 1, 20, []string{"One", "Two"})
+	cb.Show(scr)
+
+	arrowCell := scr.GetCell(cb.X2, cb.Y1)
+	arrowFg := GetRGBFore(arrowCell.Attributes)
+	arrowBg := GetRGBBack(arrowCell.Attributes)
+
+	if arrowFg == arrowBg {
+		t.Errorf("arrow foreground #%06x equals background #%06x (invisible arrow)", arrowFg, arrowBg)
+	}
+	if arrowFg != 0xE6CF70 {
+		t.Errorf("arrow foreground = #%06x, want highlight color #e6cf70", arrowFg)
+	}
+	if arrowBg != 0x37322C {
+		t.Errorf("arrow background = #%06x, want combo background #37322c", arrowBg)
+	}
+}
