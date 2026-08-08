@@ -1648,9 +1648,16 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 				}
 
 				if f.IsModal() {
-					// Logic for clicking OUTSIDE of a modal dialog:
-					// LMB -> ESC
-					// RMB -> ENTER
+					// Logic for clicking OUTSIDE of a modal frame:
+					// LMB -> ESC (cancel).
+					// RMB -> ENTER (confirm the default action) for a
+					//        regular dialog, but ESC for a menu — an
+					//        outside click on a drop-down / context
+					//        menu should dismiss, not silently activate
+					//        whichever row happens to be under the
+					//        cursor (typically the first item, e.g.
+					//        "Other panel" for f4's drive menu — the
+					//        exact symptom reported in unxed/f4#396).
 					if ev.KeyDown && ev.ButtonState != 0 {
 						if ev.ButtonState == vtinput.FromLeft1stButtonPressed {
 							f.ProcessKey(&vtinput.InputEvent{
@@ -1659,10 +1666,14 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 								VirtualKeyCode: vtinput.VK_ESCAPE,
 							})
 						} else if ev.ButtonState == vtinput.RightmostButtonPressed {
+							vk := uint16(vtinput.VK_RETURN)
+							if f.GetType() == TypeMenu {
+								vk = vtinput.VK_ESCAPE
+							}
 							f.ProcessKey(&vtinput.InputEvent{
 								Type:           vtinput.KeyEventType,
 								KeyDown:        true,
-								VirtualKeyCode: vtinput.VK_RETURN,
+								VirtualKeyCode: vk,
 							})
 						}
 					}
