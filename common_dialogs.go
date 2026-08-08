@@ -120,24 +120,77 @@ func SelectDirDialog(title string, initialPath string, vfs FSProvider) *Window {
 	FrameManager.Push(dlg)
 	return dlg
 }
+
+// MessageKind selects the visual style of a message dialog.
+//
+// Message dialogs come in two flavours:
+//   - MessageInfo — the ordinary blue/dialog palette; use for questions,
+//     choices, and neutral notifications ("File already open, what now?").
+//   - MessageWarn — the red WarnDialog palette; use for genuinely alarming
+//     situations: destructive confirmations ("Delete N files?"), errors,
+//     data-loss risks ("Unsaved changes will be lost").
+//
+// Prefer ShowMessageEx / ShowMessageOnEx when the semantics are known.
+// The legacy ShowMessage / ShowMessageOn keep working — they infer the
+// kind from a small set of well-known titles (see legacyKindFromTitle),
+// which is retained for backward compatibility only.
+type MessageKind int
+
+const (
+	MessageInfo MessageKind = iota
+	MessageWarn
+)
+
+// legacyKindFromTitle preserves the historical behaviour of ShowMessage:
+// dialogs whose trimmed title equals "Warning", "Error", or "Confirm" are
+// rendered with the warning palette. New code should pass MessageKind
+// explicitly via ShowMessageEx / ShowMessageOnEx and stop relying on
+// this string match, which couples the visual style to the (potentially
+// localised) title text.
+func legacyKindFromTitle(title string) MessageKind {
+	trimmed := strings.TrimSpace(title)
+	if trimmed == "Warning" || trimmed == "Error" || trimmed == "Confirm" {
+		return MessageWarn
+	}
+	return MessageInfo
+}
+
+// ShowMessage displays a message dialog whose visual style is guessed
+// from the title (see legacyKindFromTitle). Kept for backward
+// compatibility; prefer ShowMessageEx in new code.
 func ShowMessage(title string, text string, buttons []string) *Window {
-	dlg := createMessageDialog(title, text, buttons)
+	return ShowMessageEx(title, text, buttons, legacyKindFromTitle(title))
+}
+
+// ShowMessageOn is the anchored variant of ShowMessage — see there for
+// the caveats. Prefer ShowMessageOnEx in new code.
+func ShowMessageOn(anchor Frame, title string, text string, buttons []string) *Window {
+	return ShowMessageOnEx(anchor, title, text, buttons, legacyKindFromTitle(title))
+}
+
+// ShowMessageEx displays a message dialog with an explicit visual kind.
+// The title no longer influences the palette — callers control the look
+// via kind, which decouples wording from styling and lets warnings stay
+// warnings regardless of localisation.
+func ShowMessageEx(title string, text string, buttons []string, kind MessageKind) *Window {
+	dlg := createMessageDialog(title, text, buttons, kind)
 	FrameManager.Push(dlg)
 	return dlg
 }
 
-// ShowMessageOn creates a message box targeted to a specific screen (via an anchor frame).
-func ShowMessageOn(anchor Frame, title string, text string, buttons []string) *Window {
-	// 1. Create the dialog but DON'T push it yet via the generic FrameManager.Push
-	dlg := createMessageDialog(title, text, buttons)
-
-	// 2. Target the specific screen
+// ShowMessageOnEx is the anchored variant of ShowMessageEx: the dialog
+// is pushed onto the screen owned by `anchor` instead of the current
+// top screen.
+func ShowMessageOnEx(anchor Frame, title string, text string, buttons []string, kind MessageKind) *Window {
+	dlg := createMessageDialog(title, text, buttons, kind)
 	FrameManager.PushToFrameScreen(anchor, dlg)
 	return dlg
 }
 
-// Internal helper to avoid code duplication
-func createMessageDialog(title string, text string, buttons []string) *Window {
+// Internal helper to avoid code duplication.
+// kind is the sole source of truth for IsWarning; title-based inference
+// is done upstream (see legacyKindFromTitle) for backward compatibility.
+func createMessageDialog(title string, text string, buttons []string, kind MessageKind) *Window {
 	const maxDialogWidth = 72 // Comfortably fits within 80 columns
 	const sidePadding = 4
 
@@ -220,8 +273,7 @@ func createMessageDialog(title string, text string, buttons []string) *Window {
 	}
 
 	dlg := NewCenteredDialog(dlgWidth, dlgHeight, title)
-	trimmedTitle := strings.TrimSpace(title)
-	if trimmedTitle == "Warning" || trimmedTitle == "Error" || trimmedTitle == "Confirm" {
+	if kind == MessageWarn {
 		dlg.IsWarning = true
 	}
 
