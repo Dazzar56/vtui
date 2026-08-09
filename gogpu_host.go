@@ -525,6 +525,27 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 	return err
 }
 
+// isGogpuFaceSafe does a minimal feature probe on a gg/text.Face.
+// The GPU GlyphMask path later calls into FontSource.Parsed/copyCheck.
+// A face that survives Metrics() can still have a nil internal
+// FontSource and panic on the first DrawString. We catch that class
+// of failure early and fall back to the primary face.
+func isGogpuFaceSafe(f text.Face) (ok bool) {
+	if f == nil {
+		return false
+	}
+	defer func() {
+		if recover() != nil {
+			ok = false
+		}
+	}()
+	_ = f.Metrics()
+	// Touch a couple of common code points that the UI actually draws.
+	_ = f.Advance("A")
+	_ = f.Advance("字")
+	ok = true
+	return
+}
 func loadGogpuFont(fontName string, size float64) (text.Face, int, int) {
 	if size <= 0 {
 		size = 18.0
@@ -574,10 +595,18 @@ func loadGogpuFont(fontName string, size float64) (text.Face, int, int) {
 		}
 	}
 
+	// MultiFace gives CJK/emoji coverage, but in gg@v0.50.11 it can
+	// hand us a Face whose internal FontSource is nil. The GPU path
+	// then panics in copyCheck/Parsed on the first DrawString.
+	// Feature-probe the result; on any problem silently keep the
+	// already-working primary face (X11/Wayland fallback is separate
+	// and already correct).
 	if len(faces) > 1 {
-		multiFace, err := text.NewMultiFace(faces...)
-		if err == nil {
-			return multiFace, cellW, cellH
+		if multiFace, err := text.NewMultiFace(faces...); err == nil {
+			if isGogpuFaceSafe(multiFace) {
+				return multiFace, cellW, cellH
+			}
+			DebugLog("GOGPU_FONT: MultiFace failed safety probe, using primary face only")
 		}
 	}
 
