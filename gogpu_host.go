@@ -601,15 +601,15 @@ func loadGogpuFont(fontName string, size float64) (text.Face, int, int) {
 	// Feature-probe the result; on any problem silently keep the
 	// already-working primary face (X11/Wayland fallback is separate
 	// and already correct).
-	if len(faces) > 1 {
-		if multiFace, err := text.NewMultiFace(faces...); err == nil {
-			if isGogpuFaceSafe(multiFace) {
-				return multiFace, cellW, cellH
-			}
-			DebugLog("GOGPU_FONT: MultiFace failed safety probe, using primary face only")
-		}
-	}
-
+	// MultiFace is intentionally disabled for the gogpu backend.
+	// In gg@v0.50.11 (and the GPU GlyphMask path) a MultiFace can
+	// expose a nil *FontSource. The first real DrawString then
+	// panics inside copyCheck/Parsed on the render thread.
+	// Feature probes that only call Metrics/Advance are not enough
+	// to catch it. X11 and Wayland use a completely different font
+	// stack and their fallback continues to work.
+	// TODO: re-enable when gg fixes MultiFace for the GPU text engine
+	//       or when we can construct a verified-safe MultiFace.
 	return primaryFace, cellW, cellH
 }
 
