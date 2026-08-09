@@ -416,11 +416,14 @@ func (r *GogpuRenderer) DrawToScreen(ctx *gogpu.Context) {
 			drawCols := r.cols
 			drawRows := r.rows
 
+			// The nil check below is not decoration: every other use of the
+			// face in this function is guarded, and an unguarded Metrics()
+			// call here would fault exactly the way the render thread did.
+			var ascent float64
 			if r.face != nil {
 				dc.SetFont(r.face)
+				ascent = float64(r.face.Metrics().Ascent)
 			}
-			metrics := r.face.Metrics()
-			ascent := float64(metrics.Ascent)
 
 			for y := 0; y < drawRows; y++ {
 				rowOff := y * drawCols

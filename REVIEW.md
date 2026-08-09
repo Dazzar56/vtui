@@ -93,3 +93,23 @@ few trade-offs:
 *Future improvement:* Introduce a configurable font path list in the application
 settings or delegate font discovery to system tools like `fontconfig` on Unix-like
 systems.
+
+
+
+## Panics on the gogpu render thread used to be unreportable
+
+gogpu invokes the draw and update callbacks on its own render thread and
+re-panics the recovered value on the caller
+(`internal/thread.(*Thread).CallVoid`). The value crosses the boundary, the
+stack does not, so a crash report of a fault in our renderer pointed at gogpu's
+threading code instead. `LogAndRepanic` now writes the real stack to the debug
+log before the value is handed over. Any future callback invoked by a foreign
+thread should be wrapped the same way.
+
+`App.OnClose` was being used as if it were a window close request. It is the
+teardown notification of `App.shutdown()`, so the exit confirmation dialog was
+being opened while the application was already going down, panic unwinding
+included. Whether a genuine, vetoable window close should raise the
+confirmation dialog is still open: gogpu has `Window.SetOnClose`, which does
+return a bool, but the primary window is not reachable through the public App
+API from here.

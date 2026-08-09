@@ -200,8 +200,19 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 	reader := vtinput.NewReader(pr, true)
 	host.reader = reader
 
+	// Not a close request. gogpu's App.OnClose runs inside App.shutdown(),
+	// on the render thread, after the main loop has already ended and just
+	// before the renderer is destroyed (gogpu app.go:444). Emitting CmQuit
+	// from here made the application open its exit confirmation dialog
+	// during teardown — including teardown caused by a panic, which made a
+	// crash on the draw thread look like a user initiated quit in the logs.
+	//
+	// Nothing has to be emitted: closing the window clears the last window,
+	// gogpu stops the main loop (quitOnLastWindowClosed defaults to true),
+	// App.Run returns, and RunGogpuHost returns to its caller, which is the
+	// ordinary exit path with its deferred cleanup intact.
 	app.OnClose(func() {
-		FrameManager.EmitCommand(CmQuit, nil)
+		DebugLog("GOGPU_HOST: app is shutting down, renderer teardown follows")
 	})
 	// Files dropped on the window by other applications arrive here; the
 	// drag and drop core takes them from the backend to whatever the
@@ -212,7 +223,10 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 	// A drag out has to begin on this loop: on Windows and X11 gogpu's
 	// drag source is a modal loop of its own, and everywhere the window
 	// belongs to this thread.
-	app.OnUpdate(func(float64) { host.pumpDragOut() })
+	app.OnUpdate(func(float64) {
+		defer LogAndRepanic("gogpu OnUpdate")
+		host.pumpDragOut()
+	})
 
 	app.EventSource().OnKeyPress(func(key gpucontext.Key, mods gpucontext.Modifiers) {
 		vk := gogpuKeyToVK(key)
@@ -436,6 +450,8 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 
 	var infoLogged sync.Once
 	app.OnDraw(func(dc *gogpu.Context) {
+		defer LogAndRepanic("gogpu OnDraw")
+
 		w, h := dc.Width(), dc.Height()
 
 		host.mu.Lock()
