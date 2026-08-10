@@ -359,7 +359,8 @@ func main() {
 			}},
 			{Label: "&Right", SubItems: []vtui.MenuItem{{Text: "Command &2"}}},
 		}
-		topMenu.SetPosition(0, 0, width-1, 0)
+		menuY := vtui.FrameManager.WorkspaceTopInset()
+		topMenu.SetPosition(0, menuY, width-1, menuY)
 
 		// --- Status Line ---
 		kb := vtui.NewKeyBar()

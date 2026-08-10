@@ -1672,6 +1672,9 @@ func TestFrameManager_WorkspaceTopInsetModes(t *testing.T) {
 	fm.Init(scr)
 	frame := newMockFrame(0, 0, 80, 25, false)
 	fm.Push(frame)
+	menuBar := NewMenuBar(nil)
+	menuBar.SetPosition(0, 0, 79, 0)
+	fm.MenuBar = menuBar
 
 	if got := fm.WorkspaceTopInset(); got != 0 {
 		t.Fatalf("multiple mode with one screen inset = %d, want 0", got)
@@ -1683,14 +1686,23 @@ func TestFrameManager_WorkspaceTopInsetModes(t *testing.T) {
 	if frame.resizedW != 80 || frame.resizedH != 25 {
 		t.Fatalf("screen was not relaid out after tab row appeared: %dx%d", frame.resizedW, frame.resizedH)
 	}
+	if _, y1, _, y2 := menuBar.GetPosition(); y1 != 1 || y2 != 1 {
+		t.Fatalf("menu bar position with persistent tabs = %d..%d, want 1..1", y1, y2)
+	}
 
 	fm.ConfigureWorkspaceTabs(WorkspaceTabsOnCtrl, WorkspaceCtrlTabDirect)
 	if got := fm.WorkspaceTopInset(); got != 0 {
 		t.Fatalf("Ctrl overlay mode inset = %d, want 0", got)
 	}
+	if _, y1, _, y2 := menuBar.GetPosition(); y1 != 0 || y2 != 0 {
+		t.Fatalf("menu bar position with overlay tabs = %d..%d, want 0..0", y1, y2)
+	}
 	fm.ConfigureWorkspaceTabs(WorkspaceTabsAlways, WorkspaceCtrlTabDirect)
 	if got := fm.WorkspaceTopInset(); got != 1 {
 		t.Fatalf("always mode inset = %d, want 1", got)
+	}
+	if _, y1, _, y2 := menuBar.GetPosition(); y1 != 1 || y2 != 1 {
+		t.Fatalf("menu bar position with always-visible tabs = %d..%d, want 1..1", y1, y2)
 	}
 }
 
