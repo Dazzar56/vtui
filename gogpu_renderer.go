@@ -468,7 +468,7 @@ func (r *GogpuRenderer) DrawToScreen(ctx *gogpu.Context) {
 							rw = 2
 						}
 
-						char := rune(currCell.Char)
+						char := CellBaseRune(currCell.Char)
 						isBox := (char >= 0x2500 && char <= 0x25BF) || (char >= 0x2190 && char <= 0x2195)
 
 						if isBox {

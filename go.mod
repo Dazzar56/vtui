@@ -9,6 +9,7 @@ require (
 	github.com/jezek/xgb v1.3.1
 	github.com/mattn/go-runewidth v0.0.15
 	github.com/neurlang/wayland v0.4.2
+	github.com/rivo/uniseg v0.2.0
 	github.com/unxed/keytrans v0.1.30
 	github.com/unxed/vtinput v0.1.2
 	golang.org/x/image v0.44.0
@@ -27,7 +28,6 @@ require (
 	github.com/gogpu/wgpu v0.30.37 // indirect
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/neurlang/winc v0.1.2 // indirect
-	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/unxed/winkeys v0.1.1 // indirect
 	github.com/unxed/xkb-go v0.1.8 // indirect

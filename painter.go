@@ -1,8 +1,8 @@
 package vtui
 
 import (
-	"github.com/mattn/go-runewidth"
 	"strings"
+	"unicode/utf8"
 )
 
 // Painter provides high-level drawing primitives on top of a ScreenBuf.
@@ -49,11 +49,11 @@ func (p *Painter) DrawTitle(x1, y1, x2 int, title string, attr uint64) {
 		return
 	}
 	w := x2 - x1 + 1
-	vLen := runewidth.StringWidth(title)
+	vLen := StringWidth(title)
 
 	if vLen > w-4 {
-		title = runewidth.Truncate(title, w-4, "")
-		vLen = runewidth.StringWidth(title)
+		title = TruncateString(title, w-4, "")
+		vLen = StringWidth(title)
 	}
 
 	titleStr := " " + title + " "
@@ -76,20 +76,13 @@ func (p *Painter) DrawString(x, y int, text string, attr uint64) {
 // DrawHighlightedText draws a pre-parsed string with a specific hotkey position.
 func (p *Painter) DrawHighlightedText(x, y int, cleanText string, hkPos int, normAttr, highAttr uint64) {
 	cells := make([]CharInfo, 0, len(cleanText))
-	currRuneIdx := 0
-	for _, r := range cleanText {
+	ForEachClusterAt(cleanText, func(cluster string, w, _, runeIdx int) {
 		attr := normAttr
-		if currRuneIdx == hkPos {
+		if hkPos >= runeIdx && hkPos < runeIdx+utf8.RuneCountInString(cluster) {
 			attr = highAttr
 		}
-
-		sr, w := SanitizeRune(r)
-		cells = append(cells, CharInfo{Char: uint64(sr), Attributes: attr})
-		for j := 1; j < w; j++ {
-			cells = append(cells, CharInfo{Char: WideCharFiller, Attributes: attr})
-		}
-		currRuneIdx++
-	}
+		cells = AppendCluster(cells, cluster, w, attr)
+	})
 	p.scr.Write(x, y, cells)
 }
 

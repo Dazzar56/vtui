@@ -33,9 +33,6 @@ func ExtractHotkey(s string) rune {
 	}
 }
 
-// StringToCharInfo converts a string into a slice of CharInfo cells,
-// correctly handling double-width characters by inserting WideCharFillers.
-// It currently ignores zero-width characters to keep cell alignment strict.
 // ParseAmpersandString parses a string with ampersands, removes utility &,
 // processes && as &, and returns the clean string, the hotkey, and its position (in runes).
 func ParseAmpersandString(s string) (clean string, hotkey rune, hotkeyPos int) {
@@ -73,27 +70,23 @@ func ParseAmpersandString(s string) (clean string, hotkey rune, hotkeyPos int) {
 // StringToCharInfoHighlighted works like StringToCharInfo but highlights the letter after &.
 func StringToCharInfoHighlighted(s string, normalAttr, highAttr uint64) ([]CharInfo, rune) {
 	clean, hk, hkPos := ParseAmpersandString(s)
-	var res []CharInfo
-	currRuneIdx := 0
+	res := make([]CharInfo, 0, len(clean))
 
-	for _, r := range clean {
+	ForEachClusterAt(clean, func(cluster string, w, _, runeIdx int) {
 		attr := normalAttr
-		if currRuneIdx == hkPos {
+		if hkPos >= runeIdx && hkPos < runeIdx+utf8.RuneCountInString(cluster) {
 			attr = highAttr
 		}
-		w := runewidth.RuneWidth(r)
-		if w > 0 {
-			res = append(res, CharInfo{Char: uint64(r), Attributes: attr})
-			for j := 1; j < w; j++ {
-				res = append(res, CharInfo{Char: WideCharFiller, Attributes: attr})
-			}
-		}
-		currRuneIdx++
-	}
+		res = AppendCluster(res, cluster, w, attr)
+	})
 	return res, hk
 }
 
 // SanitizeRune ensures the rune is printable and handles its visual width.
+// It looks at one rune in isolation, so a combining mark reaching it has
+// already been separated from the character it belongs to and can only be
+// shown as a placeholder. Code that has the surrounding text should call
+// SanitizeCluster instead.
 func SanitizeRune(r rune) (rune, int) {
 	if r == '\n' || r == '\r' {
 		return 0, 0
@@ -112,49 +105,34 @@ func SanitizeRune(r rune) (rune, int) {
 }
 
 func StringToCharInfo(s string, attr uint64) []CharInfo {
-	return FillCharInfo(nil, []byte(s), attr)
+	res := make([]CharInfo, 0, len(s))
+	ForEachCluster(s, func(cluster string, w, _ int) {
+		res = AppendCluster(res, cluster, w, attr)
+	})
+	return res
 }
 
 func FillCharInfo(target []CharInfo, data []byte, attr uint64) []CharInfo {
 	target = target[:0]
-	for len(data) > 0 {
-		r, size := utf8.DecodeRune(data)
-		data = data[size:]
-
-		sr, w := SanitizeRune(r)
-		if w > 0 {
-			target = append(target, CharInfo{Char: uint64(sr), Attributes: attr})
-			for i := 1; i < w; i++ {
-				target = append(target, CharInfo{Char: WideCharFiller, Attributes: attr})
-			}
-		}
-	}
+	ForEachCluster(string(data), func(cluster string, w, _ int) {
+		target = AppendCluster(target, cluster, w, attr)
+	})
 	return target
 }
 
 // FillCharInfoWithSelection combines FillCharInfo and selection highlighting in a single pass.
+// Selection bounds are byte offsets into the whole line; a cluster is selected
+// when the byte its first rune starts at falls inside them.
 func FillCharInfoWithSelection(target []CharInfo, data []byte, defaultAttr, selAttr uint64, fragStartOffset, selMin, selMax int) []CharInfo {
 	target = target[:0]
-	currByte := 0
-	for len(data) > 0 {
-		r, size := utf8.DecodeRune(data)
-		data = data[size:]
-
-		sr, w := SanitizeRune(r)
+	ForEachCluster(string(data), func(cluster string, w, offset int) {
 		attr := defaultAttr
-		absPos := fragStartOffset + currByte
+		absPos := fragStartOffset + offset
 		if absPos >= selMin && absPos < selMax {
 			attr = selAttr
 		}
-		currByte += size
-
-		if w > 0 {
-			target = append(target, CharInfo{Char: uint64(sr), Attributes: attr})
-			for i := 1; i < w; i++ {
-				target = append(target, CharInfo{Char: WideCharFiller, Attributes: attr})
-			}
-		}
-	}
+		target = AppendCluster(target, cluster, w, attr)
+	})
 	return target
 }
 

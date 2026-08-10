@@ -2,6 +2,40 @@
 
 Decisions taken in a hurry, things noticed in passing, and things left alone
 on purpose. One file, so a review can be one sitting.
+## The cluster registry never forgets
+
+Every distinct multi rune grapheme cluster that reaches the screen is kept in
+a process wide table for the life of the program, because a cell is an integer
+and something has to own the string it stands for. Nothing frees entries and
+nothing counts references. In a dialog heavy program this is a few dozen
+strings; in a viewer paging through Devanagari or Arabic prose it could be
+tens of thousands, each a handful of bytes. The ceiling is real but far away,
+and when it matters the answer is probably a generation counter reset between
+screens rather than reference counting.
+
+## FillCharInfo now copies its input
+
+`FillCharInfo` and `FillCharInfoWithSelection` take a byte slice and hand it to
+the cluster iterator as a string, which allocates. They used to decode the
+bytes in place, which is why they take bytes at all. Giving the iterator a byte
+slice API would remove the copy; it was not worth doing before anyone measures
+it.
+
+## Format characters are assumed invisible
+
+Width counts anything in Unicode category Cf as zero columns. That is right for
+the joiners and the variation selectors, which is what the text actually
+contains, but glibc gives U+00AD SOFT HYPHEN a column and we do not. Nobody has
+complained, and the alternative is a table of exceptions.
+
+## The emoji presentation width is a guess with a switch
+
+A character followed by U+FE0F is two columns here, because that is what
+modern emulators do, but a wcwidth terminal keeps the base width and the two
+answers cannot both be right. `EmojiPresentationWide` exists so an application
+can pick; nothing detects the terminal and sets it. Probing for this is
+possible - draw and ask for the cursor position - and belongs with whatever
+else ends up probing the terminal.
 
 ## A gogpu drop is told nothing about the source
 

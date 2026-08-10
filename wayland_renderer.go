@@ -211,7 +211,7 @@ func (r *WaylandRenderer) Render(buf, shadow []CharInfo, w, h int, forceRedraw b
 					continue
 				}
 
-				char := rune(currCell.Char)
+				char := CellBaseRune(currCell.Char)
 				rw := runewidth.RuneWidth(char)
 				if rw < 1 {
 					rw = 1

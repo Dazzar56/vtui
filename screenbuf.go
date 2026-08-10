@@ -472,19 +472,11 @@ func (s *ScreenBuf) Dump(w io.Writer) {
 	fmt.Fprintf(w, "VTUI_SCREEN_DUMP_V1 %dx%d\n", s.width, s.height)
 	fmt.Fprintln(w, "--- TEXT PREVIEW ---")
 	for y := 0; y < s.height; y++ {
-		line := make([]rune, 0, s.width)
+		var line strings.Builder
 		for x := 0; x < s.width; x++ {
-			char := s.buf[y*s.width+x].Char
-			if char == WideCharFiller {
-				continue
-			}
-			if char == 0 {
-				line = append(line, ' ')
-			} else {
-				line = append(line, rune(char))
-			}
+			line.WriteString(CellString(s.buf[y*s.width+x].Char))
 		}
-		fmt.Fprintln(w, string(line))
+		fmt.Fprintln(w, line.String())
 	}
 
 	fmt.Fprintln(w, "--- CELL METADATA (RLE) ---")
@@ -640,11 +632,7 @@ func (r *AnsiRenderer) Render(buf, shadow []CharInfo, w, h int, force bool) {
 				lastX, lastY = x, y
 				continue
 			}
-			if char == 0 {
-				r.frameOut.WriteByte(' ')
-			} else {
-				r.frameOut.WriteRune(rune(char))
-			}
+			r.frameOut.WriteString(CellString(char))
 			lastX, lastY = x, y
 		}
 	}
