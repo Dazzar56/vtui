@@ -911,6 +911,7 @@ func (e *Edit) OpenHistory() {
 		return
 	}
 	menu := NewVMenu(Msg("vtui.History"))
+	menu.BoxType = SingleBox
 	for _, h := range e.History {
 		menu.AddItem(MenuItem{Text: h})
 	}

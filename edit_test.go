@@ -217,6 +217,9 @@ func TestEdit_HistoryMenu_Interactions(t *testing.T) {
 	if !ok {
 		t.Fatal("OpenHistory did not push a VMenu")
 	}
+	if menu.BoxType != SingleBox {
+		t.Fatalf("history dropdown box type = %d, want SingleBox", menu.BoxType)
+	}
 
 	// 1. Проверка Shift+Enter (только подстановка текста)
 	menu.ProcessKey(&vtinput.InputEvent{
