@@ -62,6 +62,12 @@ An attribute sitting on a combining mark is therefore ignored, because the
 mark has no cell of its own to put it in. That is the point rather than a
 shortcoming: a highlighter that colours a mark differently from its base
 cannot move the rest of the line.
+
+For bidirectional (BiDi) text, attributes are resolved against the logical
+string first. During visual reordering, these attributes travel with their
+respective clusters. This guarantees that logical highlighting boundaries
+remain perfectly attached to the text content even when a logically contiguous
+span is split and reordered into visually separate runs.
 ## Where the rest of the work is written down
 
 This file describes the machinery. The task it belongs to, what is done, what
