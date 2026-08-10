@@ -2,6 +2,7 @@ package vtui
 
 import (
 	"fmt"
+	"github.com/mattn/go-runewidth"
 	"github.com/unxed/vtinput"
 	"strings"
 )
