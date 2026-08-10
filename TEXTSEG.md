@@ -46,6 +46,22 @@ strictly wcwidth terminal.
 - `SanitizeCluster` instead of `SanitizeRune`, whenever the surrounding text
   is at hand. `SanitizeRune` remains for callers that only have one rune.
 
+## Highlighter attributes are indexed by rune
+
+`Highlighter.Highlight` returns one attribute per rune of the line. Not per
+byte, and not per cell. Those three counts stopped agreeing as soon as text
+with emoji or combining marks arrived: a cluster is one cell, one or two
+columns, one to seven runes and up to twenty five bytes.
+
+`StringToCharInfoWithAttrs` is the mapper. It walks clusters, gives each
+cluster the attribute of its first rune, and repeats that attribute over the
+fillers of a wide cluster. Runes past the end of the slice, and a nil slice,
+take the base attribute.
+
+An attribute sitting on a combining mark is therefore ignored, because the
+mark has no cell of its own to put it in. That is the point rather than a
+shortcoming: a highlighter that colours a mark differently from its base
+cannot move the rest of the line.
 ## Where the rest of the work is written down
 
 This file describes the machinery. The task it belongs to, what is done, what

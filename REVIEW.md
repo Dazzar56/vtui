@@ -192,3 +192,17 @@ included. Whether a genuine, vetoable window close should raise the
 confirmation dialog is still open: gogpu has `Window.SetOnClose`, which does
 return a bool, but the primary window is not reachable through the public App
 API from here.
+## The highlighter contract is rune indices, not byte offsets
+
+`UNICODE_PLAN.md` recommended indexing `Highlighter.Highlight` attributes by
+byte offset, on the grounds that a byte oriented grammar produces that
+naturally and that it survives any later change to clustering. Runes were
+chosen instead, because every producer and every consumer that exists already
+speaks runes: colorer reports code point offsets, the chroma based highlighter
+appends one attribute per rune of each token, and the editor drawing the
+result counts runes as it decodes. Byte offsets would have meant changing all
+of them at once, to fix a bug that was about code points versus UTF-16 units.
+
+If a highlighter turns up that genuinely works in bytes, the honest move is a
+second mapper next to the first, not a redefinition of the contract underneath
+code that already relies on it.

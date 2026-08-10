@@ -35,11 +35,10 @@ general case. Two things remain, and one new one appeared:
 
 - **The cursor over a double width character covers only half the cell.** Only
   in the graphical backends. Cosmetic, not urgent, but visible.
-- **Syntax highlighting produces artifacts after an emoji on the line.** The
-  application uses colorer (from far2l, ported through wazero). This is
-  probably a bug on the highlighter side rather than in vtui, and it will be
-  investigated separately, but vtui owes it a well defined interface, and it
-  does not have one today. See stage 3.
+- **Syntax highlighting produces artifacts after an emoji on the line.** Found
+  and fixed. The highlighter is colorer, and the application was reading its
+  region offsets as UTF-16 units while colorer counts code points. vtui's own
+  share of the fault was the missing contract, which stage 3 now states.
 - **Bidirectional text needs editing, not just display.** The user confirmed
   that typing and moving the caret inside RTL text is in scope. It stays at
   the end of the plan.
@@ -97,7 +96,7 @@ application vtui serves is a rewrite of it. Its approach, for the record:
 |---|---|---|
 | 1 | Cluster layer, composite registry, cluster aware cell producers, ANSI renderer | **done** |
 | 2 | Cursor covers the whole double width cell in graphical backends | **done** |
-| 3 | A defined contract for `Highlighter` attributes, and a mapper onto cells | to do |
+| 3 | A defined contract for `Highlighter` attributes, and a mapper onto cells | **done** |
 | 4 | Graphical backends draw whole clusters, not just the base rune | to do |
 | 5 | Remaining `go-runewidth` callers, and the three per rune writers | to do |
 | 6 | BiDi for display only | to do |
@@ -184,49 +183,56 @@ principle.
 backend, which was already correct: the terminal draws its own cursor and only
 needs the cell position, which it always had.
 
-## 7. Stage 3 - the highlighter contract
+## 7. Stage 3 - the highlighter contract - done
 
-**Symptom.** Syntax colouring goes wrong after an emoji on the line. The
-highlighter is colorer, running in wazero, outside this repository.
+**What the symptom was.** Syntax colouring went wrong from the first emoji on
+a line onwards, and stayed wrong to the end of that line.
 
-**Why vtui is implicated even if the bug is elsewhere.** `types.go` declares
+**What the cause turned out to be.** Not clustering, and not this repository.
+`Highlighter.Highlight` never said what `attrs` was indexed by, so the two
+sides of it had each quietly picked an answer, and the answers differed.
+colorer keeps a line in its legacy `UnicodeString`, one element per code
+point, and reports region offsets in those elements. The application read them
+as UTF-16 units and mapped them through a surrogate aware table first. Inside
+the BMP the two readings agree, which is why nobody noticed for so long; an
+astral character - and an emoji is one - shifted every offset after it one
+position to the left.
 
-    Highlight(line string, prevState any, baseAttr uint64) (attrs []uint64, nextState any)
+Three independent readings of the colorer sources agree, which is why this was
+fixed rather than guessed at:
 
-and never says what `attrs` is indexed by. Runes? Bytes? Cells? Before stage 1
-those three happened to coincide for most text, so nobody had to decide. They
-no longer coincide: an emoji is one cell, two columns, one to seven runes, and
-four to twenty five bytes. Any consumer that indexes `attrs` by cell will
-desynchronise at the first emoji and stay wrong for the rest of the line -
-which is exactly the reported artifact.
+- `strings/legacy/CString.cpp` decodes UTF-8 into one `wchar` per code point
+  and never builds a surrogate pair.
+- `strings/legacy/Character.h` states outright that the library has no
+  surrogate support and would treat a pair as two distinct characters.
+- `strings/legacy/Encodings.cpp` carries a `wc > 0xFFFF` branch, guarded by
+  `__WCHAR_MAX__ > 0xffff`, so one element holds a whole code point. Under
+  wasi-sdk `wchar_t` is 32 bits.
 
-**What to do.**
+**The contract, decided.** `attrs` is indexed by **rune**. `attrs[i]` colours
+the i-th rune of `line`; `len(attrs)` is the rune count of the line, except
+that nil and a short slice are allowed and the remainder takes `baseAttr`. It
+is written on the interface in `types.go` and repeated in `TEXTSEG.md`.
 
-1. Decide and document the contract. The recommendation is **`attrs` is
-   indexed by byte offset into `line`**, because that is what a highlighter
-   working on a byte oriented grammar naturally produces, and because it
-   survives any later change to clustering. Write the decision into `types.go`
-   as a doc comment on the interface and into `TEXTSEG.md`.
-2. Add the mapper, in `textseg.go` or a new `highlight.go`:
+This is not the byte offset contract this section used to recommend. Rune
+indices are what every producer already emits and what every consumer already
+reads. Bytes would have been a flag day across three repositories, to fix a
+bug that was about code points versus UTF-16 units and never about bytes. The
+reasoning is in `REVIEW.md`, as this section asked for.
 
-       func StringToCharInfoWithAttrs(s string, attrs []uint64, baseAttr uint64) []CharInfo
+**The mapper.** `highlight.go`:
 
-   It walks clusters. Each cluster takes the attribute at the byte offset of
-   its first rune. Offsets past the end of `attrs`, and a nil `attrs`, fall
-   back to `baseAttr`. Fillers repeat the attribute of their cluster, which
-   `AppendCluster` already does.
-3. If the contract chosen is not byte offsets, provide the mapper for whatever
-   it is instead, and say plainly in `REVIEW.md` why.
+    func StringToCharInfoWithAttrs(s string, attrs []uint64, baseAttr uint64) []CharInfo
 
-**Tests.** A line with an emoji in the middle, an `attrs` slice that changes
-colour right after it, and an assertion that the colour change lands on the
-cell after the emoji rather than several cells later. Also a line with a
-combining mark, where the mark's own bytes carry a different attribute than
-its base: the base wins, and nothing shifts.
+It walks clusters, gives each cluster the attribute of its first rune, and
+lets `AppendCluster` repeat that attribute over the fillers of a wide one. A
+combining mark coloured differently from its base gets no cell of its own, so
+it cannot shift anything. Tests are in `highlight_test.go`, including the
+invariant that the cell count equals `StringWidth`.
 
-**Done when.** The contract is written down, the mapper exists and is tested,
-and the answer to "is this colorer's bug or ours" can be given by pointing at
-a test.
+**Where the other half of the fix lives.** In the application, which now reads
+colorer's offsets as the rune indices they are. vtui's obligation was the
+contract and the mapper, and both are here.
 
 ## 8. Stage 4 - clusters in the graphical backends
 

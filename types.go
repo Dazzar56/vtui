@@ -108,7 +108,24 @@ type Highlighter interface {
 	// line: text to highlight.
 	// prevState: state returned by the previous line (nil for the first line).
 	// baseAttr: default text attributes.
-	// Returns: attributes for each character and the state for the next line.
+	//
+	// attrs is indexed by rune: attrs[i] colours the i-th rune of line,
+	// counted the way utf8.DecodeRune walks it. len(attrs) is therefore the
+	// rune count of the line, except that a highlighter with nothing to say
+	// may return nil, and a short slice is allowed; the rest of the line then
+	// takes baseAttr.
+	//
+	// It is not indexed by byte, and not indexed by screen cell. The three
+	// units coincided for plain text and stopped coinciding the moment text
+	// carrying emoji or combining marks arrived: a grapheme cluster is one
+	// cell, one or two columns, one to seven runes and up to twenty five
+	// bytes. A caller that mixes the units up desynchronises at the first such
+	// character and stays wrong to the end of the line, which is exactly the
+	// artifact that made this contract necessary.
+	//
+	// The runes of one cluster need not agree on their attribute:
+	// StringToCharInfoWithAttrs gives the cell to the first rune of the
+	// cluster, so a mark cannot shift anything.
 	Highlight(line string, prevState any, baseAttr uint64) (attrs []uint64, nextState any)
 }
 
