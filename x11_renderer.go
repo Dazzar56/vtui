@@ -26,6 +26,8 @@ type X11Renderer struct {
 	oldCursorY int
 
 	lastCursorReset time.Time
+	blinkState      bool
+	lastBlinkTime   time.Time
 
 	stats renderStats
 
@@ -41,6 +43,8 @@ func NewX11Renderer(host *X11Host, face font.Face) *X11Renderer {
 		face:            face,
 		glyphCache:      make(map[glyphKey]*image.RGBA),
 		lastCursorReset: time.Now(),
+		blinkState:      true,
+		lastBlinkTime:   time.Now(),
 	}
 }
 
@@ -104,6 +108,7 @@ func (r *X11Renderer) SetCursor(x, y int, visible bool, shape CursorShape) {
 		r.cursorVis = visible
 		r.cursorShape = shape
 		r.lastCursorReset = time.Now()
+		r.blinkState = true
 	}
 }
 
@@ -173,6 +178,17 @@ func (r *X11Renderer) Render(buf, shadow []CharInfo, w, h int, forceRedraw bool)
 	r.host.mu.Lock()
 	defer r.host.mu.Unlock()
 
+	now := time.Now()
+	if now.Sub(r.lastBlinkTime) >= 500*time.Millisecond {
+		r.blinkState = !r.blinkState
+		r.lastBlinkTime = r.lastBlinkTime.Add(500 * time.Millisecond)
+		if now.Sub(r.lastBlinkTime) >= 500*time.Millisecond {
+			r.lastBlinkTime = now
+		}
+	}
+
+	cursorVisible := r.cursorVis && r.blinkState
+
 	reqWidth := uint16(w * r.host.cellW)
 	reqHeight := uint16(h * r.host.cellH)
 	if r.host.imgBuf == nil || uint16(r.host.imgBuf.Bounds().Dx()) != reqWidth || uint16(r.host.imgBuf.Bounds().Dy()) != reqHeight {
@@ -189,12 +205,6 @@ func (r *X11Renderer) Render(buf, shadow []CharInfo, w, h int, forceRedraw bool)
 			r.host.dirtyLines[i] = true
 		}
 		forceRedraw = true
-	}
-
-	cursorVisible := r.cursorVis
-	if cursorVisible {
-		elapsed := time.Since(r.lastCursorReset)
-		cursorVisible = (int(elapsed.Milliseconds())/500)%2 == 0
 	}
 
 	r.w, r.h = w, h

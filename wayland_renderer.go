@@ -25,6 +25,8 @@ type WaylandRenderer struct {
 	cursorShape            CursorShape
 
 	lastCursorReset time.Time
+	blinkState      bool
+	lastBlinkTime   time.Time
 
 	stats renderStats
 
@@ -40,6 +42,8 @@ func NewWaylandRenderer(host *WaylandHost, face font.Face) *WaylandRenderer {
 		face:            face,
 		glyphCache:      make(map[glyphKey]*image.RGBA),
 		lastCursorReset: time.Now(),
+		blinkState:      true,
+		lastBlinkTime:   time.Now(),
 	}
 }
 
@@ -56,6 +60,7 @@ func (r *WaylandRenderer) SetCursor(x, y int, visible bool, shape CursorShape) {
 		r.cursorVis = visible
 		r.cursorShape = shape
 		r.lastCursorReset = time.Now()
+		r.blinkState = true
 	}
 }
 
@@ -123,11 +128,16 @@ func (r *WaylandRenderer) Render(buf, shadow []CharInfo, w, h int, forceRedraw b
 	r.host.mu.Lock()
 	defer r.host.mu.Unlock()
 
-	cursorVisible := r.cursorVis
-	if cursorVisible {
-		elapsed := time.Since(r.lastCursorReset)
-		cursorVisible = (int(elapsed.Milliseconds())/500)%2 == 0
+	now := time.Now()
+	if now.Sub(r.lastBlinkTime) >= 500*time.Millisecond {
+		r.blinkState = !r.blinkState
+		r.lastBlinkTime = r.lastBlinkTime.Add(500 * time.Millisecond)
+		if now.Sub(r.lastBlinkTime) >= 500*time.Millisecond {
+			r.lastBlinkTime = now
+		}
 	}
+
+	cursorVisible := r.cursorVis && r.blinkState
 
 	r.w, r.h = w, h
 	img := r.host.imgBuf
