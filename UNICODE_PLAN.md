@@ -100,7 +100,7 @@ application vtui serves is a rewrite of it. Its approach, for the record:
 | 4 | Graphical backends draw whole clusters, not just the base rune | **done** |
 | 5 | Remaining `go-runewidth` callers, and the three per rune writers | **done** |
 | 6 | BiDi for display only | **done** |
-| 7 | BiDi for editing: caret, selection, input | to do |
+| 7 | BiDi for editing: caret, selection, input | **done** |
 | 8 | Own width tables generated from the UCD, replacing `go-runewidth` | optional |
 
 ## 5. Stage 1 - done

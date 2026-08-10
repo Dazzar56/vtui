@@ -2,9 +2,11 @@ package vtui
 
 import (
 	"unicode"
+	"unicode/utf8"
 
-	"github.com/mattn/go-runewidth"
+	"github.com/rivo/uniseg"
 	"github.com/unxed/vtinput"
+	"golang.org/x/text/unicode/bidi"
 )
 
 type Edit struct {
@@ -78,33 +80,66 @@ func NewPasswordEdit(x, y, width int, defaultText string) *Edit {
 func (e *Edit) Show(scr *ScreenBuf) {
 	e.ScreenObject.Show(scr)
 
-	// Ensure cursor is visible before display
 	visibleWidth := e.X2 - e.X1 + 1
+	if e.ShowHistoryButton {
+		visibleWidth--
+	}
 	if visibleWidth < 1 {
 		visibleWidth = 1
-	} // Safety: handle zero-width windows
+	}
 
-	if e.curPos < e.leftPos {
-		e.leftPos = e.curPos
-	}
-	// Safety: leftPos must not exceed curPos.
-	width := 0
-	for i := e.leftPos; i < e.curPos; i++ {
-		r := e.text[i]
-		if e.PasswordMode {
-			width += 1
-		} else {
-			width += runewidth.RuneWidth(r)
+	if DefaultBidiMode == BidiFull {
+		cmap := e.caretMap()
+		vPos := cmap.LogicalToVisual[e.curPos]
+		if vPos < e.leftPos {
+			e.leftPos = vPos
 		}
-	}
-	for e.leftPos < e.curPos && width >= visibleWidth {
-		r := e.text[e.leftPos]
-		if e.PasswordMode {
-			width -= 1
-		} else {
-			width -= runewidth.RuneWidth(r)
+		vis, _ := VisualStringWithRuneMap(string(e.text))
+		width := 0
+		g := uniseg.NewGraphemes(vis)
+		vIdx := 0
+		for g.Next() {
+			from, to := g.Positions()
+			if vIdx >= e.leftPos && vIdx < vPos {
+				width += ClusterWidth(vis[from:to])
+			}
+			vIdx++
 		}
-		e.leftPos++
+		for e.leftPos < vPos && width >= visibleWidth {
+			g2 := uniseg.NewGraphemes(vis)
+			vIdx2 := 0
+			for g2.Next() {
+				from, to := g2.Positions()
+				if vIdx2 == e.leftPos {
+					width -= ClusterWidth(vis[from:to])
+					break
+				}
+				vIdx2++
+			}
+			e.leftPos++
+		}
+	} else {
+		if e.curPos < e.leftPos {
+			e.leftPos = e.curPos
+		}
+		width := 0
+		for i := e.leftPos; i < e.curPos; i++ {
+			r := e.text[i]
+			if e.PasswordMode {
+				width += 1
+			} else {
+				width += ClusterWidth(string(r))
+			}
+		}
+		for e.leftPos < e.curPos && width >= visibleWidth {
+			r := e.text[e.leftPos]
+			if e.PasswordMode {
+				width -= 1
+			} else {
+				width -= ClusterWidth(string(r))
+			}
+			e.leftPos++
+		}
 	}
 
 	e.DisplayObject(scr)
@@ -116,10 +151,60 @@ func (e *Edit) Show(scr *ScreenBuf) {
 		} else {
 			scr.SetCursorShape(CursorShapeUnderline)
 		}
-		headText := string(e.text[e.leftPos:e.curPos])
-		vOffset := runewidth.StringWidth(headText)
+		vOffset := 0
+		if DefaultBidiMode == BidiFull {
+			cmap := e.caretMap()
+			vPos := cmap.LogicalToVisual[e.curPos]
+			vis, _ := VisualStringWithRuneMap(string(e.text))
+			g := uniseg.NewGraphemes(vis)
+			vIdx := 0
+			for g.Next() {
+				if vIdx >= vPos {
+					break
+				}
+				from, to := g.Positions()
+				w := ClusterWidth(vis[from:to])
+				if vIdx >= e.leftPos {
+					vOffset += w
+				}
+				vIdx++
+			}
+		} else {
+			headText := string(e.text[e.leftPos:e.curPos])
+			vOffset = StringWidth(headText)
+		}
 		scr.SetCursorPos(e.X1+vOffset, e.Y1)
 	}
+}
+
+func (e *Edit) caretMap() CaretMap {
+	return BuildCaretMap(string(e.text))
+}
+func (e *Edit) prevClusterBoundary(pos int) int {
+	if pos <= 0 {
+		return 0
+	}
+	s := string(e.text)
+	lastBoundary := 0
+	ForEachClusterAt(s, func(cluster string, w, offset, runeIndex int) {
+		if runeIndex < pos {
+			lastBoundary = runeIndex
+		}
+	})
+	return lastBoundary
+}
+
+func (e *Edit) nextClusterBoundary(pos int) int {
+	s := string(e.text)
+	nextBoundary := len(e.text)
+	found := false
+	ForEachClusterAt(s, func(cluster string, w, offset, runeIndex int) {
+		if !found && runeIndex > pos {
+			nextBoundary = runeIndex
+			found = true
+		}
+	})
+	return nextBoundary
 }
 
 func (e *Edit) DisplayObject(scr *ScreenBuf) {
@@ -133,25 +218,25 @@ func (e *Edit) DisplayObject(scr *ScreenBuf) {
 		visibleWidth--
 	}
 
-	// Pre-fill the entire line with background to avoid artifacts
 	defaultAttr := e.GetStateAttr(e.ColorTextIdx, e.ColorTextIdx)
 	scr.FillRect(e.X1, e.Y1, e.X2, e.Y1, ' ', defaultAttr)
 
-	currX := 0
-	for i := e.leftPos; i < len(e.text); i++ {
-		r := e.text[i]
-		if e.PasswordMode {
-			r = '*'
-		}
-		w := runewidth.RuneWidth(r)
+	type logicalCluster struct {
+		text    string
+		runeIdx int
+		attr    uint64
+	}
 
-		// Stop if next character doesn't fit visually
-		if currX+w > visibleWidth {
-			break
-		}
+	var logicalClusters []logicalCluster
+	runeIdx := 0
+	sText := string(e.text)
+	g := uniseg.NewGraphemes(sText)
+	for g.Next() {
+		from, to := g.Positions()
+		clText := sText[from:to]
 
 		attr := defaultAttr
-		if e.selStart != -1 && i >= e.selStart && i < e.selEnd {
+		if e.selStart != -1 && runeIdx >= e.selStart && runeIdx < e.selEnd {
 			selectedIdx := e.ColorSelectedIdx
 			if e.clearFlag {
 				selectedIdx = e.ColorUnchangedIdx
@@ -162,12 +247,75 @@ func (e *Edit) DisplayObject(scr *ScreenBuf) {
 			attr = DimColor(attr)
 		}
 
-		// Write rune (handles WideCharFiller automatically)
-		cells := StringToCharInfo(string(r), attr)
-		scr.Write(e.X1+currX, e.Y1, cells)
+		logicalClusters = append(logicalClusters, logicalCluster{
+			text:    clText,
+			runeIdx: runeIdx,
+			attr:    attr,
+		})
+		runeIdx += utf8.RuneCountInString(clText)
+	}
+
+	var visualClusters []logicalCluster
+	s := string(e.text)
+	if DefaultBidiMode != BidiOff && HasRTL(s) {
+		p := bidi.Paragraph{}
+		_, err := p.SetString(s)
+		if err == nil {
+			order, err := p.Order()
+			if err == nil {
+				numRuns := order.NumRuns()
+				for i := 0; i < numRuns; i++ {
+					run := order.Run(i)
+					start, end := run.Pos()
+
+					var runClusters []logicalCluster
+					for _, c := range logicalClusters {
+						if c.runeIdx >= start && c.runeIdx <= end {
+							runClusters = append(runClusters, c)
+						}
+					}
+
+					isRTL := run.Direction() == bidi.RightToLeft
+					if isRTL {
+						for i, j := 0, len(runClusters)-1; i < j; i, j = i+1, j-1 {
+							runClusters[i], runClusters[j] = runClusters[j], runClusters[i]
+						}
+						for i := range runClusters {
+							if utf8.RuneCountInString(runClusters[i].text) == 1 {
+								runClusters[i].text = bidi.ReverseString(runClusters[i].text)
+							}
+						}
+					}
+
+					visualClusters = append(visualClusters, runClusters...)
+				}
+			}
+		}
+	}
+
+	if len(visualClusters) == 0 {
+		visualClusters = logicalClusters
+	}
+
+	currX := 0
+	for i, c := range visualClusters {
+		if i < e.leftPos {
+			continue
+		}
+		w := ClusterWidth(c.text)
+		if currX+w > visibleWidth {
+			break
+		}
+
+		if e.PasswordMode {
+			scr.FillRect(e.X1+currX, e.Y1, e.X1+currX+w-1, e.Y1, '*', c.attr)
+		} else {
+			cells := AppendCluster(nil, c.text, w, c.attr)
+			scr.Write(e.X1+currX, e.Y1, cells)
+		}
 		currX += w
 	}
-	// Draw history button if needed
+
 	if e.ShowHistoryButton {
 		btnAttr := Palette[ColDialogText]
 		if e.focused {
@@ -392,35 +540,54 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 		return e.FireAction(e.OnAction, nil)
 
 	case vtinput.VK_LEFT:
-		if e.curPos == 0 && !shift && !ctrl {
-			return false
-		} // Escape focus to previous
+		isAtStart := false
+		var cmap CaretMap
+		if DefaultBidiMode == BidiFull {
+			cmap = e.caretMap()
+			isAtStart = cmap.LogicalToVisual[e.curPos] == 0
+		} else {
+			isAtStart = e.curPos == 0
+		}
+
+		if isAtStart && !shift && !ctrl {
+			return false // Escape focus to previous
+		}
+
 		if shift {
 			e.beginSelection()
 		} else {
 			e.selStart = -1
 			e.selAnchor = -1
 		}
-		if ctrl {
-			if e.curPos > 0 {
-				e.curPos--
-				if shift {
-					e.endSelection()
-				}
-				for e.curPos > 0 {
-					prev, curr := e.text[e.curPos-1], e.text[e.curPos]
-					if stopBeforeRuneLeft(prev, curr, shift) {
-						break
-					}
-					e.curPos--
+
+		if DefaultBidiMode == BidiFull {
+			vPos := cmap.LogicalToVisual[e.curPos]
+			if vPos > 0 {
+				vPos--
+				e.curPos = cmap.VisualToLogical[vPos]
+			}
+		} else {
+			if ctrl {
+				if e.curPos > 0 {
+					e.curPos = e.prevClusterBoundary(e.curPos)
 					if shift {
 						e.endSelection()
 					}
+					for e.curPos > 0 {
+						prev, curr := e.text[e.curPos-1], e.text[e.curPos]
+						if stopBeforeRuneLeft(prev, curr, shift) {
+							break
+						}
+						e.curPos = e.prevClusterBoundary(e.curPos)
+						if shift {
+							e.endSelection()
+						}
+					}
 				}
-			}
-		} else {
-			if e.curPos > 0 {
-				e.curPos--
+			} else {
+				if e.curPos > 0 {
+					e.curPos = e.prevClusterBoundary(e.curPos)
+				}
 			}
 		}
 		if shift {
@@ -430,7 +597,16 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 		return true
 
 	case vtinput.VK_RIGHT:
-		if e.curPos == len(e.text) && !shift && !ctrl {
+		isAtEnd := false
+		var cmap CaretMap
+		if DefaultBidiMode == BidiFull {
+			cmap = e.caretMap()
+			isAtEnd = cmap.LogicalToVisual[e.curPos] == len(cmap.VisualToLogical)-1
+		} else {
+			isAtEnd = e.curPos == len(e.text)
+		}
+
+		if isAtEnd && !shift && !ctrl {
 			// Feature: if everything is selected and we are at the end,
 			// just clear selection and stay in this field instead of losing focus.
 			if e.selStart == 0 && e.selEnd == len(e.text) {
@@ -441,32 +617,43 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 			}
 			return false // Escape focus to next
 		}
+
 		if shift {
 			e.beginSelection()
 		} else {
 			e.selStart = -1
 			e.selAnchor = -1
 		}
-		if ctrl {
-			if e.curPos < len(e.text) {
-				e.curPos++
-				if shift {
-					e.endSelection()
-				}
-				for e.curPos < len(e.text) {
-					prev, curr := e.text[e.curPos-1], e.text[e.curPos]
-					if stopBeforeRuneRight(prev, curr, shift) {
-						break
-					}
-					e.curPos++
+
+		if DefaultBidiMode == BidiFull {
+			vPos := cmap.LogicalToVisual[e.curPos]
+			N := len(cmap.VisualToLogical) - 1
+			if vPos < N {
+				vPos++
+				e.curPos = cmap.VisualToLogical[vPos]
+			}
+		} else {
+			if ctrl {
+				if e.curPos < len(e.text) {
+					e.curPos = e.nextClusterBoundary(e.curPos)
 					if shift {
 						e.endSelection()
 					}
+					for e.curPos < len(e.text) {
+						prev, curr := e.text[e.curPos-1], e.text[e.curPos]
+						if stopBeforeRuneRight(prev, curr, shift) {
+							break
+						}
+						e.curPos = e.nextClusterBoundary(e.curPos)
+						if shift {
+							e.endSelection()
+						}
+					}
 				}
-			}
-		} else {
-			if e.curPos < len(e.text) {
-				e.curPos++
+			} else {
+				if e.curPos < len(e.text) {
+					e.curPos = e.nextClusterBoundary(e.curPos)
+				}
 			}
 		}
 		if shift {
@@ -482,7 +669,12 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 			e.selStart = -1
 			e.selAnchor = -1
 		}
-		e.curPos = 0
+		if DefaultBidiMode == BidiFull {
+			cmap := e.caretMap()
+			e.curPos = cmap.VisualToLogical[0]
+		} else {
+			e.curPos = 0
+		}
 		if shift {
 			e.endSelection()
 		}
@@ -496,7 +688,13 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 			e.selStart = -1
 			e.selAnchor = -1
 		}
-		e.curPos = len(e.text)
+		if DefaultBidiMode == BidiFull {
+			cmap := e.caretMap()
+			N := len(cmap.VisualToLogical) - 1
+			e.curPos = cmap.VisualToLogical[N]
+		} else {
+			e.curPos = len(e.text)
+		}
 		if shift {
 			e.endSelection()
 		}
@@ -509,9 +707,23 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 			e.ClearSelection()
 		} else if e.selStart != -1 {
 			e.DeleteBlock()
+		} else if DefaultBidiMode == BidiFull {
+			cmap := e.caretMap()
+			vPos := cmap.LogicalToVisual[e.curPos]
+			if vPos > 0 {
+				r1 := cmap.VisualToLogical[vPos-1]
+				r2 := cmap.VisualToLogical[vPos]
+				start, end := r1, r2
+				if start > end {
+					start, end = end, start
+				}
+				e.text = append(e.text[:start], e.text[end:]...)
+				e.curPos = cmap.VisualToLogical[vPos-1]
+			}
 		} else if e.curPos > 0 {
-			e.text = append(e.text[:e.curPos-1], e.text[e.curPos:]...)
-			e.curPos--
+			prevBoundary := e.prevClusterBoundary(e.curPos)
+			e.text = append(e.text[:prevBoundary], e.text[e.curPos:]...)
+			e.curPos = prevBoundary
 		}
 		e.clearFlag = false
 		if e.OnTextChange != nil {
@@ -525,8 +737,23 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 			e.ClearSelection()
 		} else if e.selStart != -1 {
 			e.DeleteBlock()
+		} else if DefaultBidiMode == BidiFull {
+			cmap := e.caretMap()
+			vPos := cmap.LogicalToVisual[e.curPos]
+			N := len(cmap.VisualToLogical) - 1
+			if vPos < N {
+				r1 := cmap.VisualToLogical[vPos]
+				r2 := cmap.VisualToLogical[vPos+1]
+				start, end := r1, r2
+				if start > end {
+					start, end = end, start
+				}
+				e.text = append(e.text[:start], e.text[end:]...)
+				e.curPos = cmap.VisualToLogical[vPos]
+			}
 		} else if e.curPos < len(e.text) {
-			e.text = append(e.text[:e.curPos], e.text[e.curPos+1:]...)
+			nextBoundary := e.nextClusterBoundary(e.curPos)
+			e.text = append(e.text[:e.curPos], e.text[nextBoundary:]...)
 		}
 		e.clearFlag = false
 		if e.OnTextChange != nil {
@@ -926,16 +1153,45 @@ func (e *Edit) cursorPositionAtX(x int) int {
 	}
 
 	column := x - e.X1
-	width := 0
-	for i := e.leftPos; i < len(e.text); i++ {
-		runeWidth := 1
-		if !e.PasswordMode {
-			runeWidth = runewidth.RuneWidth(e.text[i])
+	currX := 0
+	result := len(e.text)
+	found := false
+
+	if DefaultBidiMode == BidiFull {
+		cmap := e.caretMap()
+		vis, _ := VisualStringWithRuneMap(string(e.text))
+		g := uniseg.NewGraphemes(vis)
+		vIdx := 0
+		for g.Next() {
+			if found || vIdx < e.leftPos {
+				vIdx++
+				continue
+			}
+			from, to := g.Positions()
+			w := ClusterWidth(vis[from:to])
+			if currX+w > column {
+				result = cmap.VisualToLogical[vIdx]
+				found = true
+				break
+			}
+			currX += w
+			vIdx++
 		}
-		if width+runeWidth > column {
-			return i
+		if !found {
+			result = cmap.VisualToLogical[vIdx]
 		}
-		width += runeWidth
+	} else {
+		ForEachClusterAt(string(e.text), func(cluster string, w, _, runeIndex int) {
+			if found || runeIndex < e.leftPos {
+				return
+			}
+			if currX+w > column {
+				result = runeIndex
+				found = true
+				return
+			}
+			currX += w
+		})
 	}
-	return len(e.text)
+	return result
 }

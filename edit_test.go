@@ -290,6 +290,34 @@ func TestEdit_WideCharCaret(t *testing.T) {
 		t.Errorf("Expected click on col 1 (filler) to return index 0, got %d", pos)
 	}
 }
+func TestEdit_BidiCaretMovement(t *testing.T) {
+	oldMode := DefaultBidiMode
+	DefaultBidiMode = BidiFull
+	defer func() { DefaultBidiMode = oldMode }()
+
+	e := NewEdit(0, 0, 10, "שלום")
+	e.ClearSelection()
+
+	if e.curPos != 4 {
+		t.Errorf("Expected initial curPos 4, got %d", e.curPos)
+	}
+
+	cmap := e.caretMap()
+	if vPos := cmap.LogicalToVisual[e.curPos]; vPos != 0 {
+		t.Errorf("Expected initial visual position 0, got %d", vPos)
+	}
+
+	// Move visual RIGHT (towards logical start)
+	e.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT})
+	cmap = e.caretMap()
+	vPos := cmap.LogicalToVisual[e.curPos]
+	if vPos != 1 {
+		t.Errorf("Expected visual position 1 after VK_RIGHT, got %d", vPos)
+	}
+	if e.curPos != 3 {
+		t.Errorf("Expected logical curPos 3 after VK_RIGHT, got %d", e.curPos)
+	}
+}
 
 func TestEdit_OnAction(t *testing.T) {
 	e := NewEdit(0, 0, 10, "test")

@@ -1,6 +1,8 @@
 package vtui
 
 import (
+	"github.com/rivo/uniseg"
+	"golang.org/x/text/unicode/bidi"
 	"strings"
 	"unicode"
 	"unicode/utf8"

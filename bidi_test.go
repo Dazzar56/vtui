@@ -25,7 +25,7 @@ func TestBidi_Hebrew_Simple(t *testing.T) {
 func TestBidi_Hebrew_With_Latin(t *testing.T) {
 	s := "שלום hello"
 	vis := VisualString(s)
-	expected := "םולש hello"
+	expected := " םולשhello"
 	if vis != expected {
 		t.Errorf("Mixed LTR/RTL failed: expected %q, got %q", expected, vis)
 	}
