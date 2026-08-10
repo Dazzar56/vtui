@@ -309,6 +309,10 @@ func (fm *frameManager) ResizeAllScreens() {
 			frame.ResizeConsole(fm.scr.width, fm.scr.height)
 		}
 	}
+	if fm.MenuBar != nil {
+		top := fm.WorkspaceTopInset()
+		fm.MenuBar.SetPosition(0, top, fm.scr.width-1, top)
+	}
 }
 
 func (fm *frameManager) SyncCurrentScreen() {
@@ -1623,7 +1627,8 @@ func (fm *frameManager) Run(reader *vtinput.Reader) {
 			// This ensures they stay at the top/bottom regardless of whether
 			// the active frame also tries to resize them.
 			if fm.MenuBar != nil {
-				fm.MenuBar.SetPosition(0, 0, width-1, 0)
+				top := fm.WorkspaceTopInset()
+				fm.MenuBar.SetPosition(0, top, width-1, top)
 			}
 			if fm.KeyBar != nil {
 				fm.KeyBar.SetPosition(0, height-1, width-1, height-1)

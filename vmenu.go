@@ -30,6 +30,7 @@ type VMenu struct {
 	OnAction   func(int)
 	OnKeyDown  func(*vtinput.InputEvent) bool
 	HideShadow bool
+	BoxType    int
 
 	// Palette entries the menu paints with. They default to the Menu.* group;
 	// a ComboBox points them at Dialog.Combo.* so its dropdown stands apart
@@ -54,6 +55,7 @@ func NewVMenu(title string) *VMenu {
 		ColorSelectedHighlightIdx: ColMenuSelectedHighlight,
 		ColorBoxIdx:               ColMenuBox,
 		ColorTitleIdx:             ColMenuTitle,
+		BoxType:                   DoubleBox,
 	}
 	m.canFocus = true
 	m.Wrap = true
@@ -302,7 +304,7 @@ func (m *VMenu) DisplayObject(scr *ScreenBuf) {
 
 	// 1. Frame and Background
 	p.Fill(m.X1, m.Y1, m.X2, m.Y2, ' ', Palette[m.ColorTextIdx])
-	p.DrawBox(m.X1, m.Y1, m.X2, m.Y2, Palette[m.ColorBoxIdx], DoubleBox)
+	p.DrawBox(m.X1, m.Y1, m.X2, m.Y2, Palette[m.ColorBoxIdx], m.BoxType)
 
 	// far2l paints a menu title with Menu.Title whether the menu holds focus
 	// or not, so there is no separate focused variant here.
@@ -341,7 +343,14 @@ func (m *VMenu) DisplayObject(scr *ScreenBuf) {
 		}
 
 		if item.Separator {
-			p.DrawLine(m.X1, currY, m.X2, currY, boxSymbols[bsH], colBox, true, true)
+			if m.BoxType == SingleBox {
+				symbols := getBoxSymbols(SingleBox)
+				p.DrawLine(m.X1, currY, m.X2, currY, symbols[bsH], colBox, false, false)
+				scr.Write(m.X1, currY, []CharInfo{{Char: uint64(symbols[bsHCrossLeft]), Attributes: colBox}})
+				scr.Write(m.X2, currY, []CharInfo{{Char: uint64(symbols[bsHCrossRight]), Attributes: colBox}})
+			} else {
+				p.DrawLine(m.X1, currY, m.X2, currY, boxSymbols[bsH], colBox, true, true)
+			}
 			continue
 		}
 

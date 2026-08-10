@@ -6,6 +6,9 @@ import "testing"
 // menu group, so that a theme can keep it distinct from the dialog behind it.
 func TestComboBox_DropdownUsesComboPalette(t *testing.T) {
 	cb := NewComboBox(0, 0, 10, []string{"one", "two"})
+	if cb.Menu.BoxType != SingleBox {
+		t.Fatalf("dropdown box type = %d, want SingleBox", cb.Menu.BoxType)
+	}
 
 	cases := []struct {
 		name      string
@@ -46,6 +49,20 @@ func TestComboBox_DropdownStandsApartFromDialog(t *testing.T) {
 	cb := NewComboBox(0, 0, 10, []string{"one", "two"})
 	cb.Menu.SetPosition(0, 0, 10, 4)
 	cb.Menu.Show(scr)
+	single := getBoxSymbols(SingleBox)
+	for _, corner := range []struct {
+		x, y int
+		want rune
+	}{
+		{0, 0, single[bsTL]},
+		{10, 0, single[bsTR]},
+		{0, 4, single[bsBL]},
+		{10, 4, single[bsBR]},
+	} {
+		if got := rune(scr.GetCell(corner.x, corner.y).Char); got != corner.want {
+			t.Errorf("dropdown corner (%d,%d) = %q, want %q", corner.x, corner.y, got, corner.want)
+		}
+	}
 
 	// A menu selects its first item on construction, so row 1 is the selected
 	// one and row 2 an ordinary item. Both must come from the combo group;
@@ -61,6 +78,9 @@ func TestComboBox_DropdownStandsApartFromDialog(t *testing.T) {
 // A plain menu keeps the Menu.* group.
 func TestVMenu_DefaultsToMenuPalette(t *testing.T) {
 	m := NewVMenu("Menu")
+	if m.BoxType != DoubleBox {
+		t.Fatalf("plain menu box type = %d, want DoubleBox", m.BoxType)
+	}
 	if m.ColorTextIdx != ColMenuText || m.ColorBoxIdx != ColMenuBox || m.ColorTitleIdx != ColMenuTitle {
 		t.Errorf("plain menu should default to the Menu.* entries, got %d/%d/%d",
 			m.ColorTextIdx, m.ColorBoxIdx, m.ColorTitleIdx)

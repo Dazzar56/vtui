@@ -34,6 +34,7 @@ func NewComboBox(x, y, width int, items []string) *ComboBox {
 	cb.Menu.ColorSelectedHighlightIdx = ColDialogComboSelectedHighlight
 	cb.Menu.ColorBoxIdx = ColDialogComboBox
 	cb.Menu.ColorTitleIdx = ColDialogComboTitle
+	cb.Menu.BoxType = SingleBox
 	if cb.Menu.ScrollBar != nil {
 		cb.Menu.ScrollBar.ColorIdx = ColDialogComboScrollbar
 	}
