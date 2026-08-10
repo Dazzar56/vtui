@@ -50,6 +50,7 @@ func (fm *frameManager) ExportSemanticScene() map[string]any {
 		}
 		screens = append(screens, map[string]any{
 			"index":       i,
+			"number":      screen.Number,
 			"active":      i == fm.ActiveIdx,
 			"title":       screen.GetTitle(),
 			"progress":    screen.GetProgress(),
@@ -84,6 +85,7 @@ func (fm *frameManager) ExportSemanticScene() map[string]any {
 	if len(fm.Screens) > 1 {
 		scene["workspaceCount"] = len(fm.Screens)
 	}
+	scene["workspaceTabs"] = fm.semanticWorkspaceTabs()
 
 	if AppSceneAdapter != nil {
 		if adapted := AppSceneAdapter(ctx, scene); adapted != nil {
@@ -93,6 +95,107 @@ func (fm *frameManager) ExportSemanticScene() map[string]any {
 	return scene
 }
 
+func (fm *frameManager) semanticWorkspaceTabs() map[string]any {
+	mode := "multiple"
+	switch fm.WorkspaceTabMode {
+	case WorkspaceTabsAlways:
+		mode = "always"
+	case WorkspaceTabsOnCtrl:
+		mode = "ctrl"
+	}
+
+	hits := make(map[int]workspaceTabHit, len(fm.workspaceTabHits))
+	for _, hit := range fm.workspaceTabHits {
+		hits[hit.index] = hit
+	}
+	tabs := make([]map[string]any, 0, len(fm.Screens))
+	for i, screen := range fm.Screens {
+		tab := map[string]any{
+			"id":          fmt.Sprintf("workspace-tab-%d", screen.Number),
+			"kind":        "tab",
+			"index":       i,
+			"number":      screen.Number,
+			"text":        screen.GetTabTitle(),
+			"active":      i == fm.ActiveIdx,
+			"selected":    i == fm.ActiveIdx,
+			"attention":   screen.NeedsAttention(),
+			"progress":    screen.GetProgress(),
+			"visible":     fm.workspaceTabsVisible(),
+			"action":      "workspace.activate",
+			"closable":    true,
+			"closeAction": "workspace.close",
+		}
+		if hit, ok := hits[i]; ok {
+			tab["x"] = hit.x1
+			tab["y"] = 0
+			tab["w"] = hit.x2 - hit.x1 + 1
+			tab["h"] = 1
+		}
+		tabs = append(tabs, tab)
+	}
+
+	counterText := fm.workspaceCounterText()
+	counterWidth := runewidth.StringWidth(counterText)
+	counter := map[string]any{
+		"id":      "workspace-counter",
+		"kind":    "status",
+		"text":    counterText,
+		"current": fm.ActiveIdx + 1,
+		"total":   len(fm.Screens),
+		"visible": len(fm.Screens) > 1,
+		"action":  "workspace.menu",
+		"y":       0,
+		"h":       1,
+	}
+	if fm.scr != nil && counterWidth > 0 {
+		counter["x"] = fm.scr.width - counterWidth
+		counter["w"] = counterWidth
+	}
+
+	newTab := map[string]any{
+		"id":      "workspace-new",
+		"kind":    "button",
+		"text":    "+",
+		"visible": fm.workspaceTabsVisible() && fm.workspaceNewTabX >= 0,
+		"action":  "workspace.new",
+		"y":       0,
+		"w":       1,
+		"h":       1,
+	}
+	if fm.workspaceNewTabX >= 0 {
+		newTab["x"] = fm.workspaceNewTabX
+	}
+
+	width := 0
+	if fm.scr != nil {
+		width = fm.scr.width - counterWidth
+		if width < 0 {
+			width = 0
+		}
+	}
+	return map[string]any{
+		"id":          "workspace-tabs",
+		"kind":        "tablist",
+		"visible":     fm.workspaceTabsVisible(),
+		"mode":        mode,
+		"reserved":    fm.WorkspaceTopInset() > 0,
+		"x":           0,
+		"y":           0,
+		"w":           width,
+		"h":           1,
+		"activeIndex": fm.ActiveIdx,
+		"activeNumber": func() int {
+			if fm.ActiveIdx >= 0 && fm.ActiveIdx < len(fm.Screens) {
+				return fm.Screens[fm.ActiveIdx].Number
+			}
+			return 0
+		}(),
+		"tabs":    tabs,
+		"newTab":  newTab,
+		"counter": counter,
+	}
+}
+
 // HandleSemanticAction глобально маршрутизирует семантические действия во vtui
 func (fm *frameManager) HandleSemanticAction(action map[string]any) bool {
 	if fm == nil || action == nil {
@@ -100,6 +203,53 @@ func (fm *frameManager) HandleSemanticAction(action map[string]any) bool {
 	}
 	if kind, _ := action["kind"].(string); kind == "command" {
 		return fm.EmitCommand(semanticInt(action["command"]), action["args"])
+	}
+	actionName := semanticString(action["action"])
+	target := semanticString(action["target"])
+	if actionName == "workspace.new" || ((actionName == "activate" || actionName == "control.activate") && target == "workspace-new") {
+		return fm.EmitCommand(CmResize, "fork")
+	}
+	if actionName == "workspace.menu" || ((actionName == "activate" || actionName == "control.activate") && target == "workspace-counter") {
+		fm.showScreensMenu()
+		fm.Redraw()
+		return true
+	}
+	if actionName == "workspace.close" || actionName == "tab.close" || (actionName == "close" && strings.HasPrefix(target, "workspace-tab-")) {
+		idx := -1
+		if raw, ok := action["index"]; ok {
+			idx = semanticInt(raw)
+		} else {
+			for i, screen := range fm.Screens {
+				if target == fmt.Sprintf("workspace-tab-%d", screen.Number) {
+					idx = i
+					break
+				}
+			}
+		}
+		if idx >= 0 && idx < len(fm.Screens) {
+			fm.CloseScreen(idx)
+			return true
+		}
+		return false
+	}
+	if actionName == "workspace.activate" || actionName == "tab.activate" ||
+		((actionName == "activate" || actionName == "control.activate") && strings.HasPrefix(target, "workspace-tab-")) {
+		idx := -1
+		if raw, ok := action["index"]; ok {
+			idx = semanticInt(raw)
+		} else {
+			for i, screen := range fm.Screens {
+				if target == fmt.Sprintf("workspace-tab-%d", screen.Number) {
+					idx = i
+					break
+				}
+			}
+		}
+		if idx >= 0 && idx < len(fm.Screens) {
+			fm.SwitchScreen(idx)
+			return true
+		}
+		return false
 	}
 	if semanticString(action["action"]) == "menu_bar_activate" || semanticString(action["action"]) == "menuBar.activate" {
 		if mb := fm.GetActiveMenuBar(); mb != nil {
@@ -116,7 +266,7 @@ func (fm *frameManager) HandleSemanticAction(action map[string]any) bool {
 	activeIdx := fm.ActiveIdx
 	frames := fm.GetActiveFrames(activeIdx)
 
-	target := semanticString(action["target"])
+	target = semanticString(action["target"])
 	for i := len(frames) - 1; i >= 0; i-- {
 		if target == "" {
 			if h, ok := frames[i].(SemanticActionHandler); ok && h.HandleSemanticAction(action) {
@@ -437,11 +587,11 @@ func (cb *ComboBox) SemanticNode(ctx *SemanticContext) map[string]any {
 	var items []map[string]any
 	if cb.Menu != nil {
 		for i, item := range cb.Menu.Items {
-			clean, hotkey, _ := ParseAmpersandString(item.Text)
+			clean, hotkey, _ := ParseAmpersandString(item.AccentPrefix + item.Text)
 			items = append(items, map[string]any{
 				"index":     i,
 				"text":      clean,
-				"rawText":   item.Text,
+				"rawText":   item.AccentPrefix + item.Text,
 				"hotkey":    stringOrEmpty(hotkey),
 				"shortcut":  item.Shortcut,
 				"command":   item.Command,

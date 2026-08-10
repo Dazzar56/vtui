@@ -39,7 +39,7 @@ Success
 	if hv.current.Name != "NextTopic" {
 		t.Errorf("Jump failed, current is %s", hv.current.Name)
 	}
-	if len(hv.history) != 1 || hv.history[0] != "Contents" {
+	if len(hv.history) != 1 || hv.history[0].topic != "Contents" || hv.history[0].selectedIdx != 0 {
 		t.Error("History not updated after jump")
 	}
 
@@ -47,6 +47,77 @@ Success
 	hv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_BACK})
 	if hv.current.Name != "Contents" {
 		t.Error("History Back failed")
+	}
+}
+
+func TestHelpView_BackRestoresOriginatingLinkAndViewport(t *testing.T) {
+	engine := NewHelpEngine(&mockHelpVFS{})
+	lines := make([]string, 20)
+	for i := range lines {
+		lines[i] = "Help text"
+	}
+	lines[1] = "~First~First@"
+	lines[15] = "~Nested~Nested@"
+	engine.AddTopic(&HelpTopic{
+		Name:  "Root",
+		Lines: lines,
+		Links: []HelpLink{{Text: "First", Target: "First", Line: 1}, {Text: "Nested", Target: "Nested", Line: 15}},
+	})
+	engine.AddTopic(&HelpTopic{Name: "Nested", Lines: []string{"Nested content"}})
+
+	hv := NewHelpView(engine, "Root")
+	hv.SetPosition(0, 0, 40, 7)
+	hv.selectedIdx = 1
+	hv.ensureLinkVisible()
+	wantScroll := hv.scrollTop
+	hv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN})
+	if hv.current.Name != "Nested" {
+		t.Fatalf("current topic = %q, want Nested", hv.current.Name)
+	}
+
+	hv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_BACK})
+	if hv.current.Name != "Root" {
+		t.Fatalf("Backspace returned to %q, want Root", hv.current.Name)
+	}
+	if hv.selectedIdx != 1 {
+		t.Fatalf("restored link index = %d, want 1", hv.selectedIdx)
+	}
+	if hv.scrollTop != wantScroll {
+		t.Fatalf("restored scrollTop = %d, want %d", hv.scrollTop, wantScroll)
+	}
+}
+
+func TestHelpView_BackButtonReturnsToOriginatingLink(t *testing.T) {
+	SetDefaultPalette()
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	FrameManager.Init(scr)
+	engine := NewHelpEngine(&mockHelpVFS{})
+	engine.AddTopic(&HelpTopic{
+		Name:  "Root",
+		Lines: []string{"~Nested~Nested@"},
+		Links: []HelpLink{{Text: "Nested", Target: "Nested", Line: 0}},
+	})
+	engine.AddTopic(&HelpTopic{Name: "Nested", Lines: []string{"Nested content"}})
+	hv := NewHelpView(engine, "Root")
+	hv.ResizeConsole(80, 25)
+	hv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN})
+	hv.Show(scr)
+
+	if got := rune(scr.GetCell(hv.X1+3, hv.Y1).Char); got != '←' {
+		t.Fatalf("Back button center = %q, want ←", got)
+	}
+	if !hv.ProcessMouse(&vtinput.InputEvent{
+		Type:        vtinput.MouseEventType,
+		KeyDown:     true,
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+		MouseX:      int16(hv.X1 + 3),
+		MouseY:      int16(hv.Y1),
+	}) {
+		t.Fatal("Back button click was not handled")
+	}
+	if hv.current.Name != "Root" || hv.selectedIdx != 0 {
+		t.Fatalf("Back button restored topic=%q link=%d, want Root/0", hv.current.Name, hv.selectedIdx)
 	}
 }
 

@@ -2,6 +2,47 @@ package vtui
 
 import "testing"
 
+func TestDialogTextAndLabelFollowRuntimePaletteChanges(t *testing.T) {
+	SetDefaultPalette()
+	original := Palette[ColDialogText]
+	defer func() { Palette[ColDialogText] = original }()
+
+	Palette[ColDialogText] = SetRGBBoth(0, 0xAAAAAA, 0x111111)
+	text := NewText(1, 1, "Text", Palette[ColDialogText])
+	label := NewLabel(1, 2, "Label", nil)
+
+	Palette[ColDialogText] = SetRGBBoth(0, 0xBBBBBB, 0x222222)
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(20, 5)
+	text.Show(scr)
+	label.Show(scr)
+
+	for _, y := range []int{1, 2} {
+		cell := scr.GetCell(1, y)
+		if fg, bg := GetRGBFore(cell.Attributes), GetRGBBack(cell.Attributes); fg != 0xBBBBBB || bg != 0x222222 {
+			t.Fatalf("runtime-themed text at y=%d = %06X on %06X, want BBBBBB on 222222", y, fg, bg)
+		}
+	}
+}
+
+func TestTextExplicitCustomColorStaysFixedAcrossPaletteChanges(t *testing.T) {
+	SetDefaultPalette()
+	original := Palette[ColDialogText]
+	defer func() { Palette[ColDialogText] = original }()
+
+	custom := SetRGBBoth(0, 0x123456, 0x654321)
+	text := NewText(1, 1, "Custom", custom)
+	Palette[ColDialogText] = SetRGBBoth(0, 0xBBBBBB, 0x222222)
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(20, 4)
+	text.Show(scr)
+
+	cell := scr.GetCell(1, 1)
+	if fg, bg := GetRGBFore(cell.Attributes), GetRGBBack(cell.Attributes); fg != 0x123456 || bg != 0x654321 {
+		t.Fatalf("custom text changed to %06X on %06X", fg, bg)
+	}
+}
+
 func TestText_Truncation(t *testing.T) {
 	SetDefaultPalette()
 	scr := NewSilentScreenBuf()

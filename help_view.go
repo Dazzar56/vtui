@@ -12,12 +12,20 @@ import (
 type HelpView struct {
 	BaseWindow
 	engine      *HelpEngine
-	history     []string
+	history     []helpHistoryEntry
 	current     *HelpTopic
 	scrollTop   int
 	selectedIdx int // Index of selected link in current.Links
 	scrollBar   *ScrollBar
 }
+
+type helpHistoryEntry struct {
+	topic       string
+	selectedIdx int
+	scrollTop   int
+}
+
+const helpBackButton = "[←]"
 
 func NewHelpView(engine *HelpEngine, startTopic string) *HelpView {
 	hv := &HelpView{
@@ -71,7 +79,11 @@ func (hv *HelpView) SwitchTopic(name string) {
 		return
 	}
 	if hv.current != nil {
-		hv.history = append(hv.history, hv.current.Name)
+		hv.history = append(hv.history, helpHistoryEntry{
+			topic:       hv.current.Name,
+			selectedIdx: hv.selectedIdx,
+			scrollTop:   hv.scrollTop,
+		})
 	}
 	hv.current = topic
 	hv.scrollTop = 0
@@ -87,15 +99,21 @@ func (hv *HelpView) PopTopic() {
 		hv.Close()
 		return
 	}
-	name := hv.history[len(hv.history)-1]
+	entry := hv.history[len(hv.history)-1]
 	hv.history = hv.history[:len(hv.history)-1]
-	hv.current = hv.engine.GetTopic(name)
-	hv.scrollTop = 0
-	hv.selectedIdx = -1
+	hv.current = hv.engine.GetTopic(entry.topic)
+	if hv.current == nil {
+		return
+	}
+	hv.scrollTop = entry.scrollTop
+	hv.selectedIdx = entry.selectedIdx
 }
 
 func (hv *HelpView) Show(scr *ScreenBuf) {
 	hv.BaseWindow.Show(scr)
+	if len(hv.history) > 0 {
+		scr.Write(hv.X1+2, hv.Y1, StringToCharInfo(helpBackButton, Palette[hv.ColorBoxIdx]))
+	}
 	if hv.current == nil {
 		return
 	}
@@ -350,6 +368,23 @@ func (hv *HelpView) ensureLinkVisible() {
 
 func (hv *HelpView) GetType() FrameType { return TypeUser }
 
+func (hv *HelpView) scrollBy(delta int) {
+	if hv.current == nil || delta == 0 {
+		return
+	}
+	viewHeight := (hv.Y2 - hv.Y1 + 1) - 2 - hv.current.StickyRows
+	maxScroll := (len(hv.current.Lines) - hv.current.StickyRows) - viewHeight
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	hv.scrollTop += delta
+	if hv.scrollTop < 0 {
+		hv.scrollTop = 0
+	} else if hv.scrollTop > maxScroll {
+		hv.scrollTop = maxScroll
+	}
+}
+
 func (hv *HelpView) ProcessMouse(e *vtinput.InputEvent) bool {
 	if e.Type != vtinput.MouseEventType {
 		return false
@@ -359,11 +394,17 @@ func (hv *HelpView) ProcessMouse(e *vtinput.InputEvent) bool {
 		return true
 	}
 
+	if len(hv.history) > 0 && e.KeyDown && e.ButtonState&vtinput.FromLeft1stButtonPressed != 0 &&
+		int(e.MouseY) == hv.Y1 && int(e.MouseX) >= hv.X1+2 && int(e.MouseX) <= hv.X1+4 {
+		hv.PopTopic()
+		return true
+	}
+
 	if e.WheelDirection != 0 {
 		if e.WheelDirection > 0 {
-			hv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_UP})
+			hv.scrollBy(-1)
 		} else {
-			hv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
+			hv.scrollBy(1)
 		}
 		return true
 	}

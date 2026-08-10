@@ -8,12 +8,15 @@ import (
 
 // MenuItem represents a single menu item.
 type MenuItem struct {
-	Text      string
-	Shortcut  string // Optional right-aligned hotkey hint (e.g. "F3")
-	Command   int    // TV-style Command ID to emit when selected
-	OnClick   func() // Closure called when selected
-	UserData  any
-	Separator bool
+	// AccentPrefix is drawn immediately before Text using the menu highlight
+	// color. It is useful for non-hotkey metadata such as stable item numbers.
+	AccentPrefix string
+	Text         string
+	Shortcut     string // Optional right-aligned hotkey hint (e.g. "F3")
+	Command      int    // TV-style Command ID to emit when selected
+	OnClick      func() // Closure called when selected
+	UserData     any
+	Separator    bool
 }
 
 // VMenu implements a vertical menu with navigation support.
@@ -366,7 +369,14 @@ func (m *VMenu) DisplayObject(scr *ScreenBuf) {
 
 		// Draw background and text
 		p.Fill(m.X1+1, currY, m.X2-1, currY, ' ', itemAttr)
-		p.DrawControlText(m.X1+1, currY, " "+item.Text, itemAttr, hiAttr)
+		textX := m.X1 + 1
+		p.DrawString(textX, currY, " ", itemAttr)
+		textX++
+		if item.AccentPrefix != "" {
+			p.DrawString(textX, currY, item.AccentPrefix, hiAttr)
+			textX += runewidth.StringWidth(item.AccentPrefix)
+		}
+		p.DrawControlText(textX, currY, item.Text, itemAttr, hiAttr)
 		if shortcutText != "" {
 			p.DrawString(m.X2-vLenShortcut, currY, shortcutText, itemAttr)
 		}

@@ -1,9 +1,11 @@
 package vtui
 
 import (
+	"github.com/mattn/go-runewidth"
 	"github.com/unxed/vtinput"
 	"io"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +15,8 @@ type mockFrame struct {
 	BaseFrame
 	onProcessMouse     func(e *vtinput.InputEvent) bool
 	onProcessKey       func(e *vtinput.InputEvent) bool
+	onHandleCommand    func(cmd int, args any) bool
+	tabTitle           string
 	resizedW, resizedH int
 }
 
@@ -41,8 +45,16 @@ func (m *mockFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 	return false
 }
 
-func (m *mockFrame) GetType() FrameType { return TypeUser }
-func (m *mockFrame) GetTitle() string   { return "MockFrame" }
+func (m *mockFrame) HandleCommand(cmd int, args any) bool {
+	if m.onHandleCommand != nil {
+		return m.onHandleCommand(cmd, args)
+	}
+	return m.BaseFrame.HandleCommand(cmd, args)
+}
+
+func (m *mockFrame) GetType() FrameType           { return TypeUser }
+func (m *mockFrame) GetTitle() string             { return "MockFrame" }
+func (m *mockFrame) GetWorkspaceTabTitle() string { return m.tabTitle }
 
 func TestFrameManager_DuplicateMouseMoveDoesNotHoverNewMenu(t *testing.T) {
 	oldFM := FrameManager
@@ -309,39 +321,41 @@ func TestFrameManager_GetTopFrameType(t *testing.T) {
 		t.Errorf("Expected TopFrameType to be TypeUser, got %d", fm.GetTopFrameType())
 	}
 }
-func TestFrameManager_SwitchScreen_MRU(t *testing.T) {
+func TestFrameManager_SwitchScreenPreservesOrderAndNumbers(t *testing.T) {
 	fm := &frameManager{}
 	fm.Init(NewSilentScreenBuf())
 	defer fm.Shutdown()
-	fm.Push(NewDesktop())                       // Screen 0: Desktop
-	fm.AddScreen(NewWindow(0, 0, 10, 10, "W1")) // Screen 1: W1
-	fm.AddScreen(NewWindow(0, 0, 10, 10, "W2")) // Screen 2: W2
+	fm.Push(NewDesktop())
+	fm.AddScreen(NewWindow(0, 0, 10, 10, "W1"))
+	fm.AddScreen(NewWindow(0, 0, 10, 10, "W2"))
 
 	if len(fm.Screens) != 3 {
 		t.Fatalf("Expected 3 screens, got %d", len(fm.Screens))
 	}
+	if got := []int{fm.Screens[0].Number, fm.Screens[1].Number, fm.Screens[2].Number}; !reflect.DeepEqual(got, []int{1, 2, 3}) {
+		t.Fatalf("initial workspace numbers = %v, want [1 2 3]", got)
+	}
 
-	// Текущий порядок в массиве: [S0:Desktop, S1:W1, S2:W2]. Активен S2.
-
-	// Переключаемся на Screen 0 (Desktop).
-	// Он должен быть извлечен из начала и вставлен в конец.
 	fm.SwitchScreen(0)
 
-	// Новый порядок в массиве: [S1:W1, S2:W2, S0:Desktop].
-	if fm.ActiveIdx != 2 {
-		t.Errorf("ActiveIdx should be 2, got %d", fm.ActiveIdx)
+	if fm.ActiveIdx != 0 {
+		t.Errorf("ActiveIdx should be 0, got %d", fm.ActiveIdx)
+	}
+	if got := []string{fm.Screens[0].GetTitle(), fm.Screens[1].GetTitle(), fm.Screens[2].GetTitle()}; !reflect.DeepEqual(got, []string{"Desktop", "W1", "W2"}) {
+		t.Errorf("workspace order changed after switch: %v", got)
+	}
+	if got := []int{fm.Screens[0].Number, fm.Screens[1].Number, fm.Screens[2].Number}; !reflect.DeepEqual(got, []int{1, 2, 3}) {
+		t.Errorf("workspace numbers changed after switch: %v", got)
 	}
 
-	lastScreen := fm.Screens[fm.ActiveIdx]
-	if lastScreen.Frames[0].GetType() != TypeDesktop {
-		t.Errorf("Expected Desktop to move to the end (active), got title: %q", lastScreen.GetTitle())
+	// New numbers are derived from the largest number still in use.
+	fm.SwitchScreen(2)
+	fm.CloseActiveScreen()
+	fm.AddScreen(NewWindow(0, 0, 10, 10, "W3"))
+	if got := []int{fm.Screens[0].Number, fm.Screens[1].Number, fm.Screens[2].Number}; !reflect.DeepEqual(got, []int{1, 3, 2}) {
+		t.Errorf("workspace number did not follow the live maximum: %v", got)
 	}
 
-	if fm.Screens[0].GetTitle() != "W1" {
-		t.Errorf("Expected W1 to shift to index 0, got %q", fm.Screens[0].GetTitle())
-	}
-
-	// Проверка безопасности индексов
 	fm.SwitchScreen(-1)
 	fm.SwitchScreen(100)
 }
@@ -1439,6 +1453,13 @@ type titleFrame struct {
 
 func (t *titleFrame) GetTitle() string { return t.title }
 
+type workspaceInfoFrame struct {
+	titleFrame
+	info WorkspaceMenuInfo
+}
+
+func (f *workspaceInfoFrame) GetWorkspaceMenuInfo() WorkspaceMenuInfo { return f.info }
+
 func TestFrameManager_F12ScreensMenu(t *testing.T) {
 	fm := &frameManager{}
 	scr := NewSilentScreenBuf()
@@ -1481,8 +1502,48 @@ func TestFrameManager_F12ScreensMenu(t *testing.T) {
 		t.Fatalf("Expected 2 menu items, got %d", len(menu.Items))
 	}
 
-	if menu.Items[1].Text != "* Editor B" {
-		t.Errorf("Expected active item to have '*' prefix, got %q", menu.Items[1].Text)
+	if menu.Items[1].AccentPrefix != "2" || menu.Items[1].Text != " * ▣ Editor B" {
+		t.Errorf("unexpected active Screens item: accent=%q text=%q", menu.Items[1].AccentPrefix, menu.Items[1].Text)
+	}
+}
+
+func TestFrameManager_ScreensMenuUsesStructuredAlignedWorkspaceInfo(t *testing.T) {
+	SetDefaultPalette()
+	fm := &frameManager{}
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(120, 25)
+	fm.Init(scr)
+	defer fm.Shutdown()
+
+	first := &workspaceInfoFrame{titleFrame: titleFrame{title: "Panels"}, info: WorkspaceMenuInfo{
+		Icon: "📁", Primary: `C:\short`, Secondary: `D:\a\much\longer\right\path`,
+	}}
+	second := &workspaceInfoFrame{titleFrame: titleFrame{title: "Panels"}, info: WorkspaceMenuInfo{
+		Icon: "📁", Primary: `C:\a\much\longer\left\path`, Secondary: `D:\right`,
+	}}
+	fm.Push(first)
+	fm.AddScreen(second)
+	fm.showScreensMenu()
+
+	menu := fm.frames[len(fm.frames)-1].(*VMenu)
+	if len(menu.Items) != 2 {
+		t.Fatalf("Screens items = %d, want 2", len(menu.Items))
+	}
+	if menu.Items[0].AccentPrefix != "1" || menu.Items[1].AccentPrefix != "2" {
+		t.Fatalf("workspace accents = %q, %q", menu.Items[0].AccentPrefix, menu.Items[1].AccentPrefix)
+	}
+	if !strings.Contains(menu.Items[0].Text, `C:\short`) || !strings.Contains(menu.Items[0].Text, `D:\a\much\longer\right\path`) {
+		t.Fatalf("full panel paths missing from first item: %q", menu.Items[0].Text)
+	}
+	if strings.Index(menu.Items[0].Text, "↔") != strings.Index(menu.Items[1].Text, "↔") {
+		t.Fatalf("panel separators are not aligned: %q / %q", menu.Items[0].Text, menu.Items[1].Text)
+	}
+
+	menu.Show(scr)
+	accentCell := scr.GetCell(menu.X1+2, menu.Y1+2) // active second item
+	wantAccent := Palette[menu.ColorSelectedHighlightIdx]
+	if GetRGBFore(accentCell.Attributes) != GetRGBFore(wantAccent) {
+		t.Fatalf("active workspace index attr = %#x, want selected highlight %#x", accentCell.Attributes, Palette[menu.ColorSelectedHighlightIdx])
 	}
 }
 
@@ -1601,6 +1662,551 @@ func TestFrameManager_SwitcherLogic(t *testing.T) {
 	// Теперь Desktop должен стать активным (переехать в конец массива)
 	if fm.Screens[fm.ActiveIdx].GetTitle() != "Desktop" {
 		t.Errorf("Screen Desktop was not moved to active. Top title: %q", fm.Screens[fm.ActiveIdx].GetTitle())
+	}
+}
+
+func TestFrameManager_WorkspaceTopInsetModes(t *testing.T) {
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	fm := &frameManager{}
+	fm.Init(scr)
+	frame := newMockFrame(0, 0, 80, 25, false)
+	fm.Push(frame)
+
+	if got := fm.WorkspaceTopInset(); got != 0 {
+		t.Fatalf("multiple mode with one screen inset = %d, want 0", got)
+	}
+	fm.AddScreenBackground(newMockFrame(0, 0, 80, 25, false))
+	if got := fm.WorkspaceTopInset(); got != 1 {
+		t.Fatalf("multiple mode with two screens inset = %d, want 1", got)
+	}
+	if frame.resizedW != 80 || frame.resizedH != 25 {
+		t.Fatalf("screen was not relaid out after tab row appeared: %dx%d", frame.resizedW, frame.resizedH)
+	}
+
+	fm.ConfigureWorkspaceTabs(WorkspaceTabsOnCtrl, WorkspaceCtrlTabDirect)
+	if got := fm.WorkspaceTopInset(); got != 0 {
+		t.Fatalf("Ctrl overlay mode inset = %d, want 0", got)
+	}
+	fm.ConfigureWorkspaceTabs(WorkspaceTabsAlways, WorkspaceCtrlTabDirect)
+	if got := fm.WorkspaceTopInset(); got != 1 {
+		t.Fatalf("always mode inset = %d, want 1", got)
+	}
+}
+
+func TestFrameManager_WorkspaceTabsAndCounterRendering(t *testing.T) {
+	SetDefaultPalette()
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(60, 10)
+	fm := &frameManager{}
+	fm.Init(scr)
+	fm.Push(NewWindow(0, 0, 20, 5, "Panels"))
+	fm.AddScreen(NewWindow(0, 0, 20, 5, "Editor"))
+	fm.ConfigureWorkspaceTabs(WorkspaceTabsMultiple, WorkspaceCtrlTabDirect)
+	fm.ConfigureWorkspaceTabColors(
+		SetRGBBoth(0, 0xAAAAAA, 0x111111),
+		SetRGBBoth(0, 0xAAAAAA, 0x222222),
+		SetRGBBoth(0, 0xFFD75F, 0),
+		SetRGBBoth(0, 0xFF5F5F, 0),
+	)
+
+	fm.drawWorkspaceTabs()
+	fm.drawWorkspaceCounter()
+	var row strings.Builder
+	for x := 0; x < scr.width; x++ {
+		row.WriteRune(rune(scr.GetCell(x, 0).Char))
+	}
+	text := row.String()
+	if !strings.Contains(text, "1 Panels") || !strings.Contains(text, "2 Editor") {
+		t.Fatalf("tab row does not contain both workspaces: %q", text)
+	}
+	if !strings.Contains(text, "Panels | 2 Editor") {
+		t.Fatalf("tabs are not compact and pipe-separated: %q", text)
+	}
+	if !strings.Contains(text, "Editor |+") {
+		t.Fatalf("new-workspace control is missing after tabs: %q", text)
+	}
+	if !strings.HasSuffix(text, "[2/2]") {
+		t.Fatalf("workspace counter = %q, want suffix [2/2]", text)
+	}
+	counterX := scr.width - runewidth.StringWidth("[2/2]")
+	if got := GetRGBFore(scr.GetCell(counterX, 0).Attributes); got != 0xAAAAAA {
+		t.Fatalf("workspace counter decoration foreground = %#x, want tab bar text color", got)
+	}
+	if len(fm.workspaceTabHits) != 2 {
+		t.Fatalf("tab hit targets = %d, want 2", len(fm.workspaceTabHits))
+	}
+	if got := GetRGBBack(scr.GetCell(fm.workspaceTabHits[0].x1, 0).Attributes); got != 0x111111 {
+		t.Fatalf("inactive tab background = %#x, want dark bar background", got)
+	}
+	if got := GetRGBBack(scr.GetCell(fm.workspaceTabHits[1].x2, 0).Attributes); got != 0x222222 {
+		t.Fatalf("active tab background = %#x, want panel background", got)
+	}
+	counterCurrentX := scr.width - runewidth.StringWidth("[2/2]") + 1
+	if tabFG, counterFG := GetRGBFore(scr.GetCell(fm.workspaceTabHits[0].x1+1, 0).Attributes), GetRGBFore(scr.GetCell(counterCurrentX, 0).Attributes); tabFG != counterFG {
+		t.Fatalf("tab number foreground = %#x, counter current foreground = %#x", tabFG, counterFG)
+	} else if tabFG != 0xFFD75F {
+		t.Fatalf("workspace accent foreground = %#x, want configured %#x", tabFG, uint32(0xFFD75F))
+	}
+
+	// Attention has its own color and must not replace the ordinary accent on
+	// unrelated controls such as the new-tab button.
+	fm.Screens[0].Frames = []Frame{newMockFrame(0, 1, 20, 5, true)}
+	fm.drawWorkspaceTabs()
+	fm.drawWorkspaceCounter()
+	if got := GetRGBFore(scr.GetCell(fm.workspaceTabHits[0].x1+1, 0).Attributes); got != 0xFF5F5F {
+		t.Fatalf("attention tab foreground = %#x, want configured attention color", got)
+	}
+	if got := GetRGBFore(scr.GetCell(fm.workspaceNewTabX, 0).Attributes); got != 0xFFD75F {
+		t.Fatalf("new-tab accent foreground = %#x after attention, want ordinary accent", got)
+	}
+	if got := GetRGBFore(scr.GetCell(counterCurrentX, 0).Attributes); got != 0xFF5F5F {
+		t.Fatalf("attention counter foreground = %#x, want configured attention color", got)
+	}
+	first := fm.workspaceTabHits[0]
+	fm.dispatchEvent(&vtinput.InputEvent{
+		Type:        vtinput.MouseEventType,
+		KeyDown:     true,
+		MouseX:      int16(first.x1),
+		MouseY:      0,
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+	}, false)
+	if fm.ActiveIdx != 0 {
+		t.Fatalf("clicking first workspace tab selected %d, want 0", fm.ActiveIdx)
+	}
+}
+
+func TestFrameManager_WorkspacePlusEmitsForkCommand(t *testing.T) {
+	SetDefaultPalette()
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(60, 10)
+	fm := &frameManager{}
+	fm.Init(scr)
+	fm.Push(newMockFrame(0, 0, 20, 5, false))
+	forked := false
+	active := newMockFrame(0, 0, 20, 5, false)
+	active.onHandleCommand = func(cmd int, args any) bool {
+		forked = cmd == CmResize && args == "fork"
+		return forked
+	}
+	fm.AddScreen(active)
+	fm.drawWorkspaceTabs()
+	if fm.workspaceNewTabX < 0 {
+		t.Fatal("workspace plus hit target was not created")
+	}
+	fm.dispatchEvent(&vtinput.InputEvent{
+		Type:        vtinput.MouseEventType,
+		KeyDown:     true,
+		MouseX:      int16(fm.workspaceNewTabX),
+		MouseY:      0,
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+	}, false)
+	if !forked {
+		t.Fatal("clicking workspace plus did not emit the Ctrl+N fork command")
+	}
+}
+
+func TestFrameManager_DragWorkspaceTabReordersScreens(t *testing.T) {
+	SetDefaultPalette()
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(80, 10)
+	fm := &frameManager{}
+	fm.Init(scr)
+	fm.Push(newMockFrame(0, 1, 20, 5, false))
+	fm.AddScreen(newMockFrame(0, 1, 20, 5, false))
+	fm.AddScreen(newMockFrame(0, 1, 20, 5, false))
+	fm.drawWorkspaceTabs()
+
+	dragged := fm.Screens[0]
+	first := fm.workspaceTabHits[0]
+	third := fm.workspaceTabHits[2]
+	fm.dispatchEvent(&vtinput.InputEvent{
+		Type:        vtinput.MouseEventType,
+		KeyDown:     true,
+		MouseX:      int16(first.x1 + 1),
+		MouseY:      0,
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+	}, false)
+	fm.dispatchEvent(&vtinput.InputEvent{
+		Type:            vtinput.MouseEventType,
+		KeyDown:         true,
+		MouseX:          int16(third.x1 + 1),
+		MouseY:          5,
+		ButtonState:     vtinput.FromLeft1stButtonPressed,
+		MouseEventFlags: vtinput.MouseMoved,
+	}, false)
+	fm.dispatchEvent(&vtinput.InputEvent{
+		Type:    vtinput.MouseEventType,
+		MouseX:  500,
+		MouseY:  500,
+		KeyDown: false,
+	}, false)
+
+	if got := []int{fm.Screens[0].Number, fm.Screens[1].Number, fm.Screens[2].Number}; !reflect.DeepEqual(got, []int{2, 3, 1}) {
+		t.Fatalf("workspace order = %v, want [2 3 1]", got)
+	}
+	if fm.Screens[fm.ActiveIdx] != dragged || fm.ActiveIdx != 2 {
+		t.Fatalf("dragged workspace is not active at its new position: active=%d", fm.ActiveIdx)
+	}
+	if fm.workspaceTabDrag != nil {
+		t.Fatal("workspace tab capture was not released")
+	}
+}
+
+func TestFrameManager_DragShortTabPastLongTabDoesNotOscillate(t *testing.T) {
+	SetDefaultPalette()
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(100, 10)
+	fm := &frameManager{}
+	fm.Init(scr)
+
+	short := newMockFrame(0, 1, 20, 5, false)
+	short.tabTitle = "A"
+	long := newMockFrame(0, 1, 20, 5, false)
+	long.tabTitle = "A much longer workspace title"
+	last := newMockFrame(0, 1, 20, 5, false)
+	last.tabTitle = "C"
+	fm.Push(short)
+	fm.AddScreen(long)
+	fm.AddScreen(last)
+	fm.drawWorkspaceTabs()
+
+	dragged := fm.Screens[0]
+	first := fm.workspaceTabHits[0]
+	second := fm.workspaceTabHits[1]
+	dragX := second.x1 + 1
+	fm.dispatchEvent(&vtinput.InputEvent{
+		Type:        vtinput.MouseEventType,
+		KeyDown:     true,
+		MouseX:      int16(first.x1 + 1),
+		MouseY:      0,
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+	}, false)
+	fm.dispatchEvent(&vtinput.InputEvent{
+		Type:            vtinput.MouseEventType,
+		KeyDown:         true,
+		MouseX:          int16(dragX),
+		MouseY:          0,
+		ButtonState:     vtinput.FromLeft1stButtonPressed,
+		MouseEventFlags: vtinput.MouseMoved,
+	}, false)
+	if fm.Screens[1] != dragged {
+		t.Fatal("short tab did not move into the second slot")
+	}
+
+	// The long tab now occupies the beginning of the row and its freshly
+	// rendered hit region covers dragX. A dynamic hit test would therefore
+	// bounce the dragged tab back to slot zero on this one-pixel move.
+	fm.dispatchEvent(&vtinput.InputEvent{
+		Type:            vtinput.MouseEventType,
+		KeyDown:         true,
+		MouseX:          int16(dragX + 1),
+		MouseY:          0,
+		ButtonState:     vtinput.FromLeft1stButtonPressed,
+		MouseEventFlags: vtinput.MouseMoved,
+	}, false)
+	if fm.Screens[1] != dragged {
+		t.Fatal("short tab oscillated back after the long tab changed the rendered boundary")
+	}
+}
+
+func TestFrameManager_RestoreScreenNumbersKeepsFutureNumbersUnique(t *testing.T) {
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(80, 10)
+	fm := &frameManager{}
+	fm.Init(scr)
+	fm.Push(newMockFrame(0, 1, 20, 5, false))
+	fm.AddScreenBackground(newMockFrame(0, 1, 20, 5, false))
+	fm.AddScreenBackground(newMockFrame(0, 1, 20, 5, false))
+
+	fm.RestoreScreenNumbers([]int{2, 3, 1})
+	fm.AddScreenBackground(newMockFrame(0, 1, 20, 5, false))
+	if got := fm.Screens[1].Number; got != 4 {
+		t.Fatalf("new workspace number = %d, want 4 after restoring [2 3 1]", got)
+	}
+}
+
+func TestFrameManager_NewWorkspaceAppearsAfterActiveAndUsesCurrentMaxNumber(t *testing.T) {
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(80, 10)
+	fm := &frameManager{}
+	fm.Init(scr)
+	fm.Push(newMockFrame(0, 1, 20, 5, false))
+	fm.AddScreen(newMockFrame(0, 1, 20, 5, false))
+	fm.AddScreen(newMockFrame(0, 1, 20, 5, false))
+
+	// Remove the highest number. A stale monotonic counter would allocate 4;
+	// the current maximum is now 2, so the replacement must be number 3.
+	fm.SwitchScreen(0)
+	fm.CloseScreen(2)
+	fm.AddScreen(newMockFrame(0, 1, 20, 5, false))
+
+	if fm.ActiveIdx != 1 {
+		t.Fatalf("new workspace index = %d, want 1 immediately after the active tab", fm.ActiveIdx)
+	}
+	if got := []int{fm.Screens[0].Number, fm.Screens[1].Number, fm.Screens[2].Number}; !reflect.DeepEqual(got, []int{1, 3, 2}) {
+		t.Fatalf("workspace numbers/order = %v, want [1 3 2]", got)
+	}
+}
+
+func TestFrameManager_NewBackgroundWorkspaceAppearsAfterActive(t *testing.T) {
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(80, 10)
+	fm := &frameManager{}
+	fm.Init(scr)
+	fm.Push(newMockFrame(0, 1, 20, 5, false))
+	fm.AddScreen(newMockFrame(0, 1, 20, 5, false))
+	fm.AddScreen(newMockFrame(0, 1, 20, 5, false))
+	fm.SwitchScreen(0)
+
+	active := fm.Screens[0]
+	fm.AddScreenBackground(newMockFrame(0, 1, 20, 5, false))
+	if fm.ActiveIdx != 0 || fm.Screens[0] != active {
+		t.Fatal("background workspace changed the active tab")
+	}
+	if got := []int{fm.Screens[0].Number, fm.Screens[1].Number, fm.Screens[2].Number, fm.Screens[3].Number}; !reflect.DeepEqual(got, []int{1, 4, 2, 3}) {
+		t.Fatalf("background workspace order = %v, want [1 4 2 3]", got)
+	}
+}
+
+func TestFrameManager_MiddleClickClosesBackgroundWorkspace(t *testing.T) {
+	SetDefaultPalette()
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(80, 10)
+	fm := &frameManager{}
+	fm.Init(scr)
+	fm.Push(newMockFrame(0, 0, 20, 5, false))
+	fm.AddScreen(newMockFrame(0, 0, 20, 5, false))
+	fm.AddScreen(newMockFrame(0, 0, 20, 5, false))
+	active := fm.Screens[fm.ActiveIdx]
+	fm.drawWorkspaceTabs()
+	first := fm.workspaceTabHits[0]
+	fm.dispatchEvent(&vtinput.InputEvent{
+		Type:        vtinput.MouseEventType,
+		KeyDown:     true,
+		MouseX:      int16(first.x1 + 1),
+		MouseY:      0,
+		ButtonState: vtinput.FromLeft2ndButtonPressed,
+	}, false)
+	if len(fm.Screens) != 2 {
+		t.Fatalf("middle-click left %d workspaces, want 2", len(fm.Screens))
+	}
+	if fm.Screens[fm.ActiveIdx] != active {
+		t.Fatal("closing a background tab changed the active workspace")
+	}
+	if fm.Screens[0].Number != 2 || fm.Screens[1].Number != 3 {
+		t.Fatalf("remaining workspace numbers = [%d %d], want [2 3]", fm.Screens[0].Number, fm.Screens[1].Number)
+	}
+}
+
+func TestFrameManager_WorkspaceTabsSemanticModelAndActions(t *testing.T) {
+	SetDefaultPalette()
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(60, 10)
+	fm := &frameManager{}
+	fm.Init(scr)
+	forked := false
+	makeFrame := func(title string) *mockFrame {
+		frame := newMockFrame(0, 0, 20, 5, false)
+		frame.tabTitle = title
+		frame.onHandleCommand = func(cmd int, args any) bool {
+			forked = cmd == CmResize && args == "fork"
+			return forked
+		}
+		return frame
+	}
+	fm.Push(makeFrame("Left ↔ Right"))
+	fm.AddScreen(makeFrame("Python"))
+	fm.drawWorkspaceTabs()
+	fm.drawWorkspaceCounter()
+
+	scene := fm.ExportSemanticScene()
+	bar, ok := scene["workspaceTabs"].(map[string]any)
+	if !ok {
+		t.Fatalf("workspaceTabs semantic node missing: %#v", scene["workspaceTabs"])
+	}
+	if bar["kind"] != "tablist" || bar["visible"] != true || bar["activeIndex"] != 1 {
+		t.Fatalf("workspace tablist metadata = %#v", bar)
+	}
+	tabs, ok := bar["tabs"].([]map[string]any)
+	if !ok || len(tabs) != 2 {
+		t.Fatalf("workspace semantic tabs = %#v, want two tabs", bar["tabs"])
+	}
+	if tabs[0]["text"] != "Left ↔ Right" || tabs[0]["active"] != false || tabs[0]["w"] == nil {
+		t.Fatalf("first workspace semantic tab = %#v", tabs[0])
+	}
+	if tabs[1]["text"] != "Python" || tabs[1]["selected"] != true {
+		t.Fatalf("active workspace semantic tab = %#v", tabs[1])
+	}
+	if tabs[1]["closable"] != true || tabs[1]["closeAction"] != "workspace.close" {
+		t.Fatalf("workspace close semantics missing: %#v", tabs[1])
+	}
+	newTab := bar["newTab"].(map[string]any)
+	if newTab["kind"] != "button" || newTab["action"] != "workspace.new" || newTab["visible"] != true {
+		t.Fatalf("workspace new semantic node = %#v", newTab)
+	}
+	counter := bar["counter"].(map[string]any)
+	if counter["text"] != "[2/2]" || counter["current"] != 2 || counter["total"] != 2 {
+		t.Fatalf("workspace counter semantic node = %#v", counter)
+	}
+
+	if !fm.HandleSemanticAction(map[string]any{"action": "activate", "target": tabs[0]["id"]}) || fm.ActiveIdx != 0 {
+		t.Fatalf("semantic tab activation selected workspace %d, want 0", fm.ActiveIdx)
+	}
+	if !fm.HandleSemanticAction(map[string]any{"action": "workspace.new", "target": "workspace-new"}) || !forked {
+		t.Fatal("semantic workspace.new did not emit the Ctrl+N fork command")
+	}
+	if !fm.HandleSemanticAction(map[string]any{"action": "workspace.close", "target": tabs[1]["id"]}) || len(fm.Screens) != 1 {
+		t.Fatalf("semantic workspace.close left %d workspaces, want 1", len(fm.Screens))
+	}
+}
+
+func TestFrameManager_CtrlTabDirectAndMenuModes(t *testing.T) {
+	newManager := func() *frameManager {
+		scr := NewSilentScreenBuf()
+		scr.AllocBuf(80, 25)
+		fm := &frameManager{}
+		fm.Init(scr)
+		fm.Push(newMockFrame(0, 0, 80, 25, false))
+		fm.AddScreen(newMockFrame(0, 0, 80, 25, false))
+		return fm
+	}
+
+	direct := newManager()
+	direct.ConfigureWorkspaceTabs(WorkspaceTabsOnCtrl, WorkspaceCtrlTabDirect)
+	direct.dispatchEvent(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_TAB,
+		ControlKeyState: vtinput.LeftCtrlPressed,
+	}, false)
+	if direct.ActiveIdx != 0 || direct.switcherMenu != nil {
+		t.Fatalf("direct Ctrl+Tab active=%d menu=%v, want active=0 without menu", direct.ActiveIdx, direct.switcherMenu != nil)
+	}
+
+	menu := newManager()
+	menu.ConfigureWorkspaceTabs(WorkspaceTabsMultiple, WorkspaceCtrlTabMenu)
+	menu.dispatchEvent(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_TAB,
+		ControlKeyState: vtinput.LeftCtrlPressed,
+	}, false)
+	if menu.ActiveIdx != 1 || menu.switcherMenu == nil {
+		t.Fatalf("menu Ctrl+Tab active=%d menu=%v, want active=1 with menu", menu.ActiveIdx, menu.switcherMenu != nil)
+	}
+}
+
+func TestFrameManager_AltNumberSelectsStableWorkspaceNumber(t *testing.T) {
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	fm := &frameManager{}
+	fm.Init(scr)
+	first := newMockFrame(0, 0, 80, 25, false)
+	forwarded := 0
+	first.onProcessKey = func(*vtinput.InputEvent) bool {
+		forwarded++
+		return false
+	}
+	fm.Push(first)
+	fm.AddScreen(newMockFrame(0, 0, 80, 25, false))
+	fm.AddScreen(newMockFrame(0, 0, 80, 25, false))
+	fm.RestoreScreenNumbers([]int{7, 2, 9})
+	fm.ConfigureWorkspaceAltNumberSwitch(true)
+
+	fm.dispatchEvent(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_2,
+		ControlKeyState: vtinput.LeftAltPressed,
+	}, false)
+	if fm.ActiveIdx != 1 || fm.Screens[fm.ActiveIdx].Number != 2 {
+		t.Fatalf("Alt+2 selected index=%d number=%d, want stable workspace number 2", fm.ActiveIdx, fm.Screens[fm.ActiveIdx].Number)
+	}
+
+	fm.dispatchEvent(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_7,
+		ControlKeyState: vtinput.RightAltPressed,
+	}, false)
+	if fm.ActiveIdx != 0 || fm.Screens[fm.ActiveIdx].Number != 7 {
+		t.Fatalf("right Alt+7 selected index=%d number=%d, want stable workspace number 7", fm.ActiveIdx, fm.Screens[fm.ActiveIdx].Number)
+	}
+	forwarded = 0 // Ignore focus events generated by the workspace switches.
+
+	// Missing numbers and modified variants are not consumed.
+	fm.dispatchEvent(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_1,
+		ControlKeyState: vtinput.LeftAltPressed,
+	}, false)
+	fm.dispatchEvent(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_2,
+		ControlKeyState: vtinput.LeftAltPressed | vtinput.ShiftPressed,
+	}, false)
+	if fm.ActiveIdx != 0 || forwarded != 2 {
+		t.Fatalf("fall-through Alt-number variants: active=%d forwarded=%d, want 0/2", fm.ActiveIdx, forwarded)
+	}
+
+	fm.ConfigureWorkspaceAltNumberSwitch(false)
+	fm.dispatchEvent(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_2,
+		ControlKeyState: vtinput.LeftAltPressed,
+	}, false)
+	if fm.ActiveIdx != 0 || forwarded != 3 {
+		t.Fatalf("disabled Alt-number shortcut: active=%d forwarded=%d, want 0/3", fm.ActiveIdx, forwarded)
+	}
+}
+
+func TestFrameManager_CtrlAltNumberSelectsWorkspaceOnlyInOnCtrlTabMode(t *testing.T) {
+	newManager := func(mode WorkspaceTabMode) (*frameManager, *int) {
+		scr := NewSilentScreenBuf()
+		scr.AllocBuf(80, 25)
+		fm := &frameManager{}
+		fm.Init(scr)
+		forwarded := 0
+		first := newMockFrame(0, 0, 80, 25, false)
+		first.onProcessKey = func(*vtinput.InputEvent) bool {
+			forwarded++
+			return false
+		}
+		fm.Push(first)
+		fm.AddScreen(newMockFrame(0, 0, 80, 25, false))
+		fm.RestoreScreenNumbers([]int{1, 2})
+		fm.ConfigureWorkspaceTabs(mode, WorkspaceCtrlTabDirect)
+		fm.ConfigureWorkspaceAltNumberSwitch(true)
+		fm.SwitchScreen(0)
+		forwarded = 0 // Ignore focus events generated while arranging the fixture.
+		return fm, &forwarded
+	}
+
+	event := func() *vtinput.InputEvent {
+		return &vtinput.InputEvent{
+			Type:            vtinput.KeyEventType,
+			KeyDown:         true,
+			VirtualKeyCode:  vtinput.VK_2,
+			ControlKeyState: vtinput.LeftCtrlPressed | vtinput.LeftAltPressed,
+		}
+	}
+
+	onCtrl, _ := newManager(WorkspaceTabsOnCtrl)
+	onCtrl.dispatchEvent(event(), false)
+	if onCtrl.ActiveIdx != 1 {
+		t.Fatalf("Ctrl+Alt+2 in Ctrl-only tab mode selected index %d, want 1", onCtrl.ActiveIdx)
+	}
+	onCtrl.SwitchScreen(0)
+	onCtrl.dispatchEvent(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_2,
+		ControlKeyState: vtinput.RightCtrlPressed | vtinput.RightAltPressed,
+	}, false)
+	if onCtrl.ActiveIdx != 1 {
+		t.Fatalf("right Ctrl+Alt+2 in Ctrl-only tab mode selected index %d, want 1", onCtrl.ActiveIdx)
+	}
+
+	for _, mode := range []WorkspaceTabMode{WorkspaceTabsAlways, WorkspaceTabsMultiple} {
+		fm, forwarded := newManager(mode)
+		fm.dispatchEvent(event(), false)
+		if fm.ActiveIdx != 0 || *forwarded != 1 {
+			t.Fatalf("Ctrl+Alt+2 in tab mode %d: active=%d forwarded=%d, want 0/1", mode, fm.ActiveIdx, *forwarded)
+		}
 	}
 }
 

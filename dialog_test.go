@@ -416,18 +416,18 @@ func TestDialog_CloseButton_Shifted(t *testing.T) {
 	d := NewDialog(0, 0, 79, 10, "Shifted Close Test")
 	d.ShowClose = true
 
-	// With 2 screens and X2=79, getControlOffset must return 6.
-	// Button [x] should be at 79-6=73, 74, 75.
+	// The [current/total] counter occupies five cells at the right edge, so
+	// the close control moves left and keeps one separating cell.
 	d.ProcessMouse(&vtinput.InputEvent{
 		Type:        vtinput.MouseEventType,
 		KeyDown:     true,
-		MouseX:      74, // Middle of [x] at offset 6
+		MouseX:      72, // Middle of [x] at offset 8
 		MouseY:      0,
 		ButtonState: vtinput.FromLeft1stButtonPressed,
 	})
 
 	if !d.IsDone() {
-		t.Error("Shifted close button click failed to close the dialog at MouseX=74")
+		t.Error("Shifted close button click failed to close the dialog at MouseX=72")
 	}
 }
 

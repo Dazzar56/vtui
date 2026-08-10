@@ -174,7 +174,8 @@ func (bw *BaseWindow) Show(scr *ScreenBuf) {
 		if bw.ShowClose {
 			offset += 3
 		}
-		scr.Write(bw.X2-offset, bw.Y1, StringToCharInfo(zoomStr, Palette[bw.frame.ColorBoxIdx]))
+		controlAttr := withForeground(Palette[bw.frame.ColorBoxIdx], Palette[bw.frame.ColorTitleIdx])
+		scr.Write(bw.X2-offset, bw.Y1, StringToCharInfo(zoomStr, controlAttr))
 	}
 	if bw.Number > 0 && bw.Number <= 9 {
 		numStr := fmt.Sprintf("%c%d%c", UIStrings.CloseBrackets[0], bw.Number, UIStrings.CloseBrackets[1])
