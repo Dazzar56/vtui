@@ -3,8 +3,6 @@ package vtui
 import (
 	"fmt"
 	"strings"
-
-	"github.com/mattn/go-runewidth"
 )
 
 // LayoutError represents a specific UI design violation.
@@ -244,10 +242,10 @@ func elementID(el UIElement) string {
 	}
 	if s, ok := el.(interface{ GetText() string }); ok {
 		if txt := strings.TrimSpace(s.GetText()); txt != "" {
-			return fmt.Sprintf("%T %q", el, runewidth.Truncate(txt, 24, "..."))
+			return fmt.Sprintf("%T %q", el, TruncateString(txt, 24, "..."))
 		}
 	}
-	return fmt.Sprintf("Type:%T", el)
+	return fmt.Sprintf("%T:%p", el, el)
 }
 
 func isDecorative(el UIElement) bool {
@@ -301,17 +299,17 @@ func contentMetrics(el UIElement) (width int, clips bool, known bool) {
 	switch v := el.(type) {
 	case *Button:
 		// cleanText already contains the decorating brackets.
-		return runewidth.StringWidth(v.cleanText), false, true
+		return StringWidth(v.cleanText), false, true
 	case *Checkbox:
 		// The "[x] " prefix is 4 columns wide.
-		return 4 + runewidth.StringWidth(v.cleanText), false, true
+		return 4 + StringWidth(v.cleanText), false, true
 	case *RadioGroup:
 		return gridContentWidth(v.Columns, v.Items, v.colWidths), false, true
 	case *CheckGroup:
 		return gridContentWidth(v.Columns, v.Items, v.colWidths), false, true
 	case *Text:
 		// Text truncates itself in DisplayObject.
-		return runewidth.StringWidth(v.cleanText), true, true
+		return StringWidth(v.cleanText), true, true
 	}
 	return 0, false, false
 }
@@ -334,7 +332,7 @@ func gridContentWidth(cols int, items []string, colWidths []int) int {
 		}
 		clean, _, _ := ParseAmpersandString(itm)
 		// 4 columns for the "( ) " / "[ ] " prefix.
-		if w := offset + 4 + runewidth.StringWidth(clean); w > widest {
+		if w := offset + 4 + StringWidth(clean); w > widest {
 			widest = w
 		}
 	}

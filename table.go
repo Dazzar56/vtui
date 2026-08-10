@@ -1,7 +1,6 @@
 package vtui
 
 import (
-	"github.com/mattn/go-runewidth"
 	"github.com/unxed/vtinput"
 	"sort"
 	"strings"
@@ -192,7 +191,7 @@ func (c *TableColumn) minWidth() int {
 	if c.MinWidth > 0 {
 		return c.MinWidth
 	}
-	return runewidth.StringWidth(c.Title)
+	return StringWidth(c.Title)
 }
 
 func (t *Table) SetRows(rows []TableRow) {
@@ -515,8 +514,8 @@ func (t *Table) drawRow(scr *ScreenBuf, y int, rowIdx int, attr uint64) {
 // they are mapped to display cells accounting for truncation, alignment
 // padding and wide runes.
 func (t *Table) applyCellHighlight(cis []CharInfo, text string, width int, align Alignment, span cellHighlight) {
-	truncated := runewidth.Truncate(text, width, "")
-	space := width - runewidth.StringWidth(truncated)
+	truncated := TruncateString(text, width, "")
+	space := width - StringWidth(truncated)
 	if space < 0 {
 		space = 0
 	}
@@ -530,7 +529,7 @@ func (t *Table) applyCellHighlight(cis []CharInfo, text string, width int, align
 	cellPos := padLeft
 	runeIdx := 0
 	for _, r := range truncated {
-		w := runewidth.RuneWidth(r)
+		w := ClusterWidth(string(r))
 		if w < 1 {
 			runeIdx++
 			continue // zero-width runes occupy no display cell
@@ -553,16 +552,16 @@ func (t *Table) formatSortedHeader(title string, width int, align Alignment) str
 	if t.SortAscending {
 		arrow = " ↑"
 	}
-	arrowWidth := runewidth.StringWidth(arrow)
+	arrowWidth := StringWidth(arrow)
 	if width <= arrowWidth {
-		return runewidth.Truncate(arrow, width, "")
+		return TruncateString(arrow, width, "")
 	}
 	return t.formatCell(title, width-arrowWidth, align) + arrow
 }
 
 func (t *Table) formatCell(text string, width int, align Alignment) string {
-	text = runewidth.Truncate(text, width, "")
-	vLen := runewidth.StringWidth(text)
+	text = TruncateString(text, width, "")
+	vLen := StringWidth(text)
 	if vLen >= width {
 		return text
 	}
@@ -837,19 +836,19 @@ func (t *Table) drawSearchLine(scr *ScreenBuf) {
 	if t.searchCursor < t.searchLeft {
 		t.searchLeft = t.searchCursor
 	}
-	for t.searchLeft < t.searchCursor && runewidth.StringWidth(string(t.searchRunes[t.searchLeft:t.searchCursor])) >= visibleWidth {
+	for t.searchLeft < t.searchCursor && StringWidth(string(t.searchRunes[t.searchLeft:t.searchCursor])) >= visibleWidth {
 		t.searchLeft++
 	}
 
 	scr.Write(t.X1, y, StringToCharInfo("> ", attr))
 	text := string(t.searchRunes[t.searchLeft:])
-	text = runewidth.Truncate(text, visibleWidth, "")
+	text = TruncateString(text, visibleWidth, "")
 	scr.Write(t.X1+2, y, StringToCharInfo(text, attr))
 
 	if t.IsFocused() {
 		scr.SetCursorVisible(true)
 		scr.SetCursorShape(CursorShapeUnderline)
-		cursorX := t.X1 + 2 + runewidth.StringWidth(string(t.searchRunes[t.searchLeft:t.searchCursor]))
+		cursorX := t.X1 + 2 + StringWidth(string(t.searchRunes[t.searchLeft:t.searchCursor]))
 		if cursorX > t.X2 {
 			cursorX = t.X2
 		}

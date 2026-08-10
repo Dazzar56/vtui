@@ -98,7 +98,7 @@ application vtui serves is a rewrite of it. Its approach, for the record:
 | 2 | Cursor covers the whole double width cell in graphical backends | **done** |
 | 3 | A defined contract for `Highlighter` attributes, and a mapper onto cells | **done** |
 | 4 | Graphical backends draw whole clusters, not just the base rune | **done** |
-| 5 | Remaining `go-runewidth` callers, and the three per rune writers | to do |
+| 5 | Remaining `go-runewidth` callers, and the three per rune writers | **done** |
 | 6 | BiDi for display only | to do |
 | 7 | BiDi for editing: caret, selection, input | to do |
 | 8 | Own width tables generated from the UCD, replacing `go-runewidth` | optional |

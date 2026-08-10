@@ -3,7 +3,6 @@ package vtui
 import (
 	"strings"
 
-	"github.com/mattn/go-runewidth"
 	"github.com/unxed/vtinput"
 )
 
@@ -195,12 +194,12 @@ func (t *TreeView) DisplayObject(scr *ScreenBuf) {
 			textStr := marker + fn.node.Text
 
 			// Clip string if too long
-			prefixWidth := runewidth.StringWidth(prefixStr)
-			textWidth := runewidth.StringWidth(textStr)
+			prefixWidth := StringWidth(prefixStr)
+			textWidth := StringWidth(textStr)
 
 			if prefixWidth+textWidth > width {
-				textStr = runewidth.Truncate(textStr, width-prefixWidth, "")
-				textWidth = runewidth.StringWidth(textStr)
+				textStr = TruncateString(textStr, width-prefixWidth, "")
+				textWidth = StringWidth(textStr)
 			}
 
 			scr.Write(t.X1, currY, StringToCharInfo(prefixStr, colLine))

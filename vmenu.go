@@ -3,7 +3,6 @@ package vtui
 import (
 	"unicode"
 
-	"github.com/mattn/go-runewidth"
 	"github.com/unxed/vtinput"
 )
 
@@ -357,12 +356,12 @@ func (m *VMenu) DisplayObject(scr *ScreenBuf) {
 
 		// Calculate layout
 		//clean, _, _ := ParseAmpersandString(item.Text)
-		//vLenText := runewidth.StringWidth(clean) + 1 // +1 for leading space
+		//vLenText := StringWidth(clean) + 1 // +1 for leading space
 		shortcutText := ""
 		vLenShortcut := 0
 		if item.Shortcut != "" {
 			shortcutText = item.Shortcut + " "
-			vLenShortcut = runewidth.StringWidth(shortcutText)
+			vLenShortcut = StringWidth(shortcutText)
 		}
 
 		// Draw background and text

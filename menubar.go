@@ -1,7 +1,6 @@
 package vtui
 
 import (
-	"github.com/mattn/go-runewidth"
 	"github.com/unxed/vtinput"
 	"unicode"
 )
@@ -90,7 +89,7 @@ func (mb *MenuBar) DisplayObject(scr *ScreenBuf) {
 		p.DrawStringHighlighted(currX, mb.Y1, "  "+item.Label+"  ", itemAttr, hiAttr)
 
 		clean, _, _ := ParseAmpersandString(item.Label)
-		currX += runewidth.StringWidth("  " + clean + "  ")
+		currX += StringWidth("  " + clean + "  ")
 	}
 }
 
@@ -99,7 +98,7 @@ func (mb *MenuBar) GetItemX(index int) int {
 	x := mb.X1 + 2
 	for i := 0; i < index; i++ {
 		clean, _, _ := ParseAmpersandString(mb.Items[i].Label)
-		x += runewidth.StringWidth("  " + clean + "  ")
+		x += StringWidth("  " + clean + "  ")
 	}
 	return x
 }
@@ -150,9 +149,9 @@ func (mb *MenuBar) ActivateSubMenu(index int) {
 	for _, itm := range items {
 		if !itm.Separator {
 			clean, _, _ := ParseAmpersandString(" " + itm.Text)
-			w := runewidth.StringWidth(clean)
+			w := StringWidth(clean)
 			if itm.Shortcut != "" {
-				w += runewidth.StringWidth(itm.Shortcut + " ")
+				w += StringWidth(itm.Shortcut + " ")
 			}
 			w += 4 // Minimum visual padding between text and shortcut/border
 			if w > maxWidth {

@@ -250,6 +250,47 @@ func TestEdit_HistoryMenu_Interactions(t *testing.T) {
 		t.Error("Mouse selection in history should inject execution event")
 	}
 }
+
+func TestEdit_CombiningMarkCaret(t *testing.T) {
+	SetDefaultPalette()
+	e := NewEdit(0, 0, 10, "e\u0301")
+	e.ClearSelection()
+
+	if e.curPos != 2 {
+		t.Errorf("Expected initial curPos 2, got %d", e.curPos)
+	}
+
+	e.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_LEFT})
+	if e.curPos != 0 {
+		t.Errorf("Expected curPos to jump over combining mark to 0, got %d", e.curPos)
+	}
+
+	e.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT})
+	if e.curPos != 2 {
+		t.Errorf("Expected curPos to jump over combining mark to 2, got %d", e.curPos)
+	}
+}
+
+func TestEdit_WideCharCaret(t *testing.T) {
+	SetDefaultPalette()
+	e := NewEdit(0, 0, 10, "世")
+	e.ClearSelection()
+
+	if e.curPos != 1 {
+		t.Errorf("Expected initial curPos 1, got %d", e.curPos)
+	}
+
+	pos := e.cursorPositionAtX(0)
+	if pos != 0 {
+		t.Errorf("Expected click on col 0 to return index 0, got %d", pos)
+	}
+
+	pos = e.cursorPositionAtX(1)
+	if pos != 0 {
+		t.Errorf("Expected click on col 1 (filler) to return index 0, got %d", pos)
+	}
+}
+
 func TestEdit_OnAction(t *testing.T) {
 	e := NewEdit(0, 0, 10, "test")
 	called := false

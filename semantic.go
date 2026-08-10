@@ -2,7 +2,6 @@ package vtui
 
 import (
 	"fmt"
-	"github.com/mattn/go-runewidth"
 	"github.com/unxed/vtinput"
 	"strings"
 )
@@ -598,7 +597,7 @@ func semanticMenuBar(mb *MenuBar) map[string]any {
 		if i < len(mb.Items)-1 {
 			itemW = mb.GetItemX(i+1) - itemX
 		} else {
-			itemW = runewidth.StringWidth("  " + clean + "  ")
+			itemW = StringWidth("  " + clean + "  ")
 		}
 
 		subItems := make([]map[string]any, 0, len(item.SubItems))
