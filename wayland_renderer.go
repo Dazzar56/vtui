@@ -221,7 +221,7 @@ func (r *WaylandRenderer) Render(buf, shadow []CharInfo, w, h int, forceRedraw b
 				if char != 0 && char != ' ' {
 					r.stats.glyphs++
 					if !r.drawCustomChar(img, char, cpx, py, cw, ch, fgColor) {
-						r.drawCachedGlyph(img, char, cpx, py, rw, cfg, cbg, fgColor, bgColor)
+						r.drawCachedGlyph(img, currCell.Char, cpx, py, rw, cfg, cbg, fgColor, bgColor)
 					}
 				}
 
@@ -269,8 +269,8 @@ func (r *WaylandRenderer) Render(buf, shadow []CharInfo, w, h int, forceRedraw b
 	r.stats.totalDraw += time.Since(start)
 }
 
-func (r *WaylandRenderer) drawCachedGlyph(img *image.RGBA, char rune, px, py, rw int, fg, bg uint32, fgCol, bgCol color.RGBA) {
-	key := glyphKey{char, fg, bg, rw}
+func (r *WaylandRenderer) drawCachedGlyph(img *image.RGBA, cellVal uint64, px, py, rw int, fg, bg uint32, fgCol, bgCol color.RGBA) {
+	key := glyphKey{cellVal, fg, bg, rw}
 	cached, ok := r.glyphCache[key]
 
 	cw, ch := r.host.cellW, r.host.cellH
@@ -294,7 +294,7 @@ func (r *WaylandRenderer) drawCachedGlyph(img *image.RGBA, char rune, px, py, rw
 			Face: r.face,
 			Dot:  fixed.Point26_6{X: fixed.I(0), Y: metrics.Ascent},
 		}
-		d.DrawString(string(char))
+		d.DrawString(CellString(cellVal))
 		r.glyphCache[key] = cached
 	}
 

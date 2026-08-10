@@ -6,7 +6,7 @@ import "time"
 
 // glyphKey используется для кэширования отрисованных символов
 type glyphKey struct {
-	r  rune
+	ch uint64
 	fg uint32
 	bg uint32
 	w  int

@@ -118,6 +118,23 @@ func TestX11Host_SendEvent_ClosedChannelSafety(t *testing.T) {
 	h.sendEvent(&vtinput.InputEvent{Type: vtinput.ResizeEventType})
 }
 
+func TestX11Renderer_GlyphCacheUniqueness(t *testing.T) {
+	ch1 := RegisterCluster("e\u0301")
+	ch2 := RegisterCluster("e\u0308")
+
+	key1 := glyphKey{ch1, 0, 0, 1}
+	key2 := glyphKey{ch2, 0, 0, 1}
+
+	if key1 == key2 {
+		t.Error("expected different composite clusters to produce unique glyph keys")
+	}
+
+	keySame := glyphKey{ch1, 0, 0, 1}
+	if key1 != keySame {
+		t.Error("expected same composite cluster to produce identical glyph key")
+	}
+}
+
 func TestX11Host_MouseStateTracking(t *testing.T) {
 	pr, pw := io.Pipe()
 	defer pw.Close()

@@ -478,8 +478,9 @@ func (r *GogpuRenderer) DrawToScreen(ctx *gogpu.Context) {
 							}
 						}
 
-						if char != 0 && char != ' ' && r.face != nil {
-							dc.DrawString(string(char), lx+float64(sx*r.cellW), ly+ascent)
+						str := CellString(currCell.Char)
+						if str != "" && str != " " && r.face != nil {
+							dc.DrawString(str, lx+float64(sx*r.cellW), ly+ascent)
 						}
 						sx += rw
 					}

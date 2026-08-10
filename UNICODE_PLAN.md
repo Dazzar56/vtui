@@ -97,7 +97,7 @@ application vtui serves is a rewrite of it. Its approach, for the record:
 | 1 | Cluster layer, composite registry, cluster aware cell producers, ANSI renderer | **done** |
 | 2 | Cursor covers the whole double width cell in graphical backends | **done** |
 | 3 | A defined contract for `Highlighter` attributes, and a mapper onto cells | **done** |
-| 4 | Graphical backends draw whole clusters, not just the base rune | to do |
+| 4 | Graphical backends draw whole clusters, not just the base rune | **done** |
 | 5 | Remaining `go-runewidth` callers, and the three per rune writers | to do |
 | 6 | BiDi for display only | to do |
 | 7 | BiDi for editing: caret, selection, input | to do |
