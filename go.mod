@@ -5,7 +5,7 @@ go 1.25.5
 require (
 	github.com/gogpu/gg v0.50.14
 	github.com/gogpu/gogpu v0.50.2
-	github.com/gogpu/gpucontext v0.24.0
+	github.com/gogpu/gpucontext v0.26.0
 	github.com/jezek/xgb v1.3.1
 	github.com/mattn/go-runewidth v0.0.15
 	github.com/neurlang/wayland v0.4.2
