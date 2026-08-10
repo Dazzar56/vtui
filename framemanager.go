@@ -7,6 +7,7 @@ import (
 	"golang.org/x/term"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -21,6 +22,29 @@ const (
 	TypeMenu
 	TypeUser
 )
+
+// WorkspaceTabMode controls how the workspace tab bar is presented.
+type WorkspaceTabMode int
+
+const (
+	WorkspaceTabsAlways WorkspaceTabMode = iota
+	WorkspaceTabsMultiple
+	WorkspaceTabsOnCtrl
+)
+
+// WorkspaceCtrlTabMode controls whether Ctrl+Tab cycles immediately or opens
+// the existing Screens switcher and commits the selection on Ctrl release.
+type WorkspaceCtrlTabMode int
+
+const (
+	WorkspaceCtrlTabDirect WorkspaceCtrlTabMode = iota
+	WorkspaceCtrlTabMenu
+)
+
+type workspaceTabHit struct {
+	x1, x2 int
+	index  int
+}
 
 // Frame is the interface that all top-level screen objects (windows, dialogs, menus) must implement.
 type Frame interface {
@@ -55,9 +79,31 @@ type Frame interface {
 
 // AppScreen represents an isolated workspace with its own frame stack.
 type AppScreen struct {
+	Number        int // Stable workspace number; never changes during its lifetime.
 	Frames        []Frame
 	CapturedFrame Frame
 	Transparent   bool // Если true, под этим экраном будет рисоваться предыдущий
+}
+
+// WorkspaceTabTitleProvider lets an application provide a compact title for
+// the tab strip without changing the fuller title used by the Screens menu.
+type WorkspaceTabTitleProvider interface {
+	GetWorkspaceTabTitle() string
+}
+
+// WorkspaceMenuInfo describes the richer, full-width representation of a
+// workspace used by the Screens popup. Secondary is shown as an aligned second
+// column when present (for example, the right panel path).
+type WorkspaceMenuInfo struct {
+	Icon      string
+	Primary   string
+	Secondary string
+}
+
+// WorkspaceMenuInfoProvider lets an application expose structured workspace
+// information without overloading its window or compact tab title.
+type WorkspaceMenuInfoProvider interface {
+	GetWorkspaceMenuInfo() WorkspaceMenuInfo
 }
 
 func (s *AppScreen) GetTitle() string {
@@ -66,6 +112,29 @@ func (s *AppScreen) GetTitle() string {
 	}
 	// Возвращаем заголовок самого верхнего фрейма, очищенный от декоративных пробелов
 	return strings.TrimSpace(s.Frames[len(s.Frames)-1].GetTitle())
+}
+
+func (s *AppScreen) GetTabTitle() string {
+	for i := len(s.Frames) - 1; i >= 0; i-- {
+		if provider, ok := s.Frames[i].(WorkspaceTabTitleProvider); ok {
+			if title := strings.TrimSpace(provider.GetWorkspaceTabTitle()); title != "" {
+				return title
+			}
+		}
+	}
+	return s.GetTitle()
+}
+
+func (s *AppScreen) GetMenuInfo() WorkspaceMenuInfo {
+	for i := len(s.Frames) - 1; i >= 0; i-- {
+		if provider, ok := s.Frames[i].(WorkspaceMenuInfoProvider); ok {
+			info := provider.GetWorkspaceMenuInfo()
+			if strings.TrimSpace(info.Primary) != "" {
+				return info
+			}
+		}
+	}
+	return WorkspaceMenuInfo{Icon: "▣", Primary: s.GetTitle()}
 }
 
 func (s *AppScreen) GetProgress() int {
@@ -92,8 +161,9 @@ func (s *AppScreen) NeedsAttention() bool {
 
 // frameManager manages multiple screens and the main application loop.
 type frameManager struct {
-	Screens   []*AppScreen
-	ActiveIdx int
+	Screens           []*AppScreen
+	ActiveIdx         int
+	activationHistory []*AppScreen
 
 	frames         []Frame // Points to the active screen's frame stack
 	scr            *ScreenBuf
@@ -123,9 +193,21 @@ type frameManager struct {
 	capturedFrame Frame // Points to the active screen's captured frame
 
 	// Switcher State
-	ctrlPressed  bool
-	switcherMenu *VMenu
-	running      bool
+	ctrlPressed              bool
+	switcherMenu             *VMenu
+	WorkspaceTabMode         WorkspaceTabMode
+	WorkspaceCtrlTabMode     WorkspaceCtrlTabMode
+	WorkspaceAltNumberSwitch bool
+	WorkspaceTabBarAttr      uint64
+	WorkspaceActiveAttr      uint64
+	WorkspaceAccentAttr      uint64
+	WorkspaceAttentionAttr   uint64
+	workspaceColorsSet       bool
+	workspaceTabHits         []workspaceTabHit
+	workspaceNewTabX         int
+	workspaceTabDrag         *AppScreen
+	workspaceTabDragHits     []workspaceTabHit
+	running                  bool
 
 	lastMouseClickTime     time.Time
 	lastMouseX, lastMouseY int
@@ -171,11 +253,106 @@ func (fm *frameManager) GetActiveToast() string {
 // FrameManager is the global instance of the frame manager.
 var FrameManager = &frameManager{}
 
+// WorkspaceTopInset is the number of rows reserved above application frames
+// for the persistent workspace tab bar.
+func (fm *frameManager) WorkspaceTopInset() int {
+	if fm.WorkspaceTabMode == WorkspaceTabsAlways ||
+		(fm.WorkspaceTabMode == WorkspaceTabsMultiple && len(fm.Screens) > 1) {
+		return 1
+	}
+	return 0
+}
+
+// ConfigureWorkspaceTabs applies workspace presentation and Ctrl+Tab policy.
+// Frames are resized because the persistent modes can add or remove a top row.
+func (fm *frameManager) ConfigureWorkspaceTabs(tabMode WorkspaceTabMode, ctrlTabMode WorkspaceCtrlTabMode) {
+	if tabMode < WorkspaceTabsAlways || tabMode > WorkspaceTabsOnCtrl {
+		tabMode = WorkspaceTabsMultiple
+	}
+	if ctrlTabMode < WorkspaceCtrlTabDirect || ctrlTabMode > WorkspaceCtrlTabMenu {
+		ctrlTabMode = WorkspaceCtrlTabDirect
+	}
+	oldInset := fm.WorkspaceTopInset()
+	fm.WorkspaceTabMode = tabMode
+	fm.WorkspaceCtrlTabMode = ctrlTabMode
+	if oldInset != fm.WorkspaceTopInset() {
+		fm.ResizeAllScreens()
+	}
+	fm.Redraw()
+}
+
+// ConfigureWorkspaceAltNumberSwitch controls direct Alt+1..9 activation by
+// stable workspace number. Applications opt in explicitly to avoid taking
+// existing Alt combinations from embedders that do not expose workspace tabs.
+func (fm *frameManager) ConfigureWorkspaceAltNumberSwitch(enabled bool) {
+	fm.WorkspaceAltNumberSwitch = enabled
+}
+
+// ConfigureWorkspaceTabColors lets the host application match the tab strip
+// to its theme-specific panel colors.
+func (fm *frameManager) ConfigureWorkspaceTabColors(barAttr, activeAttr, accentAttr, attentionAttr uint64) {
+	fm.WorkspaceTabBarAttr = barAttr
+	fm.WorkspaceActiveAttr = activeAttr
+	fm.WorkspaceAccentAttr = accentAttr
+	fm.WorkspaceAttentionAttr = attentionAttr
+	fm.workspaceColorsSet = true
+	fm.Redraw()
+}
+
+// ResizeAllScreens reapplies the current terminal dimensions to every frame.
+func (fm *frameManager) ResizeAllScreens() {
+	if fm.scr == nil {
+		return
+	}
+	for _, screen := range fm.Screens {
+		for _, frame := range screen.Frames {
+			frame.ResizeConsole(fm.scr.width, fm.scr.height)
+		}
+	}
+}
+
 func (fm *frameManager) SyncCurrentScreen() {
 	if len(fm.Screens) > 0 {
 		fm.Screens[fm.ActiveIdx].Frames = fm.frames
 		fm.Screens[fm.ActiveIdx].CapturedFrame = fm.capturedFrame
 	}
+}
+
+func (fm *frameManager) screenIndex(target *AppScreen) int {
+	for i, screen := range fm.Screens {
+		if screen == target {
+			return i
+		}
+	}
+	return -1
+}
+
+func (fm *frameManager) rememberActiveScreen() {
+	if fm.ActiveIdx < 0 || fm.ActiveIdx >= len(fm.Screens) {
+		return
+	}
+	active := fm.Screens[fm.ActiveIdx]
+	if n := len(fm.activationHistory); n == 0 || fm.activationHistory[n-1] != active {
+		fm.activationHistory = append(fm.activationHistory, active)
+	}
+}
+
+func (fm *frameManager) fallbackScreenIndex(defaultIdx int) int {
+	for len(fm.activationHistory) > 0 {
+		last := len(fm.activationHistory) - 1
+		screen := fm.activationHistory[last]
+		fm.activationHistory = fm.activationHistory[:last]
+		if idx := fm.screenIndex(screen); idx >= 0 {
+			return idx
+		}
+	}
+	if defaultIdx >= len(fm.Screens) {
+		defaultIdx = len(fm.Screens) - 1
+	}
+	if defaultIdx < 0 {
+		defaultIdx = 0
+	}
+	return defaultIdx
 }
 
 func (fm *frameManager) GetActiveFrames(sIdx int) []Frame {
@@ -202,13 +379,11 @@ func (fm *frameManager) SwitchScreen(idx int) {
 	}
 
 	fm.SyncCurrentScreen()
+	fm.rememberActiveScreen()
 
-	// MRU Reordering: Move the selected screen to the end of the array
-	screen := fm.Screens[idx]
-	fm.Screens = append(fm.Screens[:idx], fm.Screens[idx+1:]...)
-	fm.Screens = append(fm.Screens, screen)
-
-	fm.ActiveIdx = len(fm.Screens) - 1
+	// Workspace order is stable. Activation changes only the active index;
+	// it never moves a workspace or changes its persistent Number.
+	fm.ActiveIdx = idx
 	fm.frames = fm.Screens[fm.ActiveIdx].Frames
 	fm.capturedFrame = fm.Screens[fm.ActiveIdx].CapturedFrame
 	DebugLog("FM: Switched to Screen %d (Workspace: %s)", fm.ActiveIdx, fm.Screens[fm.ActiveIdx].GetTitle())
@@ -222,22 +397,47 @@ func (fm *frameManager) SwitchScreen(idx int) {
 }
 
 func (fm *frameManager) createScreen(f Frame, transparent bool) *AppScreen {
-	newScreen := &AppScreen{Frames: make([]Frame, 0, 10), Transparent: transparent}
+	number := 1
+	for _, screen := range fm.Screens {
+		if screen.Number >= number {
+			number = screen.Number + 1
+		}
+	}
+	newScreen := &AppScreen{Number: number, Frames: make([]Frame, 0, 10), Transparent: transparent}
 	if !transparent {
 		newScreen.Frames = append(newScreen.Frames, NewDesktop())
 	}
 	newScreen.Frames = append(newScreen.Frames, f)
 	return newScreen
 }
+
+func (fm *frameManager) insertScreenAfterActive(screen *AppScreen) int {
+	idx := fm.ActiveIdx + 1
+	if idx < 0 {
+		idx = 0
+	}
+	if idx > len(fm.Screens) {
+		idx = len(fm.Screens)
+	}
+	fm.Screens = append(fm.Screens, nil)
+	copy(fm.Screens[idx+1:], fm.Screens[idx:])
+	fm.Screens[idx] = screen
+	return idx
+}
+
 func (fm *frameManager) AddScreen(f Frame) {
 	// If we are already shutting down or in an inconsistent state, bail out.
 	if fm.Screens == nil {
 		return
 	}
 
+	oldInset := fm.WorkspaceTopInset()
 	fm.SyncCurrentScreen()
-	fm.Screens = append(fm.Screens, fm.createScreen(f, false))
-	fm.SwitchScreen(len(fm.Screens) - 1)
+	newIdx := fm.insertScreenAfterActive(fm.createScreen(f, false))
+	if oldInset != fm.WorkspaceTopInset() {
+		fm.ResizeAllScreens()
+	}
+	fm.SwitchScreen(newIdx)
 	fm.Redraw()
 }
 
@@ -245,44 +445,79 @@ func (fm *frameManager) AddScreenHeadless(f Frame) {
 	if fm.Screens == nil {
 		return
 	}
+	oldInset := fm.WorkspaceTopInset()
 	fm.SyncCurrentScreen()
-	fm.Screens = append(fm.Screens, fm.createScreen(f, true))
-	fm.ActiveIdx = len(fm.Screens) - 1
+	fm.rememberActiveScreen()
+	fm.ActiveIdx = fm.insertScreenAfterActive(fm.createScreen(f, true))
 	fm.frames = fm.Screens[fm.ActiveIdx].Frames
 	fm.capturedFrame = nil
+	if oldInset != fm.WorkspaceTopInset() {
+		fm.ResizeAllScreens()
+	}
 	f.ProcessKey(&vtinput.InputEvent{Type: vtinput.FocusEventType, SetFocus: true})
 	fm.Redraw()
 }
 
 func (fm *frameManager) AddScreenBackground(f Frame) {
+	oldInset := fm.WorkspaceTopInset()
 	fm.SyncCurrentScreen()
-	// Insert at the beginning of the slice so it remains the "oldest" workspace
-	// and doesn't interfere with the MRU fallback order (which is at the end).
-	fm.Screens = append([]*AppScreen{fm.createScreen(f, false)}, fm.Screens...)
-	fm.ActiveIdx++ // Keep the user on the current active screen
-	DebugLog("FM: Added background screen at index 0. Current ActiveIdx: %d", fm.ActiveIdx)
+	// Place it next to its source workspace and leave focus unchanged.
+	newIdx := fm.insertScreenAfterActive(fm.createScreen(f, false))
+	if oldInset != fm.WorkspaceTopInset() {
+		fm.ResizeAllScreens()
+	}
+	DebugLog("FM: Added background screen at index %d. Current ActiveIdx: %d", newIdx, fm.ActiveIdx)
+	fm.Redraw()
+}
+
+// RestoreScreenNumbers restores stable display numbers in workspace order.
+// New workspaces derive their number from the current maximum when created.
+func (fm *frameManager) RestoreScreenNumbers(numbers []int) {
+	for i, number := range numbers {
+		if i >= len(fm.Screens) || number < 1 {
+			continue
+		}
+		fm.Screens[i].Number = number
+	}
 }
 
 func (fm *frameManager) CloseActiveScreen() {
+	fm.CloseScreen(fm.ActiveIdx)
+}
+
+// CloseScreen closes one workspace by index. Background workspaces can be
+// closed without activating them first, which is used by middle-click tabs.
+func (fm *frameManager) CloseScreen(idx int) {
+	if idx < 0 || idx >= len(fm.Screens) {
+		return
+	}
 	if len(fm.Screens) <= 1 {
 		fm.EmitCommand(CmQuit, nil)
 		return
 	}
 
-	screenToClose := fm.Screens[fm.ActiveIdx]
+	oldInset := fm.WorkspaceTopInset()
+	fm.SyncCurrentScreen()
+	closedIdx := idx
+	activeScreen := fm.Screens[fm.ActiveIdx]
+	closingActive := closedIdx == fm.ActiveIdx
+	screenToClose := fm.Screens[closedIdx]
 	for i := len(screenToClose.Frames) - 1; i >= 0; i-- {
 		screenToClose.Frames[i].Close()
 	}
 
-	fm.Screens = append(fm.Screens[:fm.ActiveIdx], fm.Screens[fm.ActiveIdx+1:]...)
-	newIdx := fm.ActiveIdx
-	if newIdx >= len(fm.Screens) {
-		newIdx = len(fm.Screens) - 1
+	fm.Screens = append(fm.Screens[:closedIdx], fm.Screens[closedIdx+1:]...)
+	newIdx := fm.screenIndex(activeScreen)
+	if closingActive || newIdx < 0 {
+		newIdx = fm.fallbackScreenIndex(closedIdx)
 	}
 	fm.ActiveIdx = newIdx
 	fm.frames = fm.Screens[newIdx].Frames
 	fm.capturedFrame = fm.Screens[newIdx].CapturedFrame
-	if len(fm.frames) > 0 {
+	if oldInset != fm.WorkspaceTopInset() {
+		fm.ResizeAllScreens()
+	}
+	if closingActive && len(fm.frames) > 0 {
 		fm.frames[len(fm.frames)-1].ProcessKey(&vtinput.InputEvent{Type: vtinput.FocusEventType, SetFocus: true})
 	}
 	fm.Redraw()
@@ -310,9 +545,18 @@ func (fm *frameManager) Screen() *ScreenBuf {
 func (fm *frameManager) Init(scr *ScreenBuf) {
 	fm.scr = scr
 	fm.frames = make([]Frame, 0, 10)
-	fm.Screens = []*AppScreen{{Frames: fm.frames}}
+	fm.Screens = []*AppScreen{{Number: 1, Frames: fm.frames}}
 	fm.ActiveIdx = 0
+	fm.activationHistory = nil
 	fm.mousePositionKnown = false
+	fm.WorkspaceTabMode = WorkspaceTabsMultiple
+	fm.WorkspaceCtrlTabMode = WorkspaceCtrlTabDirect
+	fm.WorkspaceAltNumberSwitch = false
+	fm.workspaceColorsSet = false
+	fm.workspaceTabHits = nil
+	fm.workspaceNewTabX = -1
+	fm.workspaceTabDrag = nil
+	fm.workspaceTabDragHits = nil
 
 	if fm.RedrawChan == nil {
 		fm.RedrawChan = make(chan struct{}, 1)
@@ -734,6 +978,266 @@ func (fm *frameManager) getScreenInfo(idx int, maxTitleLen int) (prefix, title, 
 	return
 }
 
+func (fm *frameManager) workspaceCounterText() string {
+	if len(fm.Screens) < 2 {
+		return ""
+	}
+	return fmt.Sprintf("[%d/%d]", fm.ActiveIdx+1, len(fm.Screens))
+}
+
+func withForeground(backgroundAttr, foregroundAttr uint64) uint64 {
+	if foregroundAttr&IsFgRGB != 0 {
+		return SetRGBFore(backgroundAttr, GetRGBFore(foregroundAttr))
+	}
+	return SetIndexFore(backgroundAttr, GetIndexFore(foregroundAttr))
+}
+
+func (fm *frameManager) workspaceBarAttr() uint64 {
+	if fm.workspaceColorsSet {
+		return fm.WorkspaceTabBarAttr
+	}
+	return Palette[ColMenuBarItem]
+}
+
+func (fm *frameManager) workspaceActiveAttr() uint64 {
+	if fm.workspaceColorsSet {
+		return fm.WorkspaceActiveAttr
+	}
+	return Palette[ColMenuBarSelected]
+}
+
+func (fm *frameManager) workspaceNumberAttr(backgroundAttr uint64) uint64 {
+	accentAttr := Palette[ColMenuBarHighlight]
+	if fm.workspaceColorsSet {
+		accentAttr = fm.WorkspaceAccentAttr
+	}
+	return withForeground(backgroundAttr, accentAttr)
+}
+
+func (fm *frameManager) workspaceAttentionAttr(backgroundAttr uint64) uint64 {
+	attentionAttr := Palette[ColMenuBarSelectedHighlight]
+	if fm.workspaceColorsSet {
+		attentionAttr = fm.WorkspaceAttentionAttr
+	}
+	return withForeground(backgroundAttr, attentionAttr)
+}
+
+func (fm *frameManager) hasBackgroundAttention() bool {
+	for i, screen := range fm.Screens {
+		if i != fm.ActiveIdx && screen.NeedsAttention() {
+			return true
+		}
+	}
+	return false
+}
+
+func (fm *frameManager) drawWorkspaceCounter() {
+	indicator := fm.workspaceCounterText()
+	if indicator == "" || fm.scr == nil {
+		return
+	}
+
+	baseAttr := Palette[ColMenuBarItem]
+	if fm.workspaceTabsVisible() {
+		baseAttr = fm.workspaceBarAttr()
+	}
+	currentAttr := fm.workspaceNumberAttr(baseAttr)
+	if fm.hasBackgroundAttention() {
+		currentAttr = fm.workspaceAttentionAttr(baseAttr)
+	}
+
+	current := strconv.Itoa(fm.ActiveIdx + 1)
+	total := strconv.Itoa(len(fm.Screens))
+	x := fm.scr.width - runewidth.StringWidth(indicator)
+	fm.scr.Write(x, 0, StringToCharInfo("[", baseAttr))
+	x++
+	fm.scr.Write(x, 0, StringToCharInfo(current, currentAttr))
+	x += runewidth.StringWidth(current)
+	fm.scr.Write(x, 0, StringToCharInfo("/"+total+"]", baseAttr))
+}
+
+func (fm *frameManager) workspaceTabsVisible() bool {
+	switch fm.WorkspaceTabMode {
+	case WorkspaceTabsAlways:
+		return true
+	case WorkspaceTabsMultiple:
+		return len(fm.Screens) > 1
+	case WorkspaceTabsOnCtrl:
+		return fm.ctrlPressed
+	default:
+		return false
+	}
+}
+
+func (fm *frameManager) drawWorkspaceTabs() {
+	fm.workspaceTabHits = fm.workspaceTabHits[:0]
+	fm.workspaceNewTabX = -1
+	if fm.scr == nil || !fm.workspaceTabsVisible() || len(fm.Screens) == 0 {
+		return
+	}
+
+	baseAttr := fm.workspaceBarAttr()
+	fm.scr.FillRect(0, 0, fm.scr.width-1, 0, ' ', baseAttr)
+	counterWidth := runewidth.StringWidth(fm.workspaceCounterText())
+	available := fm.scr.width - counterWidth
+	if available <= 0 {
+		return
+	}
+
+	tabsLimit := available
+	if tabsLimit >= 2 {
+		tabsLimit -= 2 // Reserve |+ after the compact tab sequence.
+	}
+
+	x := 0
+	for i, screen := range fm.Screens {
+		remaining := tabsLimit - x
+		if remaining < 1 {
+			break
+		}
+		tabsRemaining := len(fm.Screens) - i
+		separatorsWidth := tabsRemaining - 1
+		contentAvailable := remaining - separatorsWidth
+		maxTabWidth := 0
+		if contentAvailable > 0 {
+			maxTabWidth = contentAvailable / tabsRemaining
+		}
+		if maxTabWidth < 1 {
+			maxTabWidth = remaining
+		}
+
+		number := strconv.Itoa(screen.Number)
+		numberWidth := runewidth.StringWidth(number)
+		titleWidth := maxTabWidth - numberWidth - 3
+		if titleWidth < 0 {
+			titleWidth = 0
+		}
+		title := TruncateMiddle(screen.GetTabTitle(), titleWidth)
+
+		attr := baseAttr
+		if i == fm.ActiveIdx {
+			attr = fm.workspaceActiveAttr()
+		} else if screen.NeedsAttention() {
+			attr = fm.workspaceAttentionAttr(baseAttr)
+		}
+		numberAttr := fm.workspaceNumberAttr(attr)
+		if i != fm.ActiveIdx && screen.NeedsAttention() {
+			numberAttr = fm.workspaceAttentionAttr(attr)
+		}
+		tabStart := x
+		fm.scr.Write(x, 0, StringToCharInfo(" ", attr))
+		x++
+		fm.scr.Write(x, 0, StringToCharInfo(number, numberAttr))
+		x += numberWidth
+		if title != "" && x < tabsLimit {
+			fm.scr.Write(x, 0, StringToCharInfo(" "+title, attr))
+			x += 1 + runewidth.StringWidth(title)
+		}
+		if x < tabsLimit {
+			fm.scr.Write(x, 0, StringToCharInfo(" ", attr))
+			x++
+		}
+		fm.workspaceTabHits = append(fm.workspaceTabHits, workspaceTabHit{x1: tabStart, x2: x - 1, index: i})
+		if i < len(fm.Screens)-1 && x < tabsLimit {
+			fm.scr.Write(x, 0, StringToCharInfo("|", baseAttr))
+			x++
+		}
+	}
+	if x+2 <= available {
+		fm.scr.Write(x, 0, StringToCharInfo("|", baseAttr))
+		fm.scr.Write(x+1, 0, StringToCharInfo("+", fm.workspaceNumberAttr(baseAttr)))
+		fm.workspaceNewTabX = x + 1
+	}
+}
+
+func workspaceTabAt(hits []workspaceTabHit, x int) int {
+	for _, hit := range hits {
+		if x <= hit.x2 {
+			return hit.index
+		}
+	}
+	if len(hits) > 0 {
+		return hits[len(hits)-1].index
+	}
+	return -1
+}
+
+func (fm *frameManager) moveWorkspaceTab(screen *AppScreen, target int) bool {
+	from := fm.screenIndex(screen)
+	if from < 0 || target < 0 || target >= len(fm.Screens) || from == target {
+		return false
+	}
+	activeScreen := fm.Screens[fm.ActiveIdx]
+	if from < target {
+		copy(fm.Screens[from:target], fm.Screens[from+1:target+1])
+	} else {
+		copy(fm.Screens[target+1:from+1], fm.Screens[target:from])
+	}
+	fm.Screens[target] = screen
+	fm.ActiveIdx = fm.screenIndex(activeScreen)
+	fm.frames = fm.Screens[fm.ActiveIdx].Frames
+	fm.capturedFrame = fm.Screens[fm.ActiveIdx].CapturedFrame
+	// Refresh hit targets immediately so several move events arriving before
+	// the next render continue to reorder against the new visual order.
+	fm.drawWorkspaceTabs()
+	fm.drawWorkspaceCounter()
+	fm.Redraw()
+	return true
+}
+
+func (fm *frameManager) processWorkspaceTabDrag(ev *vtinput.InputEvent, mx int) bool {
+	if fm.workspaceTabDrag == nil {
+		return false
+	}
+	if ev.ButtonState == 0 {
+		fm.workspaceTabDrag = nil
+		fm.workspaceTabDragHits = nil
+		return true
+	}
+	if ev.ButtonState&vtinput.FromLeft1stButtonPressed == 0 {
+		fm.workspaceTabDrag = nil
+		fm.workspaceTabDragHits = nil
+		return true
+	}
+	if ev.MouseEventFlags&vtinput.MouseMoved != 0 {
+		// Use the slot geometry captured on mouse-down. Re-rendering after a
+		// reorder can move the boundary dramatically when a short tab trades
+		// places with a long one; using the new boundary would immediately move
+		// it back on the next one-pixel mouse event.
+		fm.moveWorkspaceTab(fm.workspaceTabDrag, workspaceTabAt(fm.workspaceTabDragHits, mx))
+	}
+	return true
+}
+
+func (fm *frameManager) cycleScreensDirect(forward bool) bool {
+	if len(fm.Screens) < 2 {
+		return false
+	}
+	idx := fm.ActiveIdx - 1
+	if forward {
+		idx = fm.ActiveIdx + 1
+	}
+	if idx < 0 {
+		idx = len(fm.Screens) - 1
+	} else if idx >= len(fm.Screens) {
+		idx = 0
+	}
+	fm.SwitchScreen(idx)
+	return true
+}
+
+func (fm *frameManager) switchScreenNumber(number int) bool {
+	for idx, screen := range fm.Screens {
+		if screen.Number == number {
+			if idx != fm.ActiveIdx {
+				fm.SwitchScreen(idx)
+			}
+			return true
+		}
+	}
+	return false
+}
+
 func (fm *frameManager) showScreensMenu() {
 	fm.SyncCurrentScreen()
 	menu := NewVMenu(" Screens ")
@@ -743,23 +1247,84 @@ func (fm *frameManager) showScreensMenu() {
 	if fm.scr != nil {
 		scrH = fm.scr.height
 	}
+	// Silent/headless screens used by embedders and tests may not have been
+	// allocated yet. Keep the popup layout valid until a real size arrives.
+	if scrW < 20 {
+		scrW = 40
+	}
 
-	menuW := (scrW * 60) / 100
+	maxNumberWidth := 1
+	maxLeftWidth := 0
+	maxRightWidth := 0
+	maxIconWidth := 1
+	infos := make([]WorkspaceMenuInfo, len(fm.Screens))
+	for _, screen := range fm.Screens {
+		if width := len(strconv.Itoa(screen.Number)); width > maxNumberWidth {
+			maxNumberWidth = width
+		}
+	}
+	for i, screen := range fm.Screens {
+		infos[i] = screen.GetMenuInfo()
+		if width := runewidth.StringWidth(infos[i].Primary); width > maxLeftWidth {
+			maxLeftWidth = width
+		}
+		if width := runewidth.StringWidth(infos[i].Secondary); width > maxRightWidth {
+			maxRightWidth = width
+		}
+		if width := runewidth.StringWidth(infos[i].Icon); width > maxIconWidth {
+			maxIconWidth = width
+		}
+	}
+
+	// number + marker + icon + primary + optional separator/secondary + frame
+	contentWidth := maxNumberWidth + 3 + maxIconWidth + 1 + maxLeftWidth
+	if maxRightWidth > 0 {
+		contentWidth += 3 + maxRightWidth
+	}
+	menuW := contentWidth + 4
 	if menuW < 40 {
 		menuW = 40
 	}
-	if menuW > 100 {
-		menuW = 100
+	maxMenuW := scrW - 4
+	if maxMenuW < 20 {
+		maxMenuW = scrW
 	}
-
-	maxTitleLen := menuW - 19
-	if maxTitleLen < 10 {
-		maxTitleLen = 10
+	if menuW > maxMenuW {
+		menuW = maxMenuW
+	}
+	availablePaths := menuW - 4 - maxNumberWidth - 3 - maxIconWidth - 1
+	if maxRightWidth > 0 {
+		availablePaths -= 3
+		if maxLeftWidth+maxRightWidth > availablePaths {
+			leftShare := availablePaths / 2
+			if leftShare < 4 {
+				leftShare = 4
+			}
+			maxLeftWidth = min(maxLeftWidth, leftShare)
+			maxRightWidth = max(0, availablePaths-maxLeftWidth)
+		}
+	} else {
+		maxLeftWidth = min(maxLeftWidth, availablePaths)
 	}
 
 	for i := range fm.Screens {
-		pre, tit, suf, _ := fm.getScreenInfo(i, maxTitleLen)
-		menu.AddItem(MenuItem{Text: pre + tit + suf, UserData: i})
+		pre, _, suf, _ := fm.getScreenInfo(i, 0)
+		info := infos[i]
+		primary := truncateMiddleCells(info.Primary, maxLeftWidth)
+		marker := strings.TrimSpace(pre)
+		line := " " + marker + strings.Repeat(" ", 1-runewidth.StringWidth(marker)) + " "
+		line += info.Icon + strings.Repeat(" ", maxIconWidth-runewidth.StringWidth(info.Icon)) + " "
+		line += primary + strings.Repeat(" ", maxLeftWidth-runewidth.StringWidth(primary))
+		if maxRightWidth > 0 {
+			secondary := truncateMiddleCells(info.Secondary, maxRightWidth)
+			line += " ↔ " + secondary
+		}
+		line += suf
+		menu.AddItem(MenuItem{
+			AccentPrefix: fmt.Sprintf("%*d", maxNumberWidth, fm.Screens[i].Number),
+			Text:         line,
+			UserData:     i,
+		})
 	}
 
 	menu.OnAction = func(idx int) {
@@ -776,8 +1341,41 @@ func (fm *frameManager) showScreensMenu() {
 	fm.Push(menu)
 }
 
+func truncateMiddleCells(value string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	if runewidth.StringWidth(value) <= width {
+		return value
+	}
+	if width == 1 {
+		return "…"
+	}
+	leftWidth := (width - 1) / 2
+	rightWidth := width - 1 - leftWidth
+	left := runewidth.Truncate(value, leftWidth, "")
+	runes := []rune(value)
+	start := len(runes)
+	used := 0
+	for start > 0 {
+		cellWidth := runewidth.RuneWidth(runes[start-1])
+		if used+cellWidth > rightWidth {
+			break
+		}
+		start--
+		used += cellWidth
+	}
+	return left + "…" + string(runes[start:])
+}
+
 func (fm *frameManager) cleanupDoneFrames() {
+	oldInset := fm.WorkspaceTopInset()
 	fm.SyncCurrentScreen()
+	oldActiveIdx := fm.ActiveIdx
+	var activeScreen *AppScreen
+	if fm.ActiveIdx >= 0 && fm.ActiveIdx < len(fm.Screens) {
+		activeScreen = fm.Screens[fm.ActiveIdx]
+	}
 
 	var oldTop Frame
 	if len(fm.frames) > 0 {
@@ -810,15 +1408,14 @@ func (fm *frameManager) cleanupDoneFrames() {
 		if isDead {
 			DebugLog("FM: Removing dead Screen %d (Total screens: %d)", sIdx, len(fm.Screens))
 			fm.Screens = append(fm.Screens[:sIdx], fm.Screens[sIdx+1:]...)
-			if fm.ActiveIdx >= sIdx && fm.ActiveIdx > 0 {
-				fm.ActiveIdx--
-			}
 		}
 	}
 
 	if len(fm.Screens) > 0 {
-		if fm.ActiveIdx >= len(fm.Screens) {
-			fm.ActiveIdx = len(fm.Screens) - 1
+		if idx := fm.screenIndex(activeScreen); idx >= 0 {
+			fm.ActiveIdx = idx
+		} else {
+			fm.ActiveIdx = fm.fallbackScreenIndex(oldActiveIdx)
 		}
 		fm.frames = fm.Screens[fm.ActiveIdx].Frames
 		fm.capturedFrame = fm.Screens[fm.ActiveIdx].CapturedFrame
@@ -829,6 +1426,9 @@ func (fm *frameManager) cleanupDoneFrames() {
 		}
 		if newTop != nil && newTop != oldTop {
 			newTop.ProcessKey(&vtinput.InputEvent{Type: vtinput.FocusEventType, SetFocus: true})
+		}
+		if oldInset != fm.WorkspaceTopInset() {
+			fm.ResizeAllScreens()
 		}
 	} else {
 		fm.Shutdown()
@@ -1290,30 +1890,12 @@ func (fm *frameManager) renderPhase() {
 		if fm.OnRender != nil {
 			fm.OnRender(fm.scr)
 		}
+		fm.drawWorkspaceTabs()
+		fm.drawWorkspaceCounter()
 
 		fm.scr.Graphics().EndFrame()
 		if semanticRenderer, ok := fm.scr.Renderer.(SemanticSceneRenderer); ok {
 			semanticRenderer.SetSemanticScene(fm.ExportSemanticScene())
-		}
-
-		// Draw Workspace count [N] and highlight if background needs attention
-		if len(fm.Screens) > 1 {
-			hasAttention := false
-			for i, s := range fm.Screens {
-				if i != fm.ActiveIdx && s.NeedsAttention() {
-					hasAttention = true
-					break
-				}
-			}
-
-			// Orange (0xFF8700) for attention, otherwise light gray
-			attr := SetRGBBoth(0, 0xD3D7CF, 0x2E3436)
-			if hasAttention {
-				attr = SetRGBFore(attr, 0xFF8700)
-			}
-
-			indicator := fmt.Sprintf("[%d]", len(fm.Screens))
-			fm.scr.Write(fm.scr.width-len(indicator), 0, StringToCharInfo(indicator, attr))
 		}
 
 		fm.scr.Flush()
@@ -1502,11 +2084,15 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 
 	// Track Ctrl state for Switcher logic
 	if ev.Type == vtinput.KeyEventType {
+		wasCtrlPressed := fm.ctrlPressed
 		ctrl := (ev.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
 		if ev.VirtualKeyCode == vtinput.VK_CONTROL || ev.VirtualKeyCode == vtinput.VK_LCONTROL || ev.VirtualKeyCode == vtinput.VK_RCONTROL {
 			ctrl = ev.KeyDown
 		}
 		fm.ctrlPressed = ctrl
+		if wasCtrlPressed != fm.ctrlPressed && fm.WorkspaceTabMode == WorkspaceTabsOnCtrl {
+			fm.Redraw()
+		}
 
 		// Commit Switcher selection on Ctrl release
 		if !fm.ctrlPressed && fm.switcherMenu != nil {
@@ -1556,6 +2142,27 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 		DebugLog("INPUT: KeyRelease VK=%s Char=%d (Stack: %d frames, ActiveIdx: %d)", vtinput.VKString(ev.VirtualKeyCode), ev.Char, len(fm.frames), fm.ActiveIdx)
 	}
 
+	// Alt+1..9 selects the workspace whose stable displayed number matches the
+	// digit. In the transient Ctrl-only tab-bar mode, Ctrl+Alt+1..9 does the
+	// same: Ctrl is already being held to reveal the bar, so requiring its
+	// release before choosing a tab would make the visible shortcuts awkward.
+	// Menus retain priority above, and a missing number falls through so
+	// applications and terminals can keep using that combination.
+	if fm.WorkspaceAltNumberSwitch && ev.Type == vtinput.KeyEventType && ev.KeyDown &&
+		ev.VirtualKeyCode >= vtinput.VK_1 && ev.VirtualKeyCode <= vtinput.VK_9 {
+		mods := ev.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed |
+			vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed | vtinput.ShiftPressed)
+		alt := mods&(vtinput.LeftAltPressed|vtinput.RightAltPressed) != 0
+		ctrl := mods&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed) != 0
+		shift := mods&vtinput.ShiftPressed != 0
+		validModifiers := alt && !shift && (!ctrl || fm.WorkspaceTabMode == WorkspaceTabsOnCtrl)
+		if validModifiers {
+			if fm.switchScreenNumber(int(ev.VirtualKeyCode - vtinput.VK_0)) {
+				return
+			}
+		}
+	}
+
 	// 3. Regular Dispatch (MDI Hit-Testing)
 	handled := false
 
@@ -1566,6 +2173,13 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 		mx, my := int(ev.MouseX), int(ev.MouseY)
 		if ev.ButtonState != 0 || ev.WheelDirection != 0 {
 			DebugLog("FM: Mouse Event at (%d,%d) State:%X Wheel:%d", mx, my, ev.ButtonState, ev.WheelDirection)
+		}
+		// Workspace-tab dragging is global capture: once a press starts on a
+		// tab, no part of the held gesture may leak into a frame or menu. Handle
+		// it before bounds checks so releasing outside the window still clears
+		// the capture.
+		if fm.processWorkspaceTabDrag(ev, mx) {
+			return
 		}
 
 		if mx < -1 || my < -1 {
@@ -1584,12 +2198,34 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 				fm.capturedFrame = nil // Release capture
 			}
 		} else {
-			// 3.1.2. Hit test for workspace counter [N] at top right
+			if my == 0 && ev.KeyDown && ev.ButtonState&vtinput.FromLeft2ndButtonPressed != 0 {
+				for _, hit := range fm.workspaceTabHits {
+					if mx >= hit.x1 && mx <= hit.x2 {
+						fm.CloseScreen(hit.index)
+						return
+					}
+				}
+			}
+			// 3.1.2. Hit test for workspace counter [current/total] and tabs.
 			if len(fm.Screens) > 1 && my == 0 {
-				indicatorLen := len(fmt.Sprintf("[%d]", len(fm.Screens)))
+				indicatorLen := runewidth.StringWidth(fm.workspaceCounterText())
 				if mx >= fm.scr.width-indicatorLen && mx < fm.scr.width {
 					if ev.ButtonState == vtinput.FromLeft1stButtonPressed && ev.KeyDown {
 						fm.showScreensMenu()
+						return
+					}
+				}
+			}
+			if my == 0 && ev.ButtonState == vtinput.FromLeft1stButtonPressed && ev.KeyDown {
+				if mx == fm.workspaceNewTabX {
+					fm.EmitCommand(CmResize, "fork")
+					return
+				}
+				for _, hit := range fm.workspaceTabHits {
+					if mx >= hit.x1 && mx <= hit.x2 {
+						fm.workspaceTabDrag = fm.Screens[hit.index]
+						fm.workspaceTabDragHits = append(fm.workspaceTabDragHits[:0], fm.workspaceTabHits...)
+						fm.SwitchScreen(hit.index)
 						return
 					}
 				}
@@ -1686,11 +2322,16 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 	// 3. Fallbacks (F9, Alt+Hotkey, Global Shortcuts) if top frame didn't want the key
 	if !handled && ev.Type == vtinput.KeyEventType && ev.KeyDown {
 
-		// Window Cycling (Ctrl+Tab / Ctrl+Shift+Tab)
+		// Workspace cycling (Ctrl+Tab / Ctrl+Shift+Tab).
 		if ev.VirtualKeyCode == vtinput.VK_TAB && (fm.ctrlPressed || fm.switcherMenu != nil) {
 			shift := (ev.ControlKeyState & vtinput.ShiftPressed) != 0
-			// Only consume the event if cycling is actually possible
-			if fm.CycleWindows(!shift) {
+			cycled := false
+			if fm.WorkspaceCtrlTabMode == WorkspaceCtrlTabMenu {
+				cycled = fm.CycleWindows(!shift)
+			} else {
+				cycled = fm.cycleScreensDirect(!shift)
+			}
+			if cycled {
 				return
 			}
 		}

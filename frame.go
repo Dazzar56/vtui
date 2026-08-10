@@ -1,5 +1,7 @@
 package vtui
 
+import "github.com/mattn/go-runewidth"
+
 // BorderedFrame represents a frame container that can have a title.
 // It embeds ScreenObject for position and visibility management.
 type BorderedFrame struct {
@@ -45,7 +47,7 @@ func (f *BorderedFrame) getControlOffset() int {
 	offset := 4
 	if FrameManager != nil && FrameManager.scr != nil && len(FrameManager.Screens) > 1 {
 		if f.X2 >= FrameManager.scr.width-1 {
-			offset = 6
+			offset = runewidth.StringWidth(FrameManager.workspaceCounterText()) + 3
 		}
 	}
 	return offset
@@ -83,6 +85,7 @@ func (f *BorderedFrame) DisplayObject(scr *ScreenBuf) {
 	p.DrawTitle(f.X1, f.Y1, f.X2, f.title, Palette[f.ColorTitleIdx])
 
 	if f.ShowClose {
-		p.DrawCloseButton(f.X2, f.Y1, f.getControlOffset(), Palette[f.ColorBoxIdx])
+		controlAttr := withForeground(Palette[f.ColorBoxIdx], Palette[f.ColorTitleIdx])
+		p.DrawCloseButton(f.X2, f.Y1, f.getControlOffset(), controlAttr)
 	}
 }

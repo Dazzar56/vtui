@@ -86,3 +86,63 @@ func TestHelpView_MouseNavigation(t *testing.T) {
 		t.Errorf("Middle-click failed to navigate: expected 'NextTopic', got %q", hv.current.Name)
 	}
 }
+
+func TestHelpView_MouseWheelScrollsWithoutChangingSelectedLink(t *testing.T) {
+	SetDefaultPalette()
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(80, 12)
+	FrameManager.Init(scr)
+
+	engine := NewHelpEngine(&mockHelpVFS{})
+	lines := make([]string, 30)
+	for i := range lines {
+		lines[i] = "Help text"
+	}
+	lines[1] = "~First~First@"
+	lines[20] = "~Second~Second@"
+	engine.AddTopic(&HelpTopic{
+		Name:  "Wheel",
+		Lines: lines,
+		Links: []HelpLink{{Line: 1, Target: "First"}, {Line: 20, Target: "Second"}},
+	})
+
+	hv := NewHelpView(engine, "Wheel")
+	hv.ResizeConsole(80, 12)
+	selected := hv.selectedIdx
+
+	if !hv.ProcessMouse(&vtinput.InputEvent{Type: vtinput.MouseEventType, WheelDirection: -1}) {
+		t.Fatal("wheel down was not handled")
+	}
+	if hv.scrollTop != 1 {
+		t.Fatalf("wheel down scrollTop = %d, want 1", hv.scrollTop)
+	}
+	if hv.selectedIdx != selected {
+		t.Fatalf("wheel down selected link = %d, want unchanged %d", hv.selectedIdx, selected)
+	}
+
+	hv.ProcessMouse(&vtinput.InputEvent{Type: vtinput.MouseEventType, WheelDirection: 1})
+	if hv.scrollTop != 0 {
+		t.Fatalf("wheel up scrollTop = %d, want 0", hv.scrollTop)
+	}
+	if hv.selectedIdx != selected {
+		t.Fatalf("wheel up selected link = %d, want unchanged %d", hv.selectedIdx, selected)
+	}
+
+	// The viewport stays clamped at the top and bottom even if the wheel
+	// keeps producing events there.
+	hv.ProcessMouse(&vtinput.InputEvent{Type: vtinput.MouseEventType, WheelDirection: 1})
+	if hv.scrollTop != 0 {
+		t.Fatalf("wheel scrolled above top to %d", hv.scrollTop)
+	}
+	for range 100 {
+		hv.ProcessMouse(&vtinput.InputEvent{Type: vtinput.MouseEventType, WheelDirection: -1})
+	}
+	viewHeight := (hv.Y2 - hv.Y1 + 1) - 2 - hv.current.StickyRows
+	wantBottom := len(lines) - hv.current.StickyRows - viewHeight
+	if hv.scrollTop != wantBottom {
+		t.Fatalf("wheel bottom scrollTop = %d, want %d", hv.scrollTop, wantBottom)
+	}
+	if hv.selectedIdx != selected {
+		t.Fatalf("wheel scrolling changed selected link to %d, want %d", hv.selectedIdx, selected)
+	}
+}

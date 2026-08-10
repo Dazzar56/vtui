@@ -17,8 +17,9 @@ func TestNewLabel_Linkage(t *testing.T) {
 		t.Errorf("Expected hotkey 'n', got %c", label.GetHotkey())
 	}
 
-	// Check the color (should be ColDialogText by default)
-	if label.color != Palette[ColDialogText] {
-		t.Error("Label did not use default ColDialogText color")
+	// A zero color means that the label resolves ColDialogText when it is
+	// painted, so an already open dialog follows runtime theme changes.
+	if label.color != 0 {
+		t.Errorf("Label stored a fixed color %#x instead of the live Dialog.Text color", label.color)
 	}
 }

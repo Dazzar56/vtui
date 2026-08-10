@@ -11,6 +11,13 @@ type Text struct {
 }
 
 func NewText(x, y int, content string, color uint64) *Text {
+	// Passing the current Dialog.Text value has historically meant "ordinary
+	// dialog text", not a permanently frozen custom color. Normalize it to the
+	// zero/default sentinel so an already open dialog follows runtime theme
+	// changes. Non-default explicit colors remain fixed.
+	if color == Palette[ColDialogText] {
+		color = 0
+	}
 	t := &Text{color: color}
 	t.X1, t.Y1 = x, y
 	t.Y2 = y // Single line height
@@ -35,7 +42,7 @@ func (t *Text) DisplayObject(scr *ScreenBuf) {
 	}
 
 	attr, highAttr := t.GetStateAttrs(ColDialogText, ColDialogText, ColDialogHighlightText, ColDialogHighlightText)
-	if t.color != 0 && t.color != Palette[ColDialogText] && !t.IsDisabled() {
+	if t.color != 0 && !t.IsDisabled() {
 		attr = t.color
 	}
 

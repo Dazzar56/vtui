@@ -144,10 +144,23 @@ func TestFrame_CloseButtonRendering(t *testing.T) {
 	frame.ShowClose = true
 	frame.DisplayObject(scr)
 
-	colBox := Palette[ColDialogBox]
-	checkCell(t, scr, 21, 5, uint64(UIStrings.CloseBrackets[0]), colBox)
-	checkCell(t, scr, 22, 5, uint64(UIStrings.CloseSymbol), colBox)
-	checkCell(t, scr, 23, 5, uint64(UIStrings.CloseBrackets[1]), colBox)
+	controlAttr := withForeground(Palette[ColDialogBox], Palette[ColDialogBoxTitle])
+	checkCell(t, scr, 21, 5, uint64(UIStrings.CloseBrackets[0]), controlAttr)
+	checkCell(t, scr, 22, 5, uint64(UIStrings.CloseSymbol), controlAttr)
+	checkCell(t, scr, 23, 5, uint64(UIStrings.CloseBrackets[1]), controlAttr)
+}
+
+func TestWindow_ZoomButtonUsesTitleForeground(t *testing.T) {
+	SetDefaultPalette()
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(40, 10)
+	window := NewWindow(5, 5, 25, 9, "Window")
+	window.Show(scr)
+
+	controlAttr := withForeground(Palette[ColDialogBox], Palette[ColDialogBoxTitle])
+	checkCell(t, scr, 18, 5, uint64(UIStrings.CloseBrackets[0]), controlAttr)
+	checkCell(t, scr, 19, 5, uint64(UIStrings.ZoomSymbol), controlAttr)
+	checkCell(t, scr, 20, 5, uint64(UIStrings.CloseBrackets[1]), controlAttr)
 }
 
 func TestFrame_IsBorderClick(t *testing.T) {
