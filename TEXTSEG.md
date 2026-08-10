@@ -46,24 +46,15 @@ strictly wcwidth terminal.
 - `SanitizeCluster` instead of `SanitizeRune`, whenever the surrounding text
   is at hand. `SanitizeRune` remains for callers that only have one rune.
 
-## Staged plan
+## Where the rest of the work is written down
 
-1. **Done.** The cluster layer, the composite cell registry, cluster aware
-   cell producers (`StringToCharInfo`, `FillCharInfo`,
-   `FillCharInfoWithSelection`, `StringToCharInfoHighlighted`), the painter and
-   the ANSI renderer.
-2. Graphical backends draw whole clusters. Today `x11_renderer.go`,
-   `wayland_renderer.go` and `gogpu_renderer.go` call `CellBaseRune` and draw
-   the base character only, so a composed character loses its marks there while
-   keeping the right number of columns. Terminal output is already correct.
-3. The remaining `go-runewidth` callers in the widgets, and the three places
-   that write text one rune per call: `edit.go`, `multilineedit.go`,
-   `vtext.go`.
-4. BiDi. The plan is `golang.org/x/text/unicode/bidi`, already an indirect
-   dependency: `bidi.Paragraph` for the reordering and `bidi.AppendReverse`
-   for mirroring paired brackets. First for read only widgets, where a string
-   is laid out once and never edited.
-5. BiDi in editable fields: the caret has to move in visual order while the
-   buffer stays logical, so `edit.go` needs a logical to visual map. A
-   `BidiMode` setting (off / display only / full) keeps this out of the way of
-   anyone who does not need it.
+This file describes the machinery. The task it belongs to, what is done, what
+is left and how to do it, lives in `UNICODE_PLAN.md`. Start there.
+
+The far2l equivalents, for anyone comparing the two: `COMP_CHAR` and
+`COMPOSITE_CHAR_MARK` in `WinPort/WinCompat.h`, the registry in
+`WinPort/src/APIConsole.cpp`, and the width and composition classification in
+`utils/include/CharClasses.h`. vtui takes the cell representation from them
+almost unchanged, and deliberately does not take the composition rules: real
+grapheme clusters replace far2l's prefix and suffix classes, and the ICU
+dependency their tables are generated from has no place in a Go program.

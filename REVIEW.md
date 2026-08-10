@@ -36,6 +36,38 @@ answers cannot both be right. `EmojiPresentationWide` exists so an application
 can pick; nothing detects the terminal and sets it. Probing for this is
 possible - draw and ask for the cursor position - and belongs with whatever
 else ends up probing the terminal.
+## The Highlighter interface does not say what its attributes index
+
+`Highlight` returns one attribute slice per line and never states whether the
+index is a byte, a rune or a cell. Before text was laid out by cluster the
+three were close enough to get away with; they are not now, and a consumer
+that guesses cells will drift by a few positions at the first emoji and stay
+drifted. An application built on vtui reports exactly that symptom with
+colorer. Nothing was changed here, because choosing the contract is the fix
+and it deserves its own patch: see stage 3 of `UNICODE_PLAN.md`.
+
+## Graphical backends draw the base character and drop the marks
+
+x11, wayland and gogpu call `CellBaseRune` and render one glyph per cell, so a
+composed character comes out bare there while the terminal renders it
+correctly. Column counts agree either way, so nothing shifts; only the accent
+is missing. This was the deliberate price of landing the cluster layer without
+touching three font caches in the same patch.
+
+## The cursor is one cell wide over a two cell character
+
+All three graphical backends draw the cursor rectangle at a fixed single cell
+width, and two of them skip filler cells before the cursor test, so a cursor on
+the right half of a wide character is not drawn at all. far2l's wx backend
+solves this by scaling the rectangle by the character's cell count, which is
+what stage 2 will copy.
+
+## Shaping is nobody's job here
+
+Arabic joining forms and Indic reordering are left to the font stack. vtui
+counts columns and hands over text. This is fine for a terminal, where the
+emulator does the same, and it is a visible limitation in the graphical
+backends, where vtui is the emulator. No plan to address it.
 
 ## A gogpu drop is told nothing about the source
 
