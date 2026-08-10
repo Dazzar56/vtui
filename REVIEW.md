@@ -54,13 +54,26 @@ correctly. Column counts agree either way, so nothing shifts; only the accent
 is missing. This was the deliberate price of landing the cluster layer without
 touching three font caches in the same patch.
 
-## The cursor is one cell wide over a two cell character
+## Cell width now comes from the buffer, not from the character
 
-All three graphical backends draw the cursor rectangle at a fixed single cell
-width, and two of them skip filler cells before the cursor test, so a cursor on
-the right half of a wide character is not drawn at all. far2l's wx backend
-solves this by scaling the rectangle by the character's cell count, which is
-what stage 2 will copy.
+x11 and wayland used to ask go-runewidth how wide the character in a cell was,
+which could disagree with the number of cells the layout engine actually gave
+it. Both now read the span back out of the buffer with CellSpanAt, so the
+renderer cannot disagree with the layout, and the cursor follows. gogpu still
+derives the span inline in its glyph loop, where the same one line call would
+do; it was left alone because it is already correct and stage 4 will be in that
+code anyway. If a fourth backend ever appears, CellSpanAt is the thing it
+should use.
+
+## Nothing tests that a backend actually draws a wide cursor
+
+CellSpanAt is covered, and it is where the logic lives, but the three call
+sites are three hand edits inside render loops that need a window to run. A
+regression there would be silent until somebody looks at a screen. The honest
+fix is a headless backend that renders into an image buffer and lets a test
+assert pixels; the x11 and wayland renderers already draw into an
+image.RGBA and are two thirds of the way there. Nobody has needed it enough
+yet.
 
 ## Shaping is nobody's job here
 

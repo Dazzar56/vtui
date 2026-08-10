@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/jezek/xgb/xproto"
-	"github.com/mattn/go-runewidth"
 	"golang.org/x/image/font"
 	"golang.org/x/image/math/fixed"
 )
@@ -287,10 +286,7 @@ func (r *X11Renderer) Render(buf, shadow []CharInfo, w, h int, forceRedraw bool)
 				}
 
 				char := CellBaseRune(currCell.Char)
-				rw := runewidth.RuneWidth(char)
-				if rw < 1 {
-					rw = 1
-				}
+				_, rw := CellSpanAt(buf, w, currX, y)
 
 				cpx := currX * cw
 				cfg, cbg := r.getCellColors(currCell)
@@ -304,7 +300,7 @@ func (r *X11Renderer) Render(buf, shadow []CharInfo, w, h int, forceRedraw bool)
 					}
 				}
 
-				if currX == r.cursorX && y == r.cursorY && cursorVisible {
+				if cursorVisible && y == r.cursorY && r.cursorX >= currX && r.cursorX < currX+rw {
 					var startY int
 					if r.cursorShape == CursorShapeBlock {
 						startY = 0
@@ -321,7 +317,7 @@ func (r *X11Renderer) Render(buf, shadow []CharInfo, w, h int, forceRedraw bool)
 							continue
 						}
 						rowStart := pixelY * img.Stride
-						for ix := 0; ix < cw; ix++ {
+						for ix := 0; ix < cw*rw; ix++ {
 							pixelX := cpx + ix
 							if pixelX < 0 || pixelX >= img.Rect.Max.X {
 								continue

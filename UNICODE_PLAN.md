@@ -96,7 +96,7 @@ application vtui serves is a rewrite of it. Its approach, for the record:
 | Stage | What | State |
 |---|---|---|
 | 1 | Cluster layer, composite registry, cluster aware cell producers, ANSI renderer | **done** |
-| 2 | Cursor covers the whole double width cell in graphical backends | to do |
+| 2 | Cursor covers the whole double width cell in graphical backends | **done** |
 | 3 | A defined contract for `Highlighter` attributes, and a mapper onto cells | to do |
 | 4 | Graphical backends draw whole clusters, not just the base rune | to do |
 | 5 | Remaining `go-runewidth` callers, and the three per rune writers | to do |
@@ -134,44 +134,55 @@ everything else takes what `go-runewidth` says, and the emoji sequences every
 terminal special cases are pinned to two. The details and the reasoning are in
 `TEXTSEG.md`.
 
-## 6. Stage 2 - the cursor over a double width character
+## 6. Stage 2 - the cursor over a double width character - done
 
-**Symptom.** In the x11, wayland and gogpu backends the cursor rectangle is
-one cell wide even when it sits on a character occupying two.
+**What the symptom was.** In the x11, wayland and gogpu backends the cursor
+rectangle was one cell wide even when it sat on a character occupying two, and
+a cursor parked on the right half of such a character was not drawn at all,
+because those loops skip filler cells before reaching the cursor test.
 
-**Cause.** All three draw the cursor with a hard coded single cell width, and
-the x11 and wayland loops additionally `continue` past filler cells before the
-cursor test is reached, so a cursor parked on the second half of a wide
-character is not drawn at all.
+**What the cause turned out to be.** Wider than the cursor. x11 and wayland
+took the cell count from `runewidth.RuneWidth` applied to the base rune of the
+cell. That number is the width of a character, not the number of cells the
+layout engine gave the cluster, and the two differ for exactly the text this
+task is about: a cluster carrying U+FE0F occupies two cells while its base rune
+measures one. So the renderer could disagree with the layout, and the cursor
+was only the visible half of it.
 
-**What to do.**
+**What was done.**
 
-In `x11_renderer.go` and `wayland_renderer.go`, inside the per cell loop: the
-cell's column count is already in the local variable `rw`. The cursor test is
-currently `currX == r.cursorX && y == r.cursorY`; it must become a range test,
-true when `r.cursorX` is at least `currX` and less than `currX + rw`. The fill
-loop `for ix := 0; ix < cw; ix++` must run to `cw * rw`.
-
-In `gogpu_renderer.go` the cursor is drawn once after the cell loop, from
-`r.cursorX` and `r.cellW`. Add a small helper that, given the render buffer,
-its width and a cursor position, returns the leftmost column of the character
-under the cursor and how many columns it spans: walk left while the cell is a
-filler, then walk right while the following cell is a filler. Multiply the
-rectangle by that span and start it at that leftmost column.
-
-That helper belongs in `screenbuf.go`, exported, because all three backends
-want it and stage 4 wants it too. Suggested shape:
+`CellSpanAt` in `screenbuf.go` is the single answer to "what character is in
+this cell and how wide is it":
 
     func CellSpanAt(buf []CharInfo, width, x, y int) (startX, span int)
 
-with `span` at least one and `startX` never past `x`.
+It walks left off any filler to find the character's first column, then right
+to count the fillers that follow. `span` is never below one, and out of range
+coordinates answer as a plain one column cell so callers need no bounds check
+of their own. Tests are in `cellspan_test.go`, including the composite cluster
+case that motivated it.
 
-**Tests.** `CellSpanAt` is pure and testable without a window: build a
-`[]CharInfo` by hand containing a wide character, and assert the span from
-both of its columns. The drawing itself is not unit testable here; do not try.
+The three backends now use it:
 
-**Done when.** `CellSpanAt` exists and is tested, all three backends use it,
-and the cursor on a wide character covers both columns from either half.
+- `x11_renderer.go` and `wayland_renderer.go` take `rw` from `CellSpanAt`
+  instead of from `runewidth`, so glyph placement and cursor both follow the
+  buffer. The cursor test became a range test - true when the cursor column
+  falls anywhere inside the character - and the invert loop runs `cw*rw`
+  pixels wide. `go-runewidth` is no longer imported by either.
+- `gogpu_renderer.go` draws its cursor once, after the cell loop, so it calls
+  `CellSpanAt` on `r.renderBuf` to find the character's first column and span,
+  and scales the rectangle by it. Its glyph loop still derives the span inline;
+  that code is already correct and stage 4 will be inside it anyway.
+
+**How to check it by hand.** Put a wide character in an edit field, move the
+caret onto it from the left and from the right, in each graphical backend. The
+cursor must cover both columns either way, and must not vanish. `❤\uFE0F` is
+the interesting one, because it is the case the old code got wrong even in
+principle.
+
+**What this stage deliberately did not do.** It did not touch the terminal
+backend, which was already correct: the terminal draws its own cursor and only
+needs the cell position, which it always had.
 
 ## 7. Stage 3 - the highlighter contract
 

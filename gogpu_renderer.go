@@ -517,13 +517,15 @@ func (r *GogpuRenderer) DrawToScreen(ctx *gogpu.Context) {
 
 			if cursorVisible {
 				dc.SetColor(color.White)
-				cx := float64(r.cursorX * r.cellW)
+				curX, curSpan := CellSpanAt(r.renderBuf, drawCols, r.cursorX, r.cursorY)
+				cx := float64(curX * r.cellW)
 				cy := float64(r.cursorY * r.cellH)
+				curW := float64(curSpan * r.cellW)
 				if r.cursorShape == CursorShapeBlock {
-					dc.DrawRectangle(cx, cy, float64(r.cellW), float64(r.cellH))
+					dc.DrawRectangle(cx, cy, curW, float64(r.cellH))
 				} else {
 					cy += float64(r.cellH) - 2
-					dc.DrawRectangle(cx, cy, float64(r.cellW), 2)
+					dc.DrawRectangle(cx, cy, curW, 2)
 				}
 				dc.Fill()
 			}

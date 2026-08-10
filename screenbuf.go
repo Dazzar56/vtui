@@ -463,6 +463,35 @@ func (s *ScreenBuf) GetCell(x, y int) CharInfo {
 	return s.buf[y*s.width+x]
 }
 
+// CellSpanAt reports which character occupies the cell at (x, y) and how many
+// columns it claims. startX is the column that character begins at, which is x
+// itself unless x landed on the filler half of a double width character, and
+// span is never less than one. Out of range coordinates answer as a plain one
+// column cell so that callers need no second bounds check.
+//
+// Renderers use this instead of measuring the character they are about to
+// draw: the layout engine has already decided how many cells the cluster gets,
+// and a renderer that measures again can disagree with it.
+func CellSpanAt(buf []CharInfo, width, x, y int) (startX, span int) {
+	if width <= 0 || x < 0 || y < 0 || x >= width {
+		return x, 1
+	}
+	rowOff := y * width
+	if rowOff < 0 || rowOff+width > len(buf) {
+		return x, 1
+	}
+
+	startX = x
+	for startX > 0 && buf[rowOff+startX].Char == WideCharFiller {
+		startX--
+	}
+	span = 1
+	for startX+span < width && buf[rowOff+startX+span].Char == WideCharFiller {
+		span++
+	}
+	return startX, span
+}
+
 // Dump записывает содержимое буфера в поток в формате, оптимизированном для нейросетей.
 // Сначала идет текстовое превью, затем детальные данные атрибутов с RLE-сжатием.
 func (s *ScreenBuf) Dump(w io.Writer) {
