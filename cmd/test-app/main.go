@@ -37,6 +37,19 @@ func (v *localVFS) ReadDir(ctx context.Context, p string, onChunk func([]vtui.FS
 // DemoWindow wraps vtui.Window to showcase Turbo Vision-style command routing.
 type DemoWindow struct {
 	*vtui.Window
+	workspaceIcon      string
+	workspaceTabTitle  string
+	workspaceSecondary string
+}
+
+func (d *DemoWindow) GetWorkspaceTabTitle() string { return d.workspaceTabTitle }
+
+func (d *DemoWindow) GetWorkspaceMenuInfo() vtui.WorkspaceMenuInfo {
+	return vtui.WorkspaceMenuInfo{
+		Icon:      d.workspaceIcon,
+		Primary:   d.workspaceTabTitle,
+		Secondary: d.workspaceSecondary,
+	}
 }
 
 func (d *DemoWindow) HandleCommand(cmd int, args any) bool {
@@ -53,9 +66,54 @@ func (d *DemoWindow) HandleCommand(cmd int, args any) bool {
 	case 1003: // Table demo dialog
 		showTableDialog()
 		return true
+	case 1004: // Add a workspace-tab demo screen
+		addDemoWorkspace()
+		return true
 	}
 	// Fallback to default window behavior (e.g. CmClose, CmZoom)
 	return d.Window.HandleCommand(cmd, args)
+}
+
+var demoWorkspaceSerial = 3
+
+func addDemoWorkspace() {
+	demoWorkspaceSerial++
+	width, height := vtui.FrameManager.GetScreenSize(), vtui.FrameManager.GetScreenHeight()
+	vtui.FrameManager.AddScreen(buildWorkspaceDemoWindow(
+		width,
+		height,
+		fmt.Sprintf("Workspace %d", demoWorkspaceSerial),
+		"◆",
+		fmt.Sprintf("Dynamically added screen %d", demoWorkspaceSerial),
+	))
+}
+
+func buildWorkspaceDemoWindow(width, height int, name, icon, description string) *DemoWindow {
+	base := vtui.NewWindow(0, 0, 57, 14, " Workspace TabControl: "+name+" ")
+	base.ShowClose = true
+	base.Center(width, height)
+	demo := &DemoWindow{
+		Window:             base,
+		workspaceIcon:      icon,
+		workspaceTabTitle:  icon + " " + name,
+		workspaceSecondary: description,
+	}
+
+	x, y := demo.X1, demo.Y1
+	demo.AddItem(vtui.NewGroupBox(x+2, y+2, x+55, y+10, "Workspace TabControl"))
+	demo.AddItem(vtui.NewText(x+4, y+4, description, 0))
+	demo.AddItem(vtui.NewText(x+4, y+6, "Ctrl+Tab / Ctrl+Shift+Tab switches tabs", 0))
+	demo.AddItem(vtui.NewText(x+4, y+7, "Alt+1..9 selects by stable tab number", 0))
+	demo.AddItem(vtui.NewText(x+4, y+8, "Drag to reorder; middle-click closes a tab", 0))
+
+	btnNew := vtui.NewButton(x+15, y+12, "&New tab")
+	btnNew.OnClick = addDemoWorkspace
+	demo.AddItem(btnNew)
+
+	btnClose := vtui.NewButton(x+31, y+12, "&Close tab")
+	btnClose.OnClick = func() { vtui.FrameManager.CloseActiveScreen() }
+	demo.AddItem(btnClose)
+	return demo
 }
 func (d *DemoWindow) ProcessKey(e *vtinput.InputEvent) bool {
 	// Preserve Ctrl+Q as an exit shortcut for the demo app only
@@ -269,6 +327,8 @@ func main() {
 
 	setup := func() {
 		vtui.SetWindowTitle("vtui demo")
+		vtui.FrameManager.ConfigureWorkspaceTabs(vtui.WorkspaceTabsAlways, vtui.WorkspaceCtrlTabDirect)
+		vtui.FrameManager.ConfigureWorkspaceAltNumberSwitch(true)
 
 		width, height := 80, 25
 		if vtui.FrameManager != nil {
@@ -295,6 +355,7 @@ func main() {
 				{Separator: true},
 				{Text: "UI S&howcase", Command: 1002},
 				{Text: "&Table Demo", Command: 1003},
+				{Text: "New Workspace &Tab", Command: 1004},
 			}},
 			{Label: "&Right", SubItems: []vtui.MenuItem{{Text: "Command &2"}}},
 		}
@@ -311,7 +372,12 @@ func main() {
 		baseWin.ShowClose = true
 		baseWin.Center(width, height)
 
-		dlg := &DemoWindow{Window: baseWin}
+		dlg := &DemoWindow{
+			Window:             baseWin,
+			workspaceIcon:      "▣",
+			workspaceTabTitle:  "▣ Controls",
+			workspaceSecondary: "Comprehensive control showcase",
+		}
 		x1, y1 := dlg.X1, dlg.Y1
 		topMenu.SetOwner(dlg)
 
@@ -426,6 +492,13 @@ func main() {
 		// IMPORTANT: Actually put the dialog into the FrameManager stack
 		dlg.Center(width, height)
 		vtui.FrameManager.Push(dlg)
+
+		// Populate the workspace TabControl with distinct screens at startup.
+		// AddScreen places each new tab to the right of the active one; returning
+		// to index zero leaves the comprehensive controls demo as the initial tab.
+		vtui.FrameManager.AddScreen(buildWorkspaceDemoWindow(width, height, "Inspector", "◇", "Properties and inspection workspace"))
+		vtui.FrameManager.AddScreen(buildWorkspaceDemoWindow(width, height, "Activity", "≡", "Events, jobs, and diagnostic output"))
+		vtui.FrameManager.SwitchScreen(0)
 	}
 
 	runConsole := func() {
