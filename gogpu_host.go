@@ -258,6 +258,8 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 			}
 
 			if isSpecialOrModifiedKey(vk, currMods) {
+                // Buggy
+                /*
 				// A modified key carries its character too. The X11 and
 				// Wayland backends put the virtual key and the character in
 				// one event unconditionally, and accelerators such as
@@ -271,6 +273,7 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 				if ev.Char == 0 {
 					ev.Char = defaultRuneForVK(vk)
 				}
+                */
 				host.sendEvent(ev)
 			} else {
 				if host.lastRuneForVK != nil {
