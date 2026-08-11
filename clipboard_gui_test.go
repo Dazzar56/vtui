@@ -42,6 +42,8 @@ func withTerminalClipboard(t *testing.T, disabled bool) {
 // the shell the application was launched from and print as garbage.
 func TestSetClipboard_NoOSC52WhenTerminalDisabled(t *testing.T) {
 	withTerminalClipboard(t, true)
+	testSkipOSClipboard = true
+	defer func() { testSkipOSClipboard = false }()
 
 	out := captureStdout(t, func() { SetClipboard("secret text") })
 
@@ -56,9 +58,8 @@ func TestSetClipboard_NoOSC52WhenTerminalDisabled(t *testing.T) {
 // With a terminal attached the escape must still be the last resort, so the
 // GUI change does not quietly disable clipboard support for terminal users.
 func TestSetClipboard_EmitsOSC52WhenTerminalPresent(t *testing.T) {
-	if _, ok := getOSClipboard(); ok {
-		t.Skip("an OS clipboard helper is available here, so OSC 52 is never reached")
-	}
+	testSkipOSClipboard = true
+	defer func() { testSkipOSClipboard = false }()
 	withTerminalClipboard(t, false)
 
 	out := captureStdout(t, func() { SetClipboard("hello") })
@@ -72,6 +73,8 @@ func TestSetClipboard_EmitsOSC52WhenTerminalPresent(t *testing.T) {
 // clipboard helper exists and the escape fallback is suppressed.
 func TestClipboard_RoundTripsThroughInternalBuffer(t *testing.T) {
 	withTerminalClipboard(t, true)
+	testSkipOSClipboard = true
+	defer func() { testSkipOSClipboard = false }()
 
 	const want = "выделенный текст\nвторая строка"
 	captureStdout(t, func() { SetClipboard(want) })
@@ -97,6 +100,8 @@ func TestDisableTerminalClipboard(t *testing.T) {
 // unbounded string in the internal buffer.
 func TestSetClipboard_TruncatesOversizedTextInGUIMode(t *testing.T) {
 	withTerminalClipboard(t, true)
+	testSkipOSClipboard = true
+	defer func() { testSkipOSClipboard = false }()
 
 	const limit = 2 * 1024 * 1024
 	captureStdout(t, func() { SetClipboard(strings.Repeat("x", limit+4096)) })

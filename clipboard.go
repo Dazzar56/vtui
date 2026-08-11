@@ -15,6 +15,8 @@ var (
 	// window rather than a terminal, so the OSC 52 escape fallback has
 	// nobody to talk to.
 	noTerminalBehind atomic.Bool
+
+	testSkipOSClipboard bool
 )
 
 // DisableTerminalClipboard tells the clipboard layer that no terminal is
@@ -49,7 +51,7 @@ func SetClipboard(text string) {
 		return
 	}
 	DebugLog("CLIPBOARD: SetFar2lClipboard FAILED or DISABLED")
-	if setOSClipboard(text) {
+	if !testSkipOSClipboard && setOSClipboard(text) {
 		DebugLog("CLIPBOARD: setOSClipboard SUCCESS")
 		return
 	}
@@ -71,6 +73,9 @@ func SetClipboard(text string) {
 
 // SetOSClipboard bypasses terminal extensions and writes directly to the OS clipboard.
 func SetOSClipboard(text string) bool {
+	if testSkipOSClipboard {
+		return false
+	}
 	return setOSClipboard(text)
 }
 
@@ -82,9 +87,11 @@ func GetClipboard() string {
 		return text
 	}
 	DebugLog("CLIPBOARD: GetFar2lClipboard FAILED or DISABLED")
-	if text, ok := getOSClipboard(); ok {
-		DebugLog("CLIPBOARD: getOSClipboard SUCCESS, len: %d", len(text))
-		return text
+	if !testSkipOSClipboard {
+		if text, ok := getOSClipboard(); ok {
+			DebugLog("CLIPBOARD: getOSClipboard SUCCESS, len: %d", len(text))
+			return text
+		}
 	}
 	internalClipMu.Lock()
 	fallback := internalClipboard
@@ -95,8 +102,10 @@ func GetClipboard() string {
 
 // GetOSClipboard bypasses terminal extensions and reads directly from the OS clipboard.
 func GetOSClipboard() string {
-	if text, ok := getOSClipboard(); ok {
-		return text
+	if !testSkipOSClipboard {
+		if text, ok := getOSClipboard(); ok {
+			return text
+		}
 	}
 	internalClipMu.Lock()
 	fallback := internalClipboard

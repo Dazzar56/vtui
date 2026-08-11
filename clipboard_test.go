@@ -10,6 +10,8 @@ import (
 )
 
 func TestClipboard_Truncation(t *testing.T) {
+	testSkipOSClipboard = true
+	defer func() { testSkipOSClipboard = false }()
 	// 1. Setup
 	// Create a string larger than our 2MB global limit
 	const maxGlobalClipboardSize = 2 * 1024 * 1024
@@ -44,7 +46,7 @@ func TestClipboard_Truncation(t *testing.T) {
 		t.Errorf("Internal clipboard was not truncated. Expected len %d, got %d", maxGlobalClipboardSize, len(internalClipboard))
 	}
 
-	// Check OSC 52 payload if it was used as a fallback
+	// Check OSC 52 payload since it is guaranteed to be used as a fallback
 	if strings.HasPrefix(output, "\x1b]52;c;") {
 		parts := strings.Split(output, ";")
 		if len(parts) == 3 {
@@ -53,9 +55,12 @@ func TestClipboard_Truncation(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to decode base64 from OSC 52: %v", err)
 			}
-			if len(decoded) > maxGlobalClipboardSize {
-				t.Errorf("OSC 52 payload was not truncated. Expected <= %d, got %d", maxGlobalClipboardSize, len(decoded))
+			const expectedOSC52Size = 1024 * 1024
+			if len(decoded) != expectedOSC52Size {
+				t.Errorf("OSC 52 payload was not truncated properly. Expected %d, got %d", expectedOSC52Size, len(decoded))
 			}
 		}
+	} else {
+		t.Errorf("Expected OSC 52 payload in stdout, got %q", output[:min(len(output), 100)])
 	}
 }

@@ -44,3 +44,5 @@ require (
 )
 
 replace github.com/ebitengine/purego => github.com/unxed/pureffi v0.1.12
+
+replace github.com/ebitengine/hideconsole => ./internal/hideconsole
