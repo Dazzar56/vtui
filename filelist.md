@@ -113,6 +113,10 @@
     ./highlight.go
     ./highlight_test.go
     ./history_test.go
+    ./internal
+    ./internal/hideconsole
+    ./internal/hideconsole/go.mod
+    ./internal/hideconsole/hideconsole.go
     ./keybar.go
     ./keybar_test.go
     ./keys_common.go
