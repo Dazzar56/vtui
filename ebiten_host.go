@@ -3,6 +3,7 @@
 package vtui
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"sync"
@@ -44,8 +45,25 @@ type EbitenHost struct {
 	lastMouseY int
 
 	// Buffers reused every frame to keep the input path allocation-free.
-	keyBuf  []ebiten.Key
-	charBuf []rune
+	keyBuf     []ebiten.Key
+	charBuf    []rune
+	pressedBuf []ebiten.Key
+
+	// phantomMods holds modifier keys Ebitengine still reports as pressed but
+	// which demonstrably are not. Switching keyboard layout with Alt+Shift is
+	// grabbed by the desktop, which swallows the release, and GLFW never
+	// learns the key came back up: from then on every keystroke looks like an
+	// Alt chord and typing stops working entirely. An entry is dropped once
+	// the key is genuinely reported up again.
+	phantomMods map[ebiten.Key]bool
+
+	// lastRuneForVK remembers which character a physical key produced when it
+	// was pressed unmodified, so a later Alt chord on the same key can carry
+	// that character. Alt+letter and Alt+digit are quick-search accelerators
+	// and need the rune, not just the virtual key.
+	lastRuneForVK map[uint16]rune
+
+	focused bool
 
 	pendingSize struct {
 		w, h  int
@@ -72,6 +90,76 @@ func (h *EbitenHost) sendEvent(ev *vtinput.InputEvent) {
 			DebugLog("EBITEN_HOST: dropped event, queue full: %s", ev.String())
 		}
 	}
+}
+
+// resolveModifiers reads the modifier state and filters out keys that are
+// stuck down.
+//
+// Ebitengine has no authoritative per-event modifier state the way X11 does,
+// so a swallowed release cannot simply be corrected from a later event. What
+// it does give is a contradiction to work from: if the platform produced a
+// printable character this frame, then Ctrl and Alt cannot really be held,
+// because no layout emits plain text while they are. That is enough to catch
+// the stuck key, and the suspicion is remembered until Ebitengine reports the
+// key up, so the state does not flip back on the next frame.
+func (h *EbitenHost) resolveModifiers(sawText bool) vtinput.ControlKeyState {
+	if h.phantomMods == nil {
+		h.phantomMods = make(map[ebiten.Key]bool)
+	}
+	for k := range h.phantomMods {
+		if !ebiten.IsKeyPressed(k) {
+			delete(h.phantomMods, k)
+		}
+	}
+	if sawText {
+		for _, k := range [...]ebiten.Key{
+			ebiten.KeyControlLeft, ebiten.KeyControlRight,
+			ebiten.KeyAltLeft, ebiten.KeyAltRight,
+		} {
+			if ebiten.IsKeyPressed(k) && !h.phantomMods[k] {
+				DebugLog("EBITEN_HOST: %v reported held while text arrived; treating it as stuck", k)
+				h.phantomMods[k] = true
+			}
+		}
+	}
+
+	var mods vtinput.ControlKeyState
+	pressed := func(k ebiten.Key) bool { return ebiten.IsKeyPressed(k) && !h.phantomMods[k] }
+	if pressed(ebiten.KeyShiftLeft) || pressed(ebiten.KeyShiftRight) {
+		mods |= vtinput.ShiftPressed
+	}
+	if pressed(ebiten.KeyControlLeft) {
+		mods |= vtinput.LeftCtrlPressed
+	}
+	if pressed(ebiten.KeyControlRight) {
+		mods |= vtinput.RightCtrlPressed
+	}
+	if pressed(ebiten.KeyAltLeft) {
+		mods |= vtinput.LeftAltPressed
+	}
+	if pressed(ebiten.KeyAltRight) {
+		mods |= vtinput.RightAltPressed
+	}
+	return mods
+}
+
+// charForVK returns the character a modified key should carry.
+//
+// It prefers what the key actually produced when pressed unmodified on this
+// keyboard, and falls back to the ASCII the virtual key names. Without this a
+// quick-search accelerator such as Alt+1 arrives with no character at all and
+// the application has nothing to search for.
+func (h *EbitenHost) charForVK(vk uint16) rune {
+	if r, ok := h.lastRuneForVK[vk]; ok && r != 0 {
+		return r
+	}
+	switch {
+	case vk >= vtinput.VK_0 && vk <= vtinput.VK_9:
+		return rune('0' + (vk - vtinput.VK_0))
+	case vk >= vtinput.VK_A && vk <= vtinput.VK_Z:
+		return rune('a' + (vk - vtinput.VK_A))
+	}
+	return 0
 }
 
 // requestSize records a resize asked for by the UI. The actual call happens on
@@ -113,10 +201,26 @@ func (g *ebitenGame) Update() error {
 	}
 
 	if title, ok := h.renderer.takeTitle(); ok {
-		ebiten.SetWindowTitle(title)
+		ebiten.SetWindowTitle(WindowTitleWithBackend(title))
 	}
 
-	mods := ebitenModifiers()
+	// Focus changes reset the modifier picture. The framework already treats a
+	// focus event as a cue to drop its own modifier state, and a chord held
+	// while the window went away is not held when it comes back.
+	if focused := ebiten.IsFocused(); focused != h.focused {
+		h.focused = focused
+		h.phantomMods = nil
+		h.sendEvent(&vtinput.InputEvent{Type: vtinput.FocusEventType, SetFocus: focused})
+	}
+
+	// Text is collected before the keys, because a printable character is the
+	// evidence that decides whether a modifier is really down.
+	h.charBuf = ebiten.AppendInputChars(h.charBuf[:0])
+	mods := h.resolveModifiers(len(h.charBuf) > 0)
+
+	// Which physical keys went down this frame, used below to attribute an
+	// incoming character to the key that produced it.
+	h.pressedBuf = inpututil.AppendJustPressedKeys(h.pressedBuf[:0])
 
 	// Keys first, then text. A modified or special key is delivered by virtual
 	// key code; an unmodified printable key is left to the text stream below,
@@ -150,6 +254,7 @@ func (g *ebitenGame) Update() error {
 			Type:            vtinput.KeyEventType,
 			KeyDown:         true,
 			VirtualKeyCode:  vk,
+			Char:            h.charForVK(vk),
 			ControlKeyState: mods,
 		})
 	}
@@ -171,11 +276,20 @@ func (g *ebitenGame) Update() error {
 	// Text input. Ctrl and Alt combinations are filtered out: some platforms
 	// still emit a control character for them, and the virtual key event above
 	// has already covered that keystroke.
-	h.charBuf = ebiten.AppendInputChars(h.charBuf[:0])
 	if mods&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed|vtinput.LeftAltPressed|vtinput.RightAltPressed) == 0 {
-		for _, r := range h.charBuf {
+		for i, r := range h.charBuf {
 			if r < 0x20 || r == 0x7f {
 				continue
+			}
+			// Remember what this key produces on this layout, so a later Alt
+			// chord on the same key can carry the same character. Only an
+			// unambiguous frame teaches anything: one key down, one character
+			// out. Pairing them positionally when several arrive together
+			// would sooner or later attribute the wrong rune to a key.
+			if i == 0 && len(h.charBuf) == 1 && len(h.pressedBuf) == 1 {
+				if vk := ebitenKeyToVK(h.pressedBuf[0]); vk != 0 {
+					h.lastRuneForVK[vk] = r
+				}
 			}
 			h.sendEvent(&vtinput.InputEvent{
 				Type:            vtinput.KeyEventType,
@@ -385,6 +499,10 @@ func RunEbitenHost(cols, rows int, fontName string, fontSize float64, setupApp f
 		winH:       rows * cellH,
 		lastMouseX: -1,
 		lastMouseY: -1,
+
+		phantomMods:   make(map[ebiten.Key]bool),
+		lastRuneForVK: make(map[uint16]rune),
+		focused:       true,
 	}
 
 	renderer := NewEbitenRenderer(host, face, cellW, cellH, scale)
@@ -393,6 +511,10 @@ func RunEbitenHost(cols, rows int, fontName string, fontSize float64, setupApp f
 	scr := NewScreenBuf()
 	scr.AllocBuf(cols, rows)
 	scr.Renderer = renderer
+	// Without this the layer keeps whatever protocol was detected for a
+	// terminal, and the viewer falls back to showing a JPEG as text even
+	// though this backend can draw it.
+	scr.Graphics().SetProtocol(GraphicsNative)
 	host.scr = scr
 	FrameManager.Init(scr)
 
@@ -415,10 +537,13 @@ func RunEbitenHost(cols, rows int, fontName string, fontSize float64, setupApp f
 	// to go, since this is a window and there is no terminal to receive it.
 	DisableTerminalClipboard()
 	SetDragBackend(host)
+	SetActiveBackend("ebiten",
+		fmt.Sprintf("cell %dx%d, scale %d, font %q", cellW, cellH, scale, fontName),
+		"cgo-free: Ebitengine over purego")
 
 	setupApp()
 
-	ebiten.SetWindowTitle(AppName)
+	ebiten.SetWindowTitle(WindowTitleWithBackend(AppName))
 	ebiten.SetWindowSize(cols*cellW/scale, rows*cellH/scale)
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 	// The screen is fully repainted from our own framebuffer every frame, so

@@ -300,9 +300,16 @@ func (r *EbitenRenderer) drawCachedGlyph(img *image.RGBA, cellVal uint64, px, py
 // invertCursor inverts the cell under the caret, matching the X11 backend so
 // the caret stays visible whatever colours the cell happens to carry.
 func (r *EbitenRenderer) invertCursor(img *image.RGBA, px, py, rw int) {
+	// Same geometry as the X11 backend: a block fills the cell, anything else
+	// is an underline two pixels tall, four when the display is scaled, so it
+	// stays visible on a HiDPI screen instead of thinning to a hair.
 	startY := 0
 	if r.cursorShape != CursorShapeBlock {
-		startY = r.cellH - 2
+		thickness := 2
+		if r.scale > 1 {
+			thickness = 4
+		}
+		startY = r.cellH - thickness
 		if startY < 0 {
 			startY = 0
 		}

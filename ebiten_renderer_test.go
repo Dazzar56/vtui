@@ -514,3 +514,83 @@ func TestEbitenRenderer_RenderGraphicsIgnoresUnusableLayer(t *testing.T) {
 	r.Render(buf, shadow, 4, 2, true)
 	r.RenderGraphics(nil, buf, shadow, 4, 2, true)
 }
+
+// Alt+letter and Alt+digit are quick-search accelerators: the application
+// needs the character, not just the virtual key. Without it Alt+1 arrives
+// with nothing to search for.
+func TestCharForVK_SuppliesAcceleratorCharacters(t *testing.T) {
+	h := &EbitenHost{lastRuneForVK: map[uint16]rune{}}
+
+	for vk, want := range map[uint16]rune{
+		vtinput.VK_0: '0', vtinput.VK_1: '1', vtinput.VK_9: '9',
+		vtinput.VK_A: 'a', vtinput.VK_M: 'm', vtinput.VK_Z: 'z',
+	} {
+		if got := h.charForVK(vk); got != want {
+			t.Errorf("charForVK(%d) = %q, want %q", vk, got, want)
+		}
+	}
+}
+
+// What the key really produces on this layout beats the ASCII fallback.
+func TestCharForVK_PrefersTheObservedRune(t *testing.T) {
+	h := &EbitenHost{lastRuneForVK: map[uint16]rune{vtinput.VK_A: 'ф'}}
+
+	if got := h.charForVK(vtinput.VK_A); got != 'ф' {
+		t.Errorf("charForVK = %q, want the observed rune 'ф'", got)
+	}
+	if got := h.charForVK(vtinput.VK_B); got != 'b' {
+		t.Errorf("charForVK for an unobserved key = %q, want the fallback 'b'", got)
+	}
+}
+
+// Keys with no character meaning must not invent one.
+func TestCharForVK_LeavesNonTextKeysAlone(t *testing.T) {
+	h := &EbitenHost{lastRuneForVK: map[uint16]rune{}}
+	for _, vk := range []uint16{
+		vtinput.VK_LEFT, vtinput.VK_F1, vtinput.VK_RETURN, vtinput.VK_ESCAPE, vtinput.VK_LMENU,
+	} {
+		if got := h.charForVK(vk); got != 0 {
+			t.Errorf("charForVK(%d) = %q, want no character", vk, got)
+		}
+	}
+}
+
+// The cursor underline must follow the X11 backend, including thickening on a
+// scaled display so it does not thin out to a hair.
+func TestEbitenRenderer_UnderlineCursorMatchesX11Geometry(t *testing.T) {
+	for _, tc := range []struct{ scale, cellH, wantRows int }{
+		{1, 16, 2},
+		{2, 32, 4},
+	} {
+		r := NewEbitenRenderer(nil, nil, 8, tc.cellH, tc.scale)
+		buf, shadow := mkGrid(1, 1, ' ', 0)
+		r.SetCursor(0, 0, true, CursorShapeUnderline)
+		r.Render(buf, shadow, 1, 1, true)
+
+		lit := 0
+		for y := 0; y < tc.cellH; y++ {
+			off := y*r.img.Stride + 0*4
+			if r.img.Pix[off] != 0 || r.img.Pix[off+1] != 0 || r.img.Pix[off+2] != 0 {
+				lit++
+			}
+		}
+		if lit != tc.wantRows {
+			t.Errorf("scale %d: underline is %d rows tall, want %d", tc.scale, lit, tc.wantRows)
+		}
+	}
+}
+
+// A block cursor fills the whole cell, unlike the underline.
+func TestEbitenRenderer_BlockCursorFillsTheCell(t *testing.T) {
+	r := NewEbitenRenderer(nil, nil, 8, 16, 1)
+	buf, shadow := mkGrid(1, 1, ' ', 0)
+	r.SetCursor(0, 0, true, CursorShapeBlock)
+	r.Render(buf, shadow, 1, 1, true)
+
+	for y := 0; y < 16; y++ {
+		off := y*r.img.Stride + 0*4
+		if r.img.Pix[off] == 0 && r.img.Pix[off+1] == 0 && r.img.Pix[off+2] == 0 {
+			t.Fatalf("block cursor left row %d unpainted", y)
+		}
+	}
+}

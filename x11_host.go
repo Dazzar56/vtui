@@ -614,6 +614,7 @@ func runInX11Window(cols, rows int, fontName string, fontSize float64, setupApp 
 	scr.AllocBuf(cols, rows)
 	scr.Renderer = NewX11Renderer(host, face)
 	scr.Graphics().SetProtocol(GraphicsNative)
+	SetActiveBackend("x11")
 	scr.Graphics().SetCellSize(cellW, cellH)
 
 	FrameManager.Init(scr)
