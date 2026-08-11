@@ -1712,7 +1712,7 @@ func TestFrameManager_WorkspaceTabsAndCounterRendering(t *testing.T) {
 	scr.AllocBuf(60, 10)
 	fm := &frameManager{}
 	fm.Init(scr)
-	fm.Push(NewWindow(0, 0, 20, 5, "Panels"))
+	fm.Push(NewWindow(0, 0, 20, 5, "Panels ─ Files"))
 	fm.AddScreen(NewWindow(0, 0, 20, 5, "Editor"))
 	fm.ConfigureWorkspaceTabs(WorkspaceTabsMultiple, WorkspaceCtrlTabDirect)
 	fm.ConfigureWorkspaceTabColors(
@@ -1732,10 +1732,10 @@ func TestFrameManager_WorkspaceTabsAndCounterRendering(t *testing.T) {
 	if !strings.Contains(text, "1 Panels") || !strings.Contains(text, "2 Editor") {
 		t.Fatalf("tab row does not contain both workspaces: %q", text)
 	}
-	if !strings.Contains(text, "Panels | 2 Editor") {
-		t.Fatalf("tabs are not compact and pipe-separated: %q", text)
+	if !strings.Contains(text, "Files │ 2 Editor") {
+		t.Fatalf("tabs are not compact and box-drawing-separated: %q", text)
 	}
-	if !strings.Contains(text, "Editor |+") {
+	if !strings.Contains(text, "Editor │+") {
 		t.Fatalf("new-workspace control is missing after tabs: %q", text)
 	}
 	if !strings.HasSuffix(text, "[2/2]") {
@@ -1753,6 +1753,13 @@ func TestFrameManager_WorkspaceTabsAndCounterRendering(t *testing.T) {
 	}
 	if got := GetRGBBack(scr.GetCell(fm.workspaceTabHits[1].x2, 0).Attributes); got != 0x222222 {
 		t.Fatalf("active tab background = %#x, want panel background", got)
+	}
+	titleSeparatorX := strings.IndexRune(text, '─')
+	if titleSeparatorX < 0 {
+		t.Fatalf("workspace title separator is missing: %q", text)
+	}
+	if got := GetRGBFore(scr.GetCell(titleSeparatorX, 0).Attributes); got != 0x5D5D5D {
+		t.Fatalf("workspace title separator foreground = %#x, want half-brightness %#x", got, uint32(0x5D5D5D))
 	}
 	counterCurrentX := scr.width - runewidth.StringWidth("[2/2]") + 1
 	if tabFG, counterFG := GetRGBFore(scr.GetCell(fm.workspaceTabHits[0].x1+1, 0).Attributes), GetRGBFore(scr.GetCell(counterCurrentX, 0).Attributes); tabFG != counterFG {

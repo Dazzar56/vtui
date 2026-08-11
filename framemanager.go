@@ -996,6 +996,26 @@ func withForeground(backgroundAttr, foregroundAttr uint64) uint64 {
 	return SetIndexFore(backgroundAttr, GetIndexFore(foregroundAttr))
 }
 
+func workspaceTitleSeparatorAttr(attr uint64) uint64 {
+	if attr&IsFgRGB == 0 {
+		return DimColor(attr)
+	}
+
+	foreground := GetRGBFore(attr)
+	background := uint32(0)
+	if attr&IsBgRGB != 0 {
+		background = GetRGBBack(attr)
+	}
+	blend := func(foreground, background uint32) uint32 {
+		return (foreground + background) / 2
+	}
+	return SetRGBFore(attr,
+		blend((foreground>>16)&0xFF, (background>>16)&0xFF)<<16|
+			blend((foreground>>8)&0xFF, (background>>8)&0xFF)<<8|
+			blend(foreground&0xFF, background&0xFF),
+	)
+}
+
 func (fm *frameManager) workspaceBarAttr() uint64 {
 	if fm.workspaceColorsSet {
 		return fm.WorkspaceTabBarAttr
@@ -1090,7 +1110,7 @@ func (fm *frameManager) drawWorkspaceTabs() {
 
 	tabsLimit := available
 	if tabsLimit >= 2 {
-		tabsLimit -= 2 // Reserve |+ after the compact tab sequence.
+		tabsLimit -= 2 // Reserve │+ after the compact tab sequence.
 	}
 
 	x := 0
@@ -1134,8 +1154,17 @@ func (fm *frameManager) drawWorkspaceTabs() {
 		fm.scr.Write(x, 0, StringToCharInfo(number, numberAttr))
 		x += numberWidth
 		if title != "" && x < tabsLimit {
-			fm.scr.Write(x, 0, StringToCharInfo(" "+title, attr))
-			x += 1 + runewidth.StringWidth(title)
+			parts := strings.Split(" "+title, "─")
+			for partIndex, part := range parts {
+				if part != "" {
+					fm.scr.Write(x, 0, StringToCharInfo(part, attr))
+					x += runewidth.StringWidth(part)
+				}
+				if partIndex < len(parts)-1 && x < tabsLimit {
+					fm.scr.Write(x, 0, StringToCharInfo("─", workspaceTitleSeparatorAttr(attr)))
+					x++
+				}
+			}
 		}
 		if x < tabsLimit {
 			fm.scr.Write(x, 0, StringToCharInfo(" ", attr))
@@ -1143,12 +1172,12 @@ func (fm *frameManager) drawWorkspaceTabs() {
 		}
 		fm.workspaceTabHits = append(fm.workspaceTabHits, workspaceTabHit{x1: tabStart, x2: x - 1, index: i})
 		if i < len(fm.Screens)-1 && x < tabsLimit {
-			fm.scr.Write(x, 0, StringToCharInfo("|", baseAttr))
+			fm.scr.Write(x, 0, StringToCharInfo("│", baseAttr))
 			x++
 		}
 	}
 	if x+2 <= available {
-		fm.scr.Write(x, 0, StringToCharInfo("|", baseAttr))
+		fm.scr.Write(x, 0, StringToCharInfo("│", baseAttr))
 		fm.scr.Write(x+1, 0, StringToCharInfo("+", fm.workspaceNumberAttr(baseAttr)))
 		fm.workspaceNewTabX = x + 1
 	}
@@ -1321,7 +1350,7 @@ func (fm *frameManager) showScreensMenu() {
 		line += primary + strings.Repeat(" ", maxLeftWidth-runewidth.StringWidth(primary))
 		if maxRightWidth > 0 {
 			secondary := truncateMiddleCells(info.Secondary, maxRightWidth)
-			line += " ↔ " + secondary
+			line += " ─ " + secondary
 		}
 		line += suf
 		menu.AddItem(MenuItem{
