@@ -229,13 +229,17 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 	})
 
 	app.EventSource().OnKeyPress(func(key gpucontext.Key, mods gpucontext.Modifiers) {
-		vk := gogpuKeyToVK(key)
-		if vk != 0 {
-			DebugLog("GOGPU_HOST_EVENT: OnKeyPress key=%v, vk=%d", key, vk)
-		}
+		vkBase := gogpuKeyToVK(key, 0)
 
 		host.mu.Lock()
-		currMods := host.syncMods(vk, mods, true)
+		currMods := host.syncMods(vkBase, mods, true)
+
+		vk := gogpuKeyToVK(key, currMods)
+		if vk != 0 {
+			DebugLog("GOGPU_HOST_EVENT: OnKeyPress key=%v, vk=%d", key, vk)
+		} else {
+			DebugLog("GOGPU_HOST_EVENT: OnKeyPress UNMAPPED key=%v", key)
+		}
 
 		if host.pendingKeyEvent != nil {
 			if host.pendingKeyTimer != nil {
@@ -343,10 +347,15 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 	})
 
 	app.EventSource().OnKeyRelease(func(key gpucontext.Key, mods gpucontext.Modifiers) {
-		vk := gogpuKeyToVK(key)
+		vkBase := gogpuKeyToVK(key, 0)
 
 		host.mu.Lock()
-		currMods := host.syncMods(vk, mods, false)
+		currMods := host.syncMods(vkBase, mods, false)
+
+		vk := gogpuKeyToVK(key, currMods)
+		if vk == 0 {
+			DebugLog("GOGPU_HOST_EVENT: OnKeyRelease UNMAPPED key=%v", key)
+		}
 
 		if host.pendingKeyEvent != nil {
 			if host.pendingKeyTimer != nil {
@@ -632,7 +641,13 @@ func loadGogpuFont(fontName string, size float64) (text.Face, int, int) {
 	return primaryFace, cellW, cellH
 }
 
-func gogpuKeyToVK(k gpucontext.Key) uint16 {
+func isNumLockEffectiveGogpu(mods vtinput.ControlKeyState) bool {
+	numLock := (mods & vtinput.NumLockOn) != 0
+	shift := (mods & vtinput.ShiftPressed) != 0
+	return numLock != shift
+}
+
+func gogpuKeyToVK(k gpucontext.Key, mods vtinput.ControlKeyState) uint16 {
 	switch k {
 	case gpucontext.KeyEscape:
 		return vtinput.VK_ESCAPE

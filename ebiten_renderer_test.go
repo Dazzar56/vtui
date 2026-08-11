@@ -188,9 +188,21 @@ func TestEbitenKeyToVK(t *testing.T) {
 		{ebiten.KeyDigit9, vtinput.VK_9, "9"},
 	}
 	for _, c := range cases {
-		if got := ebitenKeyToVK(c.key); got != c.want {
+		if got := ebitenKeyToVK(c.key, 0); got != c.want {
 			t.Errorf("ebitenKeyToVK(%s) = %d, want %d", c.name, got, c.want)
 		}
+	}
+}
+
+func TestEbitenKeyToVK_KeypadNavigation(t *testing.T) {
+	if got := ebitenKeyToVK(ebiten.KeyNumpad2, 0); got != vtinput.VK_DOWN {
+		t.Errorf("Numpad2 with NumLock off = %d, want VK_DOWN (%d)", got, vtinput.VK_DOWN)
+	}
+	if got := ebitenKeyToVK(ebiten.KeyNumpad2, vtinput.NumLockOn); got != vtinput.VK_NUMPAD2 {
+		t.Errorf("Numpad2 with NumLock on = %d, want VK_NUMPAD2 (%d)", got, vtinput.VK_NUMPAD2)
+	}
+	if got := ebitenKeyToVK(ebiten.KeyNumpad2, vtinput.NumLockOn|vtinput.ShiftPressed); got != vtinput.VK_DOWN {
+		t.Errorf("Numpad2 with NumLock on + Shift = %d, want VK_DOWN (%d)", got, vtinput.VK_DOWN)
 	}
 }
 
@@ -199,13 +211,13 @@ func TestEbitenKeyToVK(t *testing.T) {
 func TestEbitenKeyToVK_LetterAndDigitRanges(t *testing.T) {
 	for k := ebiten.KeyA; k <= ebiten.KeyZ; k++ {
 		want := vtinput.VK_A + uint16(k-ebiten.KeyA)
-		if got := ebitenKeyToVK(k); got != want {
+		if got := ebitenKeyToVK(k, 0); got != want {
 			t.Fatalf("letter key %v mapped to %d, want %d", k, got, want)
 		}
 	}
 	for k := ebiten.KeyDigit0; k <= ebiten.KeyDigit9; k++ {
 		want := vtinput.VK_0 + uint16(k-ebiten.KeyDigit0)
-		if got := ebitenKeyToVK(k); got != want {
+		if got := ebitenKeyToVK(k, 0); got != want {
 			t.Fatalf("digit key %v mapped to %d, want %d", k, got, want)
 		}
 	}
@@ -214,7 +226,7 @@ func TestEbitenKeyToVK_LetterAndDigitRanges(t *testing.T) {
 // Unmapped keys must return 0 so the host drops them; VK 0 sent onward would
 // read as a real keystroke.
 func TestEbitenKeyToVK_UnmappedIsZero(t *testing.T) {
-	if got := ebitenKeyToVK(ebiten.KeyMax + 1); got != 0 {
+	if got := ebitenKeyToVK(ebiten.KeyMax+1, 0); got != 0 {
 		t.Errorf("out-of-range key mapped to %d, want 0", got)
 	}
 }
@@ -227,7 +239,7 @@ func TestEbitenKeyToVK_NoAccidentalCollisions(t *testing.T) {
 	}
 	seen := make(map[uint16]ebiten.Key)
 	for k := ebiten.Key(0); k <= ebiten.KeyMax; k++ {
-		vk := ebitenKeyToVK(k)
+		vk := ebitenKeyToVK(k, 0)
 		if vk == 0 || intended[vk] {
 			continue
 		}
@@ -722,7 +734,7 @@ func TestKeyBehindText_DeclinesWhenAmbiguous(t *testing.T) {
 		"nothing at all":          {},
 		"only modifiers held":     {heldBuf: []ebiten.Key{ebiten.KeyShiftLeft, ebiten.KeyControlLeft}},
 	} {
-		if k, ok := h.keyBehindText(); ok {
+		if k, ok := h.keyBehindText(0); ok {
 			t.Errorf("%s: keyBehindText returned %v, want no attribution", name, k)
 		}
 	}

@@ -188,7 +188,7 @@ func (h *EbitenHost) settlePendingChord(sawText bool) {
 // covers auto-repeat, where the character keeps arriving with no new press.
 // Anything more ambiguous is left alone, since a wrong attribution would
 // label the key with someone else's rune and mislead every later Alt chord.
-func (h *EbitenHost) keyBehindText() (ebiten.Key, bool) {
+func (h *EbitenHost) keyBehindText(mods vtinput.ControlKeyState) (ebiten.Key, bool) {
 	if len(h.pressedBuf) == 1 {
 		return h.pressedBuf[0], true
 	}
@@ -199,7 +199,7 @@ func (h *EbitenHost) keyBehindText() (ebiten.Key, bool) {
 	var found ebiten.Key
 	n := 0
 	for _, k := range h.heldBuf {
-		vk := ebitenKeyToVK(k)
+		vk := ebitenKeyToVK(k, mods)
 		if vk == 0 || isModifierVK(vk) {
 			continue
 		}
@@ -305,7 +305,7 @@ func (g *ebitenGame) Update() error {
 	// below, and the text loop still needs to know what was down.
 	h.heldBuf = inpututil.AppendPressedKeys(h.heldBuf[:0])
 	for _, k := range h.heldBuf {
-		vk := ebitenKeyToVK(k)
+		vk := ebitenKeyToVK(k, mods)
 		if vk == 0 || !isSpecialOrModifiedKey(vk, mods) {
 			continue
 		}
@@ -344,7 +344,7 @@ func (g *ebitenGame) Update() error {
 
 	h.keyBuf = inpututil.AppendJustReleasedKeys(h.keyBuf[:0])
 	for _, k := range h.keyBuf {
-		vk := ebitenKeyToVK(k)
+		vk := ebitenKeyToVK(k, mods)
 		if vk == 0 {
 			continue
 		}
@@ -374,8 +374,8 @@ func (g *ebitenGame) Update() error {
 			// layout, so a later Alt chord on it can carry that rune.
 			var vk uint16
 			if i == 0 && len(h.charBuf) == 1 {
-				if k, ok := h.keyBehindText(); ok {
-					vk = ebitenKeyToVK(k)
+				if k, ok := h.keyBehindText(mods); ok {
+					vk = ebitenKeyToVK(k, mods)
 					if vk != 0 {
 						h.lastRuneForVK[vk] = r
 					}
