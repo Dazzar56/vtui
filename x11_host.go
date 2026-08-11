@@ -614,7 +614,6 @@ func runInX11Window(cols, rows int, fontName string, fontSize float64, setupApp 
 	scr.AllocBuf(cols, rows)
 	scr.Renderer = NewX11Renderer(host, face)
 	scr.Graphics().SetProtocol(GraphicsNative)
-	SetActiveBackend("x11")
 	scr.Graphics().SetCellSize(cellW, cellH)
 
 	FrameManager.Init(scr)
@@ -631,6 +630,9 @@ func runInX11Window(cols, rows int, fontName string, fontSize float64, setupApp 
 
 	go host.RunEventLoop()
 	setupApp()
+	// After setupApp: the application installs the debug log sink during
+	// setup, so a backend announced before it is logged nowhere.
+	SetActiveBackend("x11")
 	FrameManager.Run(reader)
 
 	return nil

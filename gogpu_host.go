@@ -192,7 +192,6 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 	renderer := NewGogpuRenderer(host, face, cellW, cellH)
 	scr.Renderer = renderer
 	scr.Graphics().SetProtocol(GraphicsNative)
-	SetActiveBackend("gogpu")
 	scr.Graphics().SetCellSize(cellW, cellH)
 
 	FrameManager.Init(scr)
@@ -498,6 +497,9 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 	}
 
 	setupApp()
+	// After setupApp: the application installs the debug log sink during
+	// setup, so a backend announced before it is logged nowhere.
+	SetActiveBackend("gogpu")
 
 	go func() {
 		w, h := app.Size()

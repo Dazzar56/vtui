@@ -79,7 +79,6 @@ func runInWaylandWindow(cols, rows int, fontName string, fontSize float64, setup
 	scr.AllocBuf(cols, rows)
 	scr.Renderer = NewWaylandRenderer(host, face)
 	scr.Graphics().SetProtocol(GraphicsNative)
-	SetActiveBackend("wayland")
 	scr.Graphics().SetCellSize(cellW, cellH)
 	FrameManager.Init(scr)
 
@@ -96,6 +95,9 @@ func runInWaylandWindow(cols, rows int, fontName string, fontSize float64, setup
 	host.widget.ScheduleResize(int32(cols*cellW), int32(rows*cellH))
 
 	setupApp()
+	// After setupApp: the application installs the debug log sink during
+	// setup, so a backend announced before it is logged nowhere.
+	SetActiveBackend("wayland")
 
 	// FrameManager must run in a goroutine because Wayland's DisplayRun blocks the main thread
 	go func() {

@@ -594,3 +594,96 @@ func TestEbitenRenderer_BlockCursorFillsTheCell(t *testing.T) {
 		}
 	}
 }
+
+// A Ctrl or Alt chord is held for one tick so that a character arriving late
+// can retract it. Without this, a fast layout switch left Alt stuck, the next
+// letter went out as an Alt chord, and the character followed a tick later:
+// typing "test" after Alt+Shift opened quick search and put "ttest" in it.
+func TestPendingChord_DroppedWhenTextContradictsIt(t *testing.T) {
+	h := newTestHost(t)
+
+	chord := &vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_T, Char: 't',
+		ControlKeyState: vtinput.LeftAltPressed,
+	}
+	h.pendingChord = chord
+
+	// Next tick brings a character, which no layout emits with Alt truly down.
+	h.settlePendingChord(true)
+
+	if h.pendingChord != nil {
+		t.Error("the chord should have been settled")
+	}
+	if got := drainEvents(h); len(got) != 0 {
+		t.Errorf("a contradicted chord must be dropped, but %d event(s) were sent", len(got))
+	}
+}
+
+// With no contradiction the chord is a real one and must still arrive.
+func TestPendingChord_SentWhenNothingContradictsIt(t *testing.T) {
+	h := newTestHost(t)
+
+	h.pendingChord = &vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_T, Char: 't',
+		ControlKeyState: vtinput.LeftAltPressed,
+	}
+	h.settlePendingChord(false)
+
+	got := drainEvents(h)
+	if len(got) != 1 {
+		t.Fatalf("expected the chord to be delivered, got %d event(s)", len(got))
+	}
+	if got[0].VirtualKeyCode != vtinput.VK_T || got[0].ControlKeyState&vtinput.LeftAltPressed == 0 {
+		t.Errorf("delivered event = %+v, want Alt+T", got[0])
+	}
+}
+
+// Settling with nothing pending must be harmless: it runs on every tick.
+func TestPendingChord_SettlingNothingIsHarmless(t *testing.T) {
+	h := newTestHost(t)
+	h.settlePendingChord(true)
+	h.settlePendingChord(false)
+	if got := drainEvents(h); len(got) != 0 {
+		t.Errorf("settling an empty slot sent %d event(s)", len(got))
+	}
+}
+
+func newTestHost(t *testing.T) *EbitenHost {
+	t.Helper()
+	return &EbitenHost{
+		reader:        &vtinput.Reader{EventChan: make(chan *vtinput.InputEvent, 16)},
+		lastRuneForVK: map[uint16]rune{},
+		phantomMods:   map[ebiten.Key]bool{},
+	}
+}
+
+func drainEvents(h *EbitenHost) []*vtinput.InputEvent {
+	var out []*vtinput.InputEvent
+	for {
+		select {
+		case ev := <-h.reader.EventChan:
+			out = append(out, ev)
+		default:
+			return out
+		}
+	}
+}
+
+// Alt+digit is a quick-search accelerator, and every digit must behave the
+// same: Alt+1 was reported broken while Alt+2 worked, so the mapping is
+// pinned to absolute values rather than only to internal consistency.
+func TestDigitKeysMapToExactVirtualKeys(t *testing.T) {
+	h := &EbitenHost{lastRuneForVK: map[uint16]rune{}}
+	for i := 0; i <= 9; i++ {
+		k := ebiten.KeyDigit0 + ebiten.Key(i)
+		vk := ebitenKeyToVK(k)
+		if want := uint16(0x30 + i); vk != want {
+			t.Errorf("%v -> VK 0x%02X, want 0x%02X", k, vk, want)
+		}
+		if got, want := h.charForVK(vk), rune('0'+i); got != want {
+			t.Errorf("%v -> char %q, want %q", k, got, want)
+		}
+	}
+}

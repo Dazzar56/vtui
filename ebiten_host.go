@@ -65,6 +65,15 @@ type EbitenHost struct {
 
 	focused bool
 
+	// pendingChord holds a Ctrl or Alt chord for one tick before sending it.
+	// The evidence that a modifier is stuck is a printable character, and that
+	// character can arrive a tick after the key that produced it, by which
+	// time an immediately sent chord has already been acted on. Waiting one
+	// tick means a chord that turns out to be phantom is dropped instead of
+	// retracted, which is not possible.
+	pendingChord *vtinput.InputEvent
+	pendingKeys  []ebiten.Key
+
 	pendingSize struct {
 		w, h  int
 		valid bool
@@ -143,6 +152,26 @@ func (h *EbitenHost) resolveModifiers(sawText bool) vtinput.ControlKeyState {
 	return mods
 }
 
+// settlePendingChord decides the fate of a chord held over from last tick.
+//
+// A printable character this tick means the modifier was never really down,
+// so the chord was an artefact of a swallowed key release and must not reach
+// the application at all. Dropping it is only possible because it was held
+// back; once sent, a chord cannot be retracted.
+func (h *EbitenHost) settlePendingChord(sawText bool) {
+	if h.pendingChord == nil {
+		return
+	}
+	chord := h.pendingChord
+	h.pendingChord = nil
+	if sawText {
+		DebugLog("EBITEN_HOST: dropping chord vk=%d, text arrived so the modifier was stuck",
+			chord.VirtualKeyCode)
+		return
+	}
+	h.sendEvent(chord)
+}
+
 // charForVK returns the character a modified key should carry.
 //
 // It prefers what the key actually produced when pressed unmodified on this
@@ -216,7 +245,11 @@ func (g *ebitenGame) Update() error {
 	// Text is collected before the keys, because a printable character is the
 	// evidence that decides whether a modifier is really down.
 	h.charBuf = ebiten.AppendInputChars(h.charBuf[:0])
-	mods := h.resolveModifiers(len(h.charBuf) > 0)
+	sawText := len(h.charBuf) > 0
+	mods := h.resolveModifiers(sawText)
+
+	// Settle last tick's chord now that this tick's text is known.
+	h.settlePendingChord(sawText)
 
 	// Which physical keys went down this frame, used below to attribute an
 	// incoming character to the key that produced it.
@@ -250,13 +283,27 @@ func (g *ebitenGame) Update() error {
 		} else if !keyRepeatFires(d, tps) {
 			continue
 		}
-		h.sendEvent(&vtinput.InputEvent{
+		ev := &vtinput.InputEvent{
 			Type:            vtinput.KeyEventType,
 			KeyDown:         true,
 			VirtualKeyCode:  vk,
 			Char:            h.charForVK(vk),
 			ControlKeyState: mods,
-		})
+		}
+		DebugLog("EBITEN_HOST: key vk=%d char=%q mods=%d held=%d", vk, ev.Char, mods, d)
+
+		// Only Ctrl and Alt chords wait. An inherently special key such as an
+		// arrow or a function key cannot be contradicted by text, and delaying
+		// it would cost repeat responsiveness for nothing.
+		if mods&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed|vtinput.LeftAltPressed|vtinput.RightAltPressed) != 0 &&
+			!isModifierVK(vk) {
+			if h.pendingChord != nil {
+				h.sendEvent(h.pendingChord)
+			}
+			h.pendingChord = ev
+			continue
+		}
+		h.sendEvent(ev)
 	}
 
 	h.keyBuf = inpututil.AppendJustReleasedKeys(h.keyBuf[:0])
@@ -537,11 +584,15 @@ func RunEbitenHost(cols, rows int, fontName string, fontSize float64, setupApp f
 	// to go, since this is a window and there is no terminal to receive it.
 	DisableTerminalClipboard()
 	SetDragBackend(host)
+
+	setupApp()
+
+	// Announced after setupApp on purpose. The application installs the debug
+	// log sink during setup, so everything logged before that point is written
+	// nowhere and the backend line never appears in a bug report.
 	SetActiveBackend("ebiten",
 		fmt.Sprintf("cell %dx%d, scale %d, font %q", cellW, cellH, scale, fontName),
 		"cgo-free: Ebitengine over purego")
-
-	setupApp()
 
 	ebiten.SetWindowTitle(WindowTitleWithBackend(AppName))
 	ebiten.SetWindowSize(cols*cellW/scale, rows*cellH/scale)
