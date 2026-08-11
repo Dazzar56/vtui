@@ -237,9 +237,13 @@ func TestEbitenKeyToVK_NoAccidentalCollisions(t *testing.T) {
 	intended := map[uint16]bool{
 		vtinput.VK_RETURN: true, // Enter and NumpadEnter share it on purpose
 	}
+	// The check runs with NumLock on, where every key stands for itself. With
+	// the lock off the keypad deliberately doubles as the navigation block, so
+	// each of those codes has two keys by design; that half of the mapping is
+	// pinned by TestEbitenKeyToVK_KeypadNavigation instead.
 	seen := make(map[uint16]ebiten.Key)
 	for k := ebiten.Key(0); k <= ebiten.KeyMax; k++ {
-		vk := ebitenKeyToVK(k, 0)
+		vk := ebitenKeyToVK(k, vtinput.NumLockOn)
 		if vk == 0 || intended[vk] {
 			continue
 		}
@@ -487,7 +491,7 @@ func TestArrowsAndEditingKeysTakeTheRepeatingPath(t *testing.T) {
 		ebiten.KeyBackspace, ebiten.KeyDelete, ebiten.KeyPageUp, ebiten.KeyPageDown,
 		ebiten.KeyHome, ebiten.KeyEnd, ebiten.KeyTab, ebiten.KeyEnter,
 	} {
-		vk := ebitenKeyToVK(k)
+		vk := ebitenKeyToVK(k, 0)
 		if vk == 0 {
 			t.Errorf("%v has no virtual key code", k)
 			continue
@@ -690,7 +694,7 @@ func TestDigitKeysMapToExactVirtualKeys(t *testing.T) {
 	h := &EbitenHost{lastRuneForVK: map[uint16]rune{}}
 	for i := 0; i <= 9; i++ {
 		k := ebiten.KeyDigit0 + ebiten.Key(i)
-		vk := ebitenKeyToVK(k)
+		vk := ebitenKeyToVK(k, 0)
 		if want := uint16(0x30 + i); vk != want {
 			t.Errorf("%v -> VK 0x%02X, want 0x%02X", k, vk, want)
 		}
@@ -707,7 +711,7 @@ func TestKeyBehindText_UsesTheKeyPressedThisTick(t *testing.T) {
 	h := newTestHost(t)
 	h.pressedBuf = []ebiten.Key{ebiten.KeyB}
 
-	k, ok := h.keyBehindText()
+	k, ok := h.keyBehindText(0)
 	if !ok || k != ebiten.KeyB {
 		t.Errorf("keyBehindText = %v, %v; want KeyB, true", k, ok)
 	}
@@ -719,7 +723,7 @@ func TestKeyBehindText_FallsBackToTheOneHeldKey(t *testing.T) {
 	h := newTestHost(t)
 	h.heldBuf = []ebiten.Key{ebiten.KeyShiftLeft, ebiten.KeyB}
 
-	k, ok := h.keyBehindText()
+	k, ok := h.keyBehindText(0)
 	if !ok || k != ebiten.KeyB {
 		t.Errorf("keyBehindText = %v, %v; want KeyB, true (modifiers do not count)", k, ok)
 	}

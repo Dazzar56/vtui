@@ -36,9 +36,13 @@ type GogpuHost struct {
 	pendingKeyTimer *time.Timer
 	lastRuneForVK   map[uint16]rune
 	lastVK          uint16
-	lCtrl, rCtrl    bool
-	lAlt, rAlt      bool
-	lShift, rShift  bool
+	// suppressTextInput drops the text belonging to the keystroke just
+	// handled. A keypad key in navigation mode has already been delivered as
+	// a virtual key, and some platforms hand us its digit anyway.
+	suppressTextInput bool
+	lCtrl, rCtrl      bool
+	lAlt, rAlt        bool
+	lShift, rShift    bool
 
 	// Cached sizes to prevent deadlocks and speed up GetTerminalSize
 	lastAppW, lastAppH int
@@ -76,6 +80,9 @@ func isSpecialOrModifiedKey(vk uint16, mods vtinput.ControlKeyState) bool {
 	case vtinput.VK_ESCAPE, vtinput.VK_RETURN, vtinput.VK_TAB, vtinput.VK_BACK, vtinput.VK_DELETE, vtinput.VK_INSERT,
 		vtinput.VK_UP, vtinput.VK_DOWN, vtinput.VK_LEFT, vtinput.VK_RIGHT,
 		vtinput.VK_HOME, vtinput.VK_END, vtinput.VK_PRIOR, vtinput.VK_NEXT,
+		// Keypad 5 with NumLock off. It produces no character, so waiting for
+		// text that never comes would only delay it by the pairing timeout.
+		vtinput.VK_CLEAR,
 		vtinput.VK_CONTROL, vtinput.VK_LCONTROL, vtinput.VK_RCONTROL,
 		vtinput.VK_SHIFT, vtinput.VK_LSHIFT, vtinput.VK_RSHIFT,
 		vtinput.VK_MENU, vtinput.VK_LMENU, vtinput.VK_RMENU,
@@ -147,6 +154,18 @@ func (h *GogpuHost) syncMods(vk uint16, mods gpucontext.Modifiers, isDown bool) 
 		} else {
 			sysMods |= vtinput.LeftAltPressed
 		}
+	}
+
+	// Lock states. gpucontext has no Has* helper for these, but the platform
+	// layer fills both bits on every event. Without them isNumLockEffectiveGogpu
+	// always sees NumLock as off, and the keypad can never reach numeric mode.
+	// X11 and Ebitengine already report the locks; the framework masks them out
+	// where they must not affect matching (see FrameManager and Edit).
+	if mods&gpucontext.ModCapsLock != 0 {
+		sysMods |= vtinput.CapsLockOn
+	}
+	if mods&gpucontext.ModNumLock != 0 {
+		sysMods |= vtinput.NumLockOn
 	}
 
 	h.currentMods = sysMods
@@ -241,6 +260,13 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 			DebugLog("GOGPU_HOST_EVENT: OnKeyPress UNMAPPED key=%v", key)
 		}
 
+		// A keypad key that resolved to navigation must not also type its
+		// digit. Whether the platform still emits text for it depends on how
+		// faithfully its keymap tracks NumLock, so rather than trust that,
+		// drop the text this keystroke would carry. Every other key clears
+		// the flag again, and text only ever follows its own key press.
+		host.suppressTextInput = isGogpuKeypadKey(key) && gogpuNumpadRune(vk) == 0
+
 		if host.pendingKeyEvent != nil {
 			if host.pendingKeyTimer != nil {
 				host.pendingKeyTimer.Stop()
@@ -283,6 +309,14 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 				if host.lastRuneForVK != nil {
 					ev.Char = host.lastRuneForVK[vk]
 				}
+				// The keypad names its own character, and unlike the letter
+				// rows it does not depend on the layout. Seeding it here keeps
+				// the digit working where the platform sends no text for the
+				// keypad at all; a character that does arrive still wins,
+				// which matters for layouts whose decimal key yields a comma.
+				if ev.Char == 0 {
+					ev.Char = gogpuNumpadRune(vk)
+				}
 				host.pendingKeyEvent = ev
 				host.pendingKeyTimer = time.AfterFunc(10*time.Millisecond, func() {
 					host.mu.Lock()
@@ -307,6 +341,15 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 
 		runes := []rune(text)
 		if len(runes) == 0 {
+			return
+		}
+
+		// This text belongs to a keypad key already delivered as navigation.
+		// The key press flushed any pending event before setting the flag, so
+		// there is nothing here to pair the text with either.
+		if host.suppressTextInput {
+			host.suppressTextInput = false
+			DebugLog("GOGPU_HOST_EVENT: dropped keypad text %q, key was navigation", text)
 			return
 		}
 
@@ -647,6 +690,49 @@ func isNumLockEffectiveGogpu(mods vtinput.ControlKeyState) bool {
 	return numLock != shift
 }
 
+// isGogpuKeypadKey reports whether a key belongs to the numeric keypad.
+//
+// Only the keys whose meaning NumLock changes are listed. The operators and
+// Enter are the same key either way, so text arriving for them is genuine and
+// must not be dropped.
+func isGogpuKeypadKey(k gpucontext.Key) bool {
+	switch k {
+	case gpucontext.KeyNumpad0, gpucontext.KeyNumpad1, gpucontext.KeyNumpad2,
+		gpucontext.KeyNumpad3, gpucontext.KeyNumpad4, gpucontext.KeyNumpad5,
+		gpucontext.KeyNumpad6, gpucontext.KeyNumpad7, gpucontext.KeyNumpad8,
+		gpucontext.KeyNumpad9, gpucontext.KeyNumpadDecimal:
+		return true
+	}
+	return false
+}
+
+// gogpuNumpadRune returns the character a keypad virtual key stands for, or
+// zero for the navigation codes the same keys produce with NumLock off.
+//
+// The caller uses zero as the test for "this keystroke types nothing", so the
+// two jobs are one function: it both fills in the character and names the keys
+// whose text has to be thrown away.
+func gogpuNumpadRune(vk uint16) rune {
+	if vk >= vtinput.VK_NUMPAD0 && vk <= vtinput.VK_NUMPAD9 {
+		return rune('0' + (vk - vtinput.VK_NUMPAD0))
+	}
+	switch vk {
+	case vtinput.VK_DECIMAL:
+		return '.'
+	case vtinput.VK_ADD:
+		return '+'
+	case vtinput.VK_SUBTRACT:
+		return '-'
+	case vtinput.VK_MULTIPLY:
+		return '*'
+	case vtinput.VK_DIVIDE:
+		return '/'
+	case vtinput.VK_SEPARATOR:
+		return ','
+	}
+	return 0
+}
+
 func gogpuKeyToVK(k gpucontext.Key, mods vtinput.ControlKeyState) uint16 {
 	switch k {
 	case gpucontext.KeyEscape:
@@ -703,6 +789,93 @@ func gogpuKeyToVK(k gpucontext.Key, mods vtinput.ControlKeyState) uint16 {
 		return vtinput.VK_TAB
 	case gpucontext.KeySpace:
 		return vtinput.VK_SPACE
+
+	// Numeric keypad.
+	//
+	// gogpu reports the physical key, so the same Key arrives whatever NumLock
+	// says; the split into digits and navigation has to happen here. Shift
+	// inverts the lock, which is what isNumLockEffectiveGogpu computes. On
+	// Windows the platform layer has already resolved the lock and simply never
+	// sends KeyNumpadN in navigation mode, so the same rule holds there too.
+	case gpucontext.KeyNumpad0:
+		if isNumLockEffectiveGogpu(mods) {
+			return vtinput.VK_NUMPAD0
+		}
+		return vtinput.VK_INSERT
+	case gpucontext.KeyNumpad1:
+		if isNumLockEffectiveGogpu(mods) {
+			return vtinput.VK_NUMPAD1
+		}
+		return vtinput.VK_END
+	case gpucontext.KeyNumpad2:
+		if isNumLockEffectiveGogpu(mods) {
+			return vtinput.VK_NUMPAD2
+		}
+		return vtinput.VK_DOWN
+	case gpucontext.KeyNumpad3:
+		if isNumLockEffectiveGogpu(mods) {
+			return vtinput.VK_NUMPAD3
+		}
+		return vtinput.VK_NEXT
+	case gpucontext.KeyNumpad4:
+		if isNumLockEffectiveGogpu(mods) {
+			return vtinput.VK_NUMPAD4
+		}
+		return vtinput.VK_LEFT
+	case gpucontext.KeyNumpad5:
+		if isNumLockEffectiveGogpu(mods) {
+			return vtinput.VK_NUMPAD5
+		}
+		return vtinput.VK_CLEAR
+	case gpucontext.KeyNumpad6:
+		if isNumLockEffectiveGogpu(mods) {
+			return vtinput.VK_NUMPAD6
+		}
+		return vtinput.VK_RIGHT
+	case gpucontext.KeyNumpad7:
+		if isNumLockEffectiveGogpu(mods) {
+			return vtinput.VK_NUMPAD7
+		}
+		return vtinput.VK_HOME
+	case gpucontext.KeyNumpad8:
+		if isNumLockEffectiveGogpu(mods) {
+			return vtinput.VK_NUMPAD8
+		}
+		return vtinput.VK_UP
+	case gpucontext.KeyNumpad9:
+		if isNumLockEffectiveGogpu(mods) {
+			return vtinput.VK_NUMPAD9
+		}
+		return vtinput.VK_PRIOR
+	case gpucontext.KeyNumpadDecimal:
+		if isNumLockEffectiveGogpu(mods) {
+			return vtinput.VK_DECIMAL
+		}
+		return vtinput.VK_DELETE
+	case gpucontext.KeyNumpadAdd:
+		return vtinput.VK_ADD
+	case gpucontext.KeyNumpadSubtract:
+		return vtinput.VK_SUBTRACT
+	case gpucontext.KeyNumpadMultiply:
+		return vtinput.VK_MULTIPLY
+	case gpucontext.KeyNumpadDivide:
+		return vtinput.VK_DIVIDE
+	case gpucontext.KeyNumpadComma:
+		return vtinput.VK_SEPARATOR
+	case gpucontext.KeyNumpadEqual:
+		return vtinput.VK_OEM_PLUS
+	case gpucontext.KeyNumpadEnter:
+		return vtinput.VK_RETURN
+
+	// Lock keys. The keypad is unusable without NumLock reaching the
+	// application, and the other two travel with it on every other backend.
+	case gpucontext.KeyNumLock:
+		return vtinput.VK_NUMLOCK
+	case gpucontext.KeyCapsLock:
+		return vtinput.VK_CAPITAL
+	case gpucontext.KeyScrollLock:
+		return vtinput.VK_SCROLL
+
 	case gpucontext.KeyLeftControl:
 		return vtinput.VK_LCONTROL
 	case gpucontext.KeyRightControl:
