@@ -115,6 +115,12 @@ func (h *HBoxLayout) SetPosition(x1, y1, x2, y2 int) {
 	h.ScreenObject.SetPosition(x1, y1, x2, y2)
 	h.X, h.Y = x1, y1
 	h.W, h.H = x2-x1+1, y2-y1+1
+	// Re-layout children, so alignment (e.g. a centered button row) survives
+	// window resizes when the layout is a real window item with grow flags.
+	// Apply is a pure function of X/Y/W/H and item sizes: idempotent.
+	if len(h.Items) > 0 {
+		h.Apply()
+	}
 }
 
 func (h *HBoxLayout) MoveRelative(dx, dy int) {

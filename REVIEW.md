@@ -206,3 +206,22 @@ of them at once, to fix a bug that was about code points versus UTF-16 units.
 If a highlighter turns up that genuinely works in bytes, the honest move is a
 second mapper next to the first, not a redefinition of the contract underneath
 code that already relies on it.
+
+## Touchpad scroll deltas below one notch are dropped in gogpu
+
+`gogpu_host.go` converts the fractional `OnScroll` delta into whole wheel
+events with `int(math.Abs(dy))` and returns early when that truncates to
+zero. A precision touchpad produces a stream of small deltas, so smooth
+scrolling is effectively dead there; ebiten clamps any nonzero delta up to
+one event instead, which is jumpy in the other direction. The fix is an
+accumulator per host that carries the remainder into the next event. It was
+not done when the system-lines multiplication moved out of the hosts because
+nobody had a precision touchpad complaint on file.
+
+## Clipboard tests leak through the global clipboard
+
+`TestClipboard_RoundTripsThroughInternalBuffer` fails intermittently in a
+full `go test .` run with a value set by another test ("secret text"),
+because the internal clipboard buffer is package global and tests run in
+source order share it. It passes in isolation. Not a wheel/scroll regression;
+observed on Windows while touching unrelated code.

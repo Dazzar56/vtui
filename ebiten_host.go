@@ -472,7 +472,8 @@ func (g *ebitenGame) updateMouse(mods vtinput.ControlKeyState) {
 		if steps < 0 {
 			steps = -steps
 		}
-		steps *= getSystemScrollLines()
+		// One wheel notch produces one event; consumers decide how many
+		// lines a notch scrolls (see WheelLinesPerNotch).
 		dir := -1
 		if dy > 0 {
 			dir = 1
@@ -631,6 +632,9 @@ func RunEbitenHost(cols, rows int, fontName string, fontSize float64, setupApp f
 	SetActiveBackend("ebiten",
 		fmt.Sprintf("cell %dx%d, scale %d, font %q", cellW, cellH, scale, fontName),
 		"cgo-free: Ebitengine over purego")
+	// One wheel notch arrives as a single event now; keep widgets scrolling
+	// the system-configured number of lines per notch as before.
+	setWheelNotchLines(getSystemScrollLines())
 
 	ebiten.SetWindowTitle(WindowTitleWithBackend(AppName))
 	ebiten.SetWindowSize(cols*cellW/scale, rows*cellH/scale)

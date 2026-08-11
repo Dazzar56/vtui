@@ -416,9 +416,15 @@ func (m *MultiLineEdit) ProcessMouse(event *vtinput.InputEvent) bool {
 	}
 	if event.WheelDirection != 0 {
 		if event.WheelDirection > 0 && m.topPos > 0 {
-			m.topPos--
+			m.topPos -= WheelLinesPerNotch()
+			if m.topPos < 0 {
+				m.topPos = 0
+			}
 		} else if event.WheelDirection < 0 && m.topPos+1 <= len(m.lines)-1 {
-			m.topPos++
+			m.topPos += WheelLinesPerNotch()
+			if maxTop := len(m.lines) - 1; m.topPos > maxTop {
+				m.topPos = maxTop
+			}
 		}
 		return true
 	}

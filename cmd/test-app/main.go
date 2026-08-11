@@ -226,20 +226,21 @@ func showTableDialog() {
 
 func buildTableDialog() *vtui.Window {
 	w, h := 78, 22
-	dlg := vtui.NewCenteredDialog(w, h, " Table Demo ")
-	dlg.ShowClose = true
+
+	btnClose := vtui.NewButton(0, 0, "&Close")
 
 	// Name and Description are flexible columns (Width 0): they share the
 	// space left after the fixed columns and follow the dialog on resize.
 	// Name additionally demonstrates MinWidth; without it the title width
 	// would be the minimum.
-	table := vtui.NewTable(dlg.X1+2, dlg.Y1+2, w-4, h-8, []vtui.TableColumn{
+	dlg, table := vtui.NewTableDialog(w, h, " Table Demo ", []vtui.TableColumn{
 		{Title: "Name", MinWidth: 12},
 		{Title: "Type", Width: 8},
 		{Title: "Size", Width: 9, Alignment: vtui.AlignRight},
 		{Title: "Modified", Width: 16},
 		{Title: "Description"},
-	})
+	}, btnClose)
+	btnClose.OnClick = func() { dlg.Close() }
 	table.Sortable = true    // click a column header to sort, again to reverse
 	table.QuickSearch = true // type to fuzzy-filter (Myers bit-vector)
 	table.ShowScrollBar = true
@@ -260,17 +261,11 @@ func buildTableDialog() *vtui.Window {
 		demoTableRow{"config.yaml", "config", "3 KB", "2026-08-03 13:37", "Runtime configuration overrides"},
 		demoTableRow{"changelog.md", "doc", "11 KB", "2026-08-04 15:58", "Release notes since v0.1"},
 	})
-	table.SetGrowMode(vtui.GrowHiX | vtui.GrowHiY)
-	dlg.AddItem(table)
 
-	hint := vtui.NewLabel(dlg.X1+2, dlg.Y1+h-5, "Type to fuzzy-filter, click a header to sort, Esc clears the filter", nil)
+	// The blank row between the table and the button row fits a hint line.
+	hint := vtui.NewLabel(dlg.X1+2, dlg.Y1+h-4, "Type to fuzzy-filter, click a header to sort, Esc clears the filter", nil)
 	hint.SetGrowMode(vtui.GrowLoY | vtui.GrowHiY)
 	dlg.AddItem(hint)
-
-	btnClose := vtui.NewButton(dlg.X1+w/2-5, dlg.Y1+h-3, "&Close")
-	btnClose.OnClick = func() { dlg.Close() }
-	btnClose.SetGrowMode(vtui.GrowLoY | vtui.GrowHiY | vtui.GrowLoX | vtui.GrowHiX)
-	dlg.AddItem(btnClose)
 
 	return dlg
 }

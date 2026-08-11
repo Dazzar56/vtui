@@ -81,6 +81,20 @@ func ValidateLayoutWithRules(c Container, rules LayoutRules) []error {
 	var errs []error
 	items := c.GetChildren()
 
+	// Layout containers are invisible geometry helpers, not paintable
+	// widgets: they cannot overlap anything and need no air or clearance.
+	// Their children are window items in their own right and are validated
+	// directly.
+	filtered := make([]UIElement, 0, len(items))
+	for _, it := range items {
+		switch it.(type) {
+		case *VBoxLayout, *HBoxLayout:
+			continue
+		}
+		filtered = append(filtered, it)
+	}
+	items = filtered
+
 	// Determine parent bounds
 	px1, py1, px2, py2 := 0, 0, 0, 0
 	hasBounds := false

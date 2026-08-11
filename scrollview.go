@@ -21,6 +21,10 @@ type ScrollView struct {
 	MarginLeft   int
 	MarginRight  int
 
+	// WheelArea selects which configurable wheel scroll speed applies to
+	// this view (see SetWheelAreaLines). Zero value: WheelAreaList.
+	WheelArea WheelArea
+
 	OnSelect func(int)
 	OnAction func(int)
 }
@@ -104,10 +108,10 @@ func (sv *ScrollView) HandleMouseScroll(e *vtinput.InputEvent) bool {
 	}
 	if e.WheelDirection != 0 {
 		if e.WheelDirection > 0 {
-			sv.ScrollBy(-1)
+			sv.ScrollBy(-wheelLinesFor(sv.WheelArea, e.WheelDirection))
 			return true
 		} else if e.WheelDirection < 0 {
-			sv.ScrollBy(1)
+			sv.ScrollBy(wheelLinesFor(sv.WheelArea, e.WheelDirection))
 			return true
 		}
 	}

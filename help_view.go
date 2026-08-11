@@ -402,9 +402,9 @@ func (hv *HelpView) ProcessMouse(e *vtinput.InputEvent) bool {
 
 	if e.WheelDirection != 0 {
 		if e.WheelDirection > 0 {
-			hv.scrollBy(-1)
+			hv.scrollBy(-WheelLinesPerNotch())
 		} else {
-			hv.scrollBy(1)
+			hv.scrollBy(WheelLinesPerNotch())
 		}
 		return true
 	}

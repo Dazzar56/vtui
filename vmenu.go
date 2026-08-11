@@ -59,6 +59,7 @@ func NewVMenu(title string) *VMenu {
 	}
 	m.canFocus = true
 	m.Wrap = true
+	m.WheelArea = WheelAreaMenu
 	m.IsSelectable = func(i int) bool {
 		return i >= 0 && i < len(m.Items) && !m.Items[i].Separator
 	}

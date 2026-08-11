@@ -443,8 +443,9 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 
 		mx, my := app.Input().Mouse().Position()
 
-		// Multiply scroll lines to match preferred user experience
-		steps := int(math.Abs(dy) * float64(getSystemScrollLines()))
+		// One wheel notch produces one event; consumers decide how many
+		// lines a notch scrolls (see WheelLinesPerNotch).
+		steps := int(math.Abs(dy))
 		if steps == 0 {
 			return
 		}
@@ -516,6 +517,9 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 	// After setupApp: the application installs the debug log sink during
 	// setup, so a backend announced before it is logged nowhere.
 	SetActiveBackend("gogpu")
+	// One wheel notch arrives as a single event now; keep widgets scrolling
+	// the system-configured number of lines per notch as before.
+	setWheelNotchLines(getSystemScrollLines())
 
 	go func() {
 		w, h := app.Size()
