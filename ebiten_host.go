@@ -216,13 +216,7 @@ func (h *EbitenHost) charForVK(vk uint16) rune {
 	if r, ok := h.lastRuneForVK[vk]; ok && r != 0 {
 		return r
 	}
-	switch {
-	case vk >= vtinput.VK_0 && vk <= vtinput.VK_9:
-		return rune('0' + (vk - vtinput.VK_0))
-	case vk >= vtinput.VK_A && vk <= vtinput.VK_Z:
-		return rune('a' + (vk - vtinput.VK_A))
-	}
-	return 0
+	return defaultRuneForVK(vk)
 }
 
 // requestSize records a resize asked for by the UI. The actual call happens on
