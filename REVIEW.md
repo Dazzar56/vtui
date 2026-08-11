@@ -206,3 +206,7 @@ of them at once, to fix a bug that was about code points versus UTF-16 units.
 If a highlighter turns up that genuinely works in bytes, the honest move is a
 second mapper next to the first, not a redefinition of the contract underneath
 code that already relies on it.
+## Ebitengine Monitor Initialization and GUI Lag on Windows
+
+1. **Monitor Scale Factor:** `ebiten.Monitor()` can return `nil` before `ebiten.RunGame` is called under some Windows graphics configurations (especially virtual machines, RDP, or multi-monitor setups), leading to a nil pointer dereference. We added a safety guard fallback of `1.0` scale.
+2. **GUI Lag:** Users report visual lag/sluggishness in both `gogpu` and `ebiten` backends on Windows. This could be due to CPU rasterization overhead, GPU driver sync issues, or high polling rates. Needs further performance profiling of the draw loops on various target machines.

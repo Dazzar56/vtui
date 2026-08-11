@@ -563,7 +563,11 @@ func RunEbitenHost(cols, rows int, fontName string, fontSize float64, setupApp f
 	// DeviceScaleFactor is readable before RunGame; if the window later moves
 	// to a monitor with a different factor the cells keep their pixel size,
 	// which is a visible but not a broken result and is left for later.
-	scale := int(ebiten.Monitor().DeviceScaleFactor() + 0.5)
+	var monitorScale float64 = 1.0
+	if m := ebiten.Monitor(); m != nil {
+		monitorScale = m.DeviceScaleFactor()
+	}
+	scale := int(monitorScale + 0.5)
 	if scale < 1 {
 		scale = 1
 	}
