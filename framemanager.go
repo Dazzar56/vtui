@@ -1262,9 +1262,16 @@ func (fm *frameManager) cycleScreensDirect(forward bool) bool {
 func (fm *frameManager) switchScreenNumber(number int) bool {
 	for idx, screen := range fm.Screens {
 		if screen.Number == number {
-			if idx != fm.ActiveIdx {
-				fm.SwitchScreen(idx)
+			if idx == fm.ActiveIdx {
+				// Already on that workspace, so switching would do nothing
+				// and swallowing the key costs whatever is below it. This is
+				// the single workspace case in particular: it is always
+				// number 1 and always active, so reporting a switch here
+				// would make Alt+1 permanently unreachable for the panel's
+				// quick search while Alt+2 and the rest still worked.
+				return false
 			}
+			fm.SwitchScreen(idx)
 			return true
 		}
 	}
