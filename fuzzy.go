@@ -266,3 +266,26 @@ func isASCIIString(s string) bool {
 	}
 	return true
 }
+
+// FuzzyMatcher is the exported handle over the Myers bit-vector matcher for
+// applications embedding vtui (Table.QuickSearch uses the unexported one).
+// Construction precomputes the needle tables once; Match is then linear in
+// the text length per candidate.
+type FuzzyMatcher struct{ fm *fuzzyMatcher }
+
+// NewFuzzyMatcher builds a matcher for needle, or nil for an empty needle.
+// The acceptance threshold is len(needle)/3 errors: exact substring matches
+// always pass, longer needles tolerate more typos.
+func NewFuzzyMatcher(needle string, caseSensitive bool) *FuzzyMatcher {
+	if fm := newFuzzyMatcher(needle, caseSensitive); fm != nil {
+		return &FuzzyMatcher{fm: fm}
+	}
+	return nil
+}
+
+// Match reports the best match of the needle inside text: the edit distance
+// score and the matched span as rune indices, end inclusive. ok is false
+// when the best distance exceeds the acceptance threshold.
+func (m *FuzzyMatcher) Match(text string) (score, start, end int, ok bool) {
+	return m.fm.match(text)
+}
