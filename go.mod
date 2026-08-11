@@ -3,7 +3,7 @@ module github.com/unxed/vtui
 go 1.25.5
 
 require (
-	github.com/gogpu/gg v0.50.14
+	github.com/gogpu/gg v0.52.2
 	github.com/gogpu/gogpu v0.52.1
 	github.com/gogpu/gpucontext v0.27.0
 	github.com/hajimehoshi/ebiten/v2 v2.10.0-alpha.13.0.20260811162617-464c2ddfc34c
