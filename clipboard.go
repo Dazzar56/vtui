@@ -4,12 +4,33 @@ import (
 	"encoding/base64"
 	"os"
 	"sync"
+	"sync/atomic"
 )
 
 var (
 	internalClipboard string
 	internalClipMu    sync.Mutex
+
+	// noTerminalBehind records that this process is drawing into a native
+	// window rather than a terminal, so the OSC 52 escape fallback has
+	// nobody to talk to.
+	noTerminalBehind atomic.Bool
 )
+
+// DisableTerminalClipboard tells the clipboard layer that no terminal is
+// attached to this process.
+//
+// SetClipboard ends with an OSC 52 escape sequence written to stdout, which is
+// the right last resort in a terminal and the wrong one in a GUI window: there
+// the sequence reaches either the shell the application was launched from,
+// where it prints as garbage, or on Windows nothing at all. A GUI host calls
+// this at startup so the internal buffer becomes the last resort instead,
+// which GetClipboard already falls back to, keeping copy and paste working
+// inside the application even where no OS clipboard helper is installed.
+func DisableTerminalClipboard() { noTerminalBehind.Store(true) }
+
+// TerminalClipboardDisabled reports whether the OSC 52 fallback is suppressed.
+func TerminalClipboardDisabled() bool { return noTerminalBehind.Load() }
 
 // SetClipboard copies text to the system clipboard.
 func SetClipboard(text string) {
@@ -30,6 +51,10 @@ func SetClipboard(text string) {
 	DebugLog("CLIPBOARD: SetFar2lClipboard FAILED or DISABLED")
 	if setOSClipboard(text) {
 		DebugLog("CLIPBOARD: setOSClipboard SUCCESS")
+		return
+	}
+	if noTerminalBehind.Load() {
+		DebugLog("CLIPBOARD: setOSClipboard FAILED, no terminal attached; keeping the internal buffer")
 		return
 	}
 	DebugLog("CLIPBOARD: setOSClipboard FAILED, falling back to OSC 52")

@@ -394,6 +394,12 @@ func RunEbitenHost(cols, rows int, fontName string, fontSize float64, setupApp f
 		return host.cols, host.rows, nil
 	}
 
+	// Copy and paste reach the OS through the shared clipboard helpers, which
+	// need nothing backend specific: the native path on Windows, and wl-copy,
+	// xclip, xsel or pbcopy elsewhere. Only the terminal escape fallback has
+	// to go, since this is a window and there is no terminal to receive it.
+	DisableTerminalClipboard()
+
 	setupApp()
 
 	ebiten.SetWindowTitle(AppName)
