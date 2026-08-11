@@ -654,16 +654,25 @@ func loadGogpuFont(fontName string, size float64) (text.Face, int, int) {
 		return nil, 8, 16
 	}
 
-	var faces []text.Face
-	faces = append(faces, primaryFace)
-
+	// The fallbacks cannot be attached to the face yet — see the note below on
+	// MultiFace — but which of them exist on this machine is worth recording.
+	// "No CJK font installed" and "CJK font installed and never consulted" are
+	// different bugs with identical symptoms, and the log is the only place
+	// they can be told apart. Parsing is part of the probe on purpose: a .ttc
+	// collection that gg refuses to open explains a missing glyph just as well
+	// as a missing file does.
 	for _, p := range fallbackFontPaths {
-		if _, err := os.Stat(p); err == nil {
-			src, err := text.NewFontSourceFromFile(p)
-			if err == nil {
-				faces = append(faces, src.Face(size))
-			}
+		if _, err := os.Stat(p); err != nil {
+			continue
 		}
+		src, err := text.NewFontSourceFromFile(p)
+		if err != nil {
+			DebugLog("GOGPU_DIAG_FONT: fallback present but gg cannot open it: %s: %v", p, err)
+			continue
+		}
+		probe := src.Face(size)
+		DebugLog("GOGPU_DIAG_FONT: fallback ok: %s (has 字=%v, has emoji=%v)",
+			p, probe.HasGlyph('字'), probe.HasGlyph('😀'))
 	}
 
 	// MultiFace gives CJK/emoji coverage, but in gg@v0.50.11 it can

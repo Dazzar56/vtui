@@ -416,7 +416,11 @@ func (r *GogpuRenderer) DrawToScreen(ctx *gogpu.Context) {
 		r.canvas, _ = ggcanvas.New(provider, w, h)
 	}
 
+	var prof gogpuFrameStats
+	drew := false
+
 	if r.dirty {
+		tDraw := gogpuProfNow()
 		r.canvas.Draw(func(dc *gg.Context) {
 			dc.SetRGB(0, 0, 0)
 			dc.DrawRectangle(0, 0, float64(w), float64(h))
@@ -458,9 +462,13 @@ func (r *GogpuRenderer) DrawToScreen(ctx *gogpu.Context) {
 					lx := float64(x * r.cellW)
 					spanPixW := float64(spanW * r.cellW)
 
+					prof.spans++
+					tBg := gogpuProfNow()
 					dc.SetColor(bg)
 					dc.DrawRectangle(lx, ly, spanPixW+1, float64(r.cellH)+1)
 					dc.Fill()
+					prof.bgFills++
+					prof.bgTime += gogpuProfSince(tBg)
 					dc.SetColor(fg)
 
 					for sx := 0; sx < spanW; {
@@ -481,7 +489,11 @@ func (r *GogpuRenderer) DrawToScreen(ctx *gogpu.Context) {
 						isBox := (char >= 0x2500 && char <= 0x25BF) || (char >= 0x2190 && char <= 0x2195)
 
 						if isBox {
-							if r.drawCustomChar(dc, char, lx+float64(sx*r.cellW), ly, float64(rw*r.cellW), float64(r.cellH)) {
+							tBox := gogpuProfNow()
+							drawn := r.drawCustomChar(dc, char, lx+float64(sx*r.cellW), ly, float64(rw*r.cellW), float64(r.cellH))
+							prof.boxTime += gogpuProfSince(tBox)
+							if drawn {
+								prof.boxChars++
 								sx += rw
 								continue
 							}
@@ -489,7 +501,11 @@ func (r *GogpuRenderer) DrawToScreen(ctx *gogpu.Context) {
 
 						str := CellString(currCell.Char)
 						if str != "" && str != " " && r.face != nil {
+							tTxt := gogpuProfNow()
 							dc.DrawString(str, lx+float64(sx*r.cellW), ly+ascent)
+							prof.textTime += gogpuProfSince(tTxt)
+							prof.strings++
+							prof.glyphs += gogpuRuneCount(str)
 						}
 						sx += rw
 					}
@@ -530,10 +546,18 @@ func (r *GogpuRenderer) DrawToScreen(ctx *gogpu.Context) {
 				dc.Fill()
 			}
 		})
+		prof.drawTime = gogpuProfSince(tDraw)
 		r.dirty = false
+		drew = true
 	}
 
+	tRender := gogpuProfNow()
 	r.canvas.Render(ctx.RenderTarget())
+	prof.renderTime = gogpuProfSince(tRender)
+
+	if gogpuProfileEnabled && drew {
+		prof.report(r.cols, r.rows)
+	}
 }
 
 func (r *GogpuRenderer) SetWindowTitle(title string) {
