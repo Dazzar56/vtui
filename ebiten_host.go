@@ -48,6 +48,7 @@ type EbitenHost struct {
 	keyBuf     []ebiten.Key
 	charBuf    []rune
 	pressedBuf []ebiten.Key
+	heldBuf    []ebiten.Key
 
 	// phantomMods holds modifier keys Ebitengine still reports as pressed but
 	// which demonstrably are not. Switching keyboard layout with Alt+Shift is
@@ -172,6 +173,39 @@ func (h *EbitenHost) settlePendingChord(sawText bool) {
 	h.sendEvent(chord)
 }
 
+// keyBehindText names the key a character came from, when exactly one key can
+// be responsible.
+//
+// Ebitengine reports text and keys as separate streams with no link between
+// them, so this is attribution rather than fact. A key that went down this
+// tick is the obvious candidate; failing that, a single held non-modifier key
+// covers auto-repeat, where the character keeps arriving with no new press.
+// Anything more ambiguous is left alone, since a wrong attribution would
+// label the key with someone else's rune and mislead every later Alt chord.
+func (h *EbitenHost) keyBehindText() (ebiten.Key, bool) {
+	if len(h.pressedBuf) == 1 {
+		return h.pressedBuf[0], true
+	}
+	if len(h.pressedBuf) > 1 {
+		return 0, false
+	}
+
+	var found ebiten.Key
+	n := 0
+	for _, k := range h.heldBuf {
+		vk := ebitenKeyToVK(k)
+		if vk == 0 || isModifierVK(vk) {
+			continue
+		}
+		found = k
+		n++
+		if n > 1 {
+			return 0, false
+		}
+	}
+	return found, n == 1
+}
+
 // charForVK returns the character a modified key should carry.
 //
 // It prefers what the key actually produced when pressed unmodified on this
@@ -267,8 +301,10 @@ func (g *ebitenGame) Update() error {
 	// out: the platform already repeats those through the text stream, and
 	// adding to it would repeat them twice.
 	tps := ebiten.TPS()
-	h.keyBuf = inpututil.AppendPressedKeys(h.keyBuf[:0])
-	for _, k := range h.keyBuf {
+	// Held keys go in their own buffer: keyBuf is reused for released keys
+	// below, and the text loop still needs to know what was down.
+	h.heldBuf = inpututil.AppendPressedKeys(h.heldBuf[:0])
+	for _, k := range h.heldBuf {
 		vk := ebitenKeyToVK(k)
 		if vk == 0 || !isSpecialOrModifiedKey(vk, mods) {
 			continue
@@ -328,19 +364,27 @@ func (g *ebitenGame) Update() error {
 			if r < 0x20 || r == 0x7f {
 				continue
 			}
-			// Remember what this key produces on this layout, so a later Alt
-			// chord on the same key can carry the same character. Only an
-			// unambiguous frame teaches anything: one key down, one character
-			// out. Pairing them positionally when several arrive together
-			// would sooner or later attribute the wrong rune to a key.
-			if i == 0 && len(h.charBuf) == 1 && len(h.pressedBuf) == 1 {
-				if vk := ebitenKeyToVK(h.pressedBuf[0]); vk != 0 {
-					h.lastRuneForVK[vk] = r
+			// Attribute the character to the key that produced it, when that
+			// can be said without guessing. It gives the event a virtual key
+			// to go with the character, so a press and its release describe
+			// the same key; a press reported as VK 0 followed by a release
+			// reporting VK_B is a pair nothing downstream can match up.
+			//
+			// The same attribution teaches which rune this key yields on this
+			// layout, so a later Alt chord on it can carry that rune.
+			var vk uint16
+			if i == 0 && len(h.charBuf) == 1 {
+				if k, ok := h.keyBehindText(); ok {
+					vk = ebitenKeyToVK(k)
+					if vk != 0 {
+						h.lastRuneForVK[vk] = r
+					}
 				}
 			}
 			h.sendEvent(&vtinput.InputEvent{
 				Type:            vtinput.KeyEventType,
 				KeyDown:         true,
+				VirtualKeyCode:  vk,
 				Char:            r,
 				ControlKeyState: mods,
 			})

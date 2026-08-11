@@ -687,3 +687,43 @@ func TestDigitKeysMapToExactVirtualKeys(t *testing.T) {
 		}
 	}
 }
+
+// A character event must name the key it came from. Ebitengine reports text
+// and keys as separate streams, and a press logged as VK 0 followed by a
+// release logging VK_B is a pair nothing downstream can match up.
+func TestKeyBehindText_UsesTheKeyPressedThisTick(t *testing.T) {
+	h := newTestHost(t)
+	h.pressedBuf = []ebiten.Key{ebiten.KeyB}
+
+	k, ok := h.keyBehindText()
+	if !ok || k != ebiten.KeyB {
+		t.Errorf("keyBehindText = %v, %v; want KeyB, true", k, ok)
+	}
+}
+
+// Auto-repeat keeps producing characters with no new press, so a single held
+// key is still an unambiguous source.
+func TestKeyBehindText_FallsBackToTheOneHeldKey(t *testing.T) {
+	h := newTestHost(t)
+	h.heldBuf = []ebiten.Key{ebiten.KeyShiftLeft, ebiten.KeyB}
+
+	k, ok := h.keyBehindText()
+	if !ok || k != ebiten.KeyB {
+		t.Errorf("keyBehindText = %v, %v; want KeyB, true (modifiers do not count)", k, ok)
+	}
+}
+
+// Ambiguity must produce no attribution rather than a guess: a wrong one
+// labels the key with someone else's rune and misleads every later Alt chord.
+func TestKeyBehindText_DeclinesWhenAmbiguous(t *testing.T) {
+	for name, h := range map[string]*EbitenHost{
+		"two keys down this tick": {pressedBuf: []ebiten.Key{ebiten.KeyA, ebiten.KeyB}},
+		"two keys held":           {heldBuf: []ebiten.Key{ebiten.KeyA, ebiten.KeyB}},
+		"nothing at all":          {},
+		"only modifiers held":     {heldBuf: []ebiten.Key{ebiten.KeyShiftLeft, ebiten.KeyControlLeft}},
+	} {
+		if k, ok := h.keyBehindText(); ok {
+			t.Errorf("%s: keyBehindText returned %v, want no attribution", name, k)
+		}
+	}
+}
