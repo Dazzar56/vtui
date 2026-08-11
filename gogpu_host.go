@@ -181,7 +181,7 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 			os.Setenv("GOGPU_DX12_DXIL", "1")
 		}
 	}
-	face, cellW, cellH := loadGogpuFont(fontName, fontSize)
+	face, fallbackFaces, cellW, cellH := loadGogpuFont(fontName, fontSize)
 
 	fmt.Fprintf(os.Stdout, "GOGPU_HOST: Starting RunGogpuHost %dx%d (Cell: %dx%d)\n", cols, rows, cellW, cellH)
 	DebugLog("GOGPU_HOST: Starting RunGogpuHost %dx%d (Cell: %dx%d)", cols, rows, cellW, cellH)
@@ -209,6 +209,7 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 	host.scr = scr
 	scr.AllocBuf(cols, rows)
 	renderer := NewGogpuRenderer(host, face, cellW, cellH)
+	renderer.SetFallbackFaces(fallbackFaces)
 	scr.Renderer = renderer
 	scr.Graphics().SetProtocol(GraphicsNative)
 	scr.Graphics().SetCellSize(cellW, cellH)
@@ -621,7 +622,15 @@ func isGogpuFaceSafe(f text.Face) (ok bool) {
 	ok = true
 	return
 }
-func loadGogpuFont(fontName string, size float64) (text.Face, int, int) {
+
+// loadGogpuFont returns the primary face plus the fallback faces that cover
+// the runes the primary lacks. The fallbacks are returned as separate faces
+// rather than folded into a gg text.MultiFace on purpose: a MultiFace has no
+// single FontSource, and the GPU glyph-mask engine refuses such a face and
+// sends every DrawString down the CPU path. Selecting the face per rune keeps
+// each face a plain single-source one, so both the primary and the fallbacks
+// stay on the GPU path.
+func loadGogpuFont(fontName string, size float64) (text.Face, []text.Face, int, int) {
 	if size <= 0 {
 		size = 18.0
 	}
@@ -655,8 +664,14 @@ func loadGogpuFont(fontName string, size float64) (text.Face, int, int) {
 	}
 
 	if primaryFace == nil {
-		return nil, 8, 16
+		return nil, nil, 8, 16
 	}
+
+	// An escape hatch that does not need a rebuild: if the chain ever draws
+	// something worse than a .notdef box, the old behaviour is one variable
+	// away.
+	noFallback := os.Getenv("VTUI_GOGPU_NO_FALLBACK") != ""
+	var fallbacks []text.Face
 
 	// The fallbacks cannot be attached to the face yet — see the note below on
 	// MultiFace — but which of them exist on this machine is worth recording.
@@ -677,24 +692,21 @@ func loadGogpuFont(fontName string, size float64) (text.Face, int, int) {
 		probe := src.Face(size)
 		DebugLog("GOGPU_DIAG_FONT: fallback ok: %s (has 字=%v, has emoji=%v)",
 			p, probe.HasGlyph('字'), probe.HasGlyph('😀'))
+		if !noFallback {
+			fallbacks = append(fallbacks, probe)
+		}
 	}
 
-	// MultiFace gives CJK/emoji coverage, but in gg@v0.50.11 it can
-	// hand us a Face whose internal FontSource is nil. The GPU path
-	// then panics in copyCheck/Parsed on the first DrawString.
-	// Feature-probe the result; on any problem silently keep the
-	// already-working primary face (X11/Wayland fallback is separate
-	// and already correct).
-	// MultiFace is intentionally disabled for the gogpu backend.
-	// In gg@v0.50.11 (and the GPU GlyphMask path) a MultiFace can
-	// expose a nil *FontSource. The first real DrawString then
-	// panics inside copyCheck/Parsed on the render thread.
-	// Feature probes that only call Metrics/Advance are not enough
-	// to catch it. X11 and Wayland use a completely different font
-	// stack and their fallback continues to work.
-	// TODO: re-enable when gg fixes MultiFace for the GPU text engine
-	//       or when we can construct a verified-safe MultiFace.
-	return primaryFace, cellW, cellH
+	// text.MultiFace stays out of this backend deliberately. It reports no
+	// FontSource, gg's glyph-mask engine rejects such a face (nil guard added
+	// upstream in gg 5aa3005, v0.50.15) and falls back to the CPU text path
+	// for every DrawString — with one DrawString per cell that is not a
+	// slowdown but a hang. The renderer walks the returned fallbacks itself
+	// instead; see GogpuRenderer.faceFor.
+	//
+	// This can be revisited when gg lands per-font-run GPU support (ADR-065),
+	// and only if it measures better than the chain below.
+	return primaryFace, fallbacks, cellW, cellH
 }
 
 func isNumLockEffectiveGogpu(mods vtinput.ControlKeyState) bool {

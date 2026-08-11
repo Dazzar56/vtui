@@ -19,6 +19,8 @@ type GogpuRenderer struct {
 	mu           sync.Mutex
 	host         *GogpuHost
 	face         text.Face
+	fallbacks    []text.Face
+	faceCache    map[rune]text.Face
 	cellW, cellH int // logical cell sizes from font measurement
 	cols, rows   int // dimensions of the current renderBuf
 
@@ -51,6 +53,48 @@ func NewGogpuRenderer(host *GogpuHost, face text.Face, cw, ch int) *GogpuRendere
 		blinkState:      true,
 		lastBlinkTime:   time.Now(),
 	}
+}
+
+// SetFallbackFaces installs the faces consulted for runes the primary font
+// has no glyph for. Passing nil restores primary-only rendering.
+func (r *GogpuRenderer) SetFallbackFaces(faces []text.Face) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.fallbacks = faces
+	r.faceCache = nil
+}
+
+// faceFor resolves the face that actually owns a glyph for ch, memoising the
+// answer. The probe itself is a cmap lookup, but it happens once per distinct
+// rune on screen rather than once per cell per frame, which is what keeps this
+// off the hot path: a panel full of Latin text asks exactly once per letter
+// and then never again.
+//
+// The caller must hold r.mu. DrawToScreen, the only caller, holds it for the
+// whole frame.
+func (r *GogpuRenderer) faceFor(ch rune) text.Face {
+	if r.face == nil || len(r.fallbacks) == 0 {
+		return r.face
+	}
+	if f, ok := r.faceCache[ch]; ok {
+		return f
+	}
+
+	f := r.face
+	if !r.face.HasGlyph(ch) {
+		for _, fb := range r.fallbacks {
+			if fb != nil && fb.HasGlyph(ch) {
+				f = fb
+				break
+			}
+		}
+	}
+
+	if r.faceCache == nil {
+		r.faceCache = make(map[rune]text.Face, 256)
+	}
+	r.faceCache[ch] = f
+	return f
 }
 
 func (r *GogpuRenderer) Render(buf, shadow []CharInfo, w, h int, force bool) {
@@ -438,6 +482,11 @@ func (r *GogpuRenderer) DrawToScreen(ctx *gogpu.Context) {
 				ascent = float64(r.face.Metrics().Ascent)
 			}
 
+			// The baseline stays the primary font's for the whole frame even
+			// when a fallback draws the glyph: a CJK face with its own ascent
+			// would make text jump between lines that mix scripts.
+			curFace := r.face
+
 			for y := 0; y < drawRows; y++ {
 				rowOff := y * drawCols
 				ly := float64(y * r.cellH)
@@ -502,6 +551,10 @@ func (r *GogpuRenderer) DrawToScreen(ctx *gogpu.Context) {
 						str := CellString(currCell.Char)
 						if str != "" && str != " " && r.face != nil {
 							tTxt := gogpuProfNow()
+							if f := r.faceFor(char); f != nil && f != curFace {
+								curFace = f
+								dc.SetFont(f)
+							}
 							dc.DrawString(str, lx+float64(sx*r.cellW), ly+ascent)
 							prof.textTime += gogpuProfSince(tTxt)
 							prof.strings++
