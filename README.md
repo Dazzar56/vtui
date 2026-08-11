@@ -54,7 +54,7 @@ The framework abstracts the physical output through the `SurfaceRenderer` interf
 
 *   **AnsiRenderer:** The default backend. Translates buffer changes into optimized ANSI escape sequences for standard terminals.
 *   **GogpuRenderer:** A hardware-accelerated backend that draws directly to a GPU-backed window using the `gogpu` library. Provides crisp text rendering and high FPS.
-*   **EbitenRenderer:** A cgo-free backend built on [Ebitengine](https://ebitengine.org). The grid is rasterised on the CPU and uploaded as a single GPU texture per frame. Its reason to exist is dependency independence: it needs neither cgo nor the gogpu stack, so `CGO_ENABLED=0` cross-compilation keeps working on Linux, Windows and macOS.
+*   **EbitenRenderer:** A cgo-free backend built on [Ebitengine](https://ebitengine.org). The grid is rasterised on the CPU and uploaded as a single GPU texture per frame; an unchanged screen costs neither an upload nor a blit. Supports HiDPI and shares the geometric frame rasteriser with the X11 and Wayland backends. Its reason to exist is dependency independence: it needs neither cgo nor the gogpu stack, so `CGO_ENABLED=0` cross-compilation keeps working on Linux, Windows and macOS.
 *   **X11/Wayland Renderers:** Native Unix backends that draw to software bitmapped windows without requiring a terminal emulator.
 *   **PureX11Renderer:** A 100% pure Go X11 backend using the XGB library and SHM. Experimental and requires further testing.
 

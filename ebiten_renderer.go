@@ -35,6 +35,11 @@ type EbitenRenderer struct {
 	cellW, cellH int
 	cols, rows   int
 
+	// scale is the display scale factor the font was measured at. It only
+	// sets line thickness for the geometric glyphs: the font face is already
+	// rasterised at the scaled size, so everything else is in real pixels.
+	scale int
+
 	// img is the rasterised frame. dirty says it has changed since the last
 	// upload, so the game loop knows whether the texture needs rewriting.
 	img   *image.RGBA
@@ -63,13 +68,18 @@ type EbitenRenderer struct {
 }
 
 // NewEbitenRenderer builds a renderer for a font face already measured into
-// cellW by cellH pixels.
-func NewEbitenRenderer(host *EbitenHost, face font.Face, cellW, cellH int) *EbitenRenderer {
+// cellW by cellH pixels. scale is the display scale factor the face was
+// rasterised at; pass 1 for a non-HiDPI screen.
+func NewEbitenRenderer(host *EbitenHost, face font.Face, cellW, cellH, scale int) *EbitenRenderer {
+	if scale < 1 {
+		scale = 1
+	}
 	return &EbitenRenderer{
 		host:          host,
 		face:          face,
 		cellW:         cellW,
 		cellH:         cellH,
+		scale:         scale,
 		glyphCache:    make(map[glyphKey]*image.RGBA),
 		blinkState:    true,
 		lastBlinkTime: time.Now(),
@@ -177,7 +187,16 @@ func (r *EbitenRenderer) Render(buf, shadow []CharInfo, w, h int, forceRedraw bo
 				fg, cbg := r.getCellColors(curr)
 
 				if ch := CellBaseRune(curr.Char); ch != 0 && ch != ' ' {
-					r.drawCachedGlyph(img, curr.Char, currX*r.cellW, y*r.cellH, rw, fg, cbg)
+					// Frames, arrows and blocks are drawn geometrically so
+					// that neighbouring cells join without hairline gaps;
+					// anything the geometric path declines goes to the font.
+					px, py := currX*r.cellW, y*r.cellH
+					if isBoxDrawRune(ch) &&
+						drawBoxGlyph(img, ch, px, py, r.cellW*rw, r.cellH, r.scale, rgbColor(fg)) {
+						sx += rw
+						continue
+					}
+					r.drawCachedGlyph(img, curr.Char, px, py, rw, fg, cbg)
 				}
 
 				if cursorVisible && y == r.cursorY && r.cursorX >= currX && r.cursorX < currX+rw {

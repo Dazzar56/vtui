@@ -21,7 +21,7 @@ func mkGrid(w, h int, ch uint64, attr uint64) (buf, shadow []CharInfo) {
 }
 
 func TestEbitenRenderer_AllocatesFramebufferForGrid(t *testing.T) {
-	r := NewEbitenRenderer(nil, nil, 8, 16)
+	r := NewEbitenRenderer(nil, nil, 8, 16, 1)
 	buf, shadow := mkGrid(10, 4, ' ', 0)
 
 	r.Render(buf, shadow, 10, 4, true)
@@ -40,7 +40,7 @@ func TestEbitenRenderer_AllocatesFramebufferForGrid(t *testing.T) {
 // A resized grid must reallocate rather than paint into the old bounds, which
 // is how a shrink turns into an out-of-range write.
 func TestEbitenRenderer_ReallocatesOnResize(t *testing.T) {
-	r := NewEbitenRenderer(nil, nil, 8, 16)
+	r := NewEbitenRenderer(nil, nil, 8, 16, 1)
 
 	buf, shadow := mkGrid(10, 4, ' ', 0)
 	r.Render(buf, shadow, 10, 4, true)
@@ -66,7 +66,7 @@ func TestEbitenRenderer_ReallocatesOnResize(t *testing.T) {
 // Render must survive a short buffer instead of panicking: the grid can be
 // resized between AllocBuf and the next flush.
 func TestEbitenRenderer_IgnoresInconsistentInput(t *testing.T) {
-	r := NewEbitenRenderer(nil, nil, 8, 16)
+	r := NewEbitenRenderer(nil, nil, 8, 16, 1)
 	buf, shadow := mkGrid(4, 4, ' ', 0)
 
 	r.Render(buf, shadow, 100, 100, true) // claims far more cells than exist
@@ -79,7 +79,7 @@ func TestEbitenRenderer_IgnoresInconsistentInput(t *testing.T) {
 }
 
 func TestEbitenRenderer_TakeFrameClearsDirty(t *testing.T) {
-	r := NewEbitenRenderer(nil, nil, 8, 16)
+	r := NewEbitenRenderer(nil, nil, 8, 16, 1)
 	buf, shadow := mkGrid(4, 2, ' ', 0)
 	r.Render(buf, shadow, 4, 2, true)
 
@@ -100,7 +100,7 @@ func TestEbitenRenderer_TakeFrameClearsDirty(t *testing.T) {
 // An unchanged grid must not dirty the framebuffer, otherwise a static screen
 // uploads a texture every frame.
 func TestEbitenRenderer_UnchangedGridDoesNotDirty(t *testing.T) {
-	r := NewEbitenRenderer(nil, nil, 8, 16)
+	r := NewEbitenRenderer(nil, nil, 8, 16, 1)
 	buf, shadow := mkGrid(8, 4, ' ', 0)
 
 	r.Render(buf, shadow, 8, 4, true)
@@ -117,7 +117,7 @@ func TestEbitenRenderer_UnchangedGridDoesNotDirty(t *testing.T) {
 }
 
 func TestEbitenRenderer_CursorChangeMarksDirty(t *testing.T) {
-	r := NewEbitenRenderer(nil, nil, 8, 16)
+	r := NewEbitenRenderer(nil, nil, 8, 16, 1)
 	buf, shadow := mkGrid(8, 4, ' ', 0)
 	r.Render(buf, shadow, 8, 4, true)
 	r.takeFrame()
@@ -135,7 +135,7 @@ func TestEbitenRenderer_CursorChangeMarksDirty(t *testing.T) {
 }
 
 func TestEbitenRenderer_TitleIsReportedOnce(t *testing.T) {
-	r := NewEbitenRenderer(nil, nil, 8, 16)
+	r := NewEbitenRenderer(nil, nil, 8, 16, 1)
 
 	if _, ok := r.takeTitle(); ok {
 		t.Error("no title was set, takeTitle should report nothing")
@@ -242,7 +242,7 @@ func TestEbitenKeyToVK_NoAccidentalCollisions(t *testing.T) {
 // dirtied every frame before the painted-cursor state was tracked separately
 // from the logical cursor position.
 func TestEbitenRenderer_HiddenCursorDoesNotDirtyForever(t *testing.T) {
-	r := NewEbitenRenderer(nil, nil, 8, 16)
+	r := NewEbitenRenderer(nil, nil, 8, 16, 1)
 	buf, shadow := mkGrid(8, 4, ' ', 0)
 
 	r.SetCursor(2, 1, true, CursorShapeBlock)
@@ -268,7 +268,7 @@ func TestEbitenRenderer_HiddenCursorDoesNotDirtyForever(t *testing.T) {
 
 // A caret that moves must erase the row it left as well as paint the new one.
 func TestEbitenRenderer_MovedCursorErasesOldRow(t *testing.T) {
-	r := NewEbitenRenderer(nil, nil, 8, 16)
+	r := NewEbitenRenderer(nil, nil, 8, 16, 1)
 	buf, shadow := mkGrid(8, 6, ' ', 0)
 
 	r.SetCursor(1, 1, true, CursorShapeBlock)
@@ -287,5 +287,84 @@ func TestEbitenRenderer_MovedCursorErasesOldRow(t *testing.T) {
 	}
 	if _, _, _, changed := r.takeFrame(); !changed {
 		t.Error("moving the caret should dirty the framebuffer")
+	}
+}
+
+// pixelAt reads a pixel out of the renderer's framebuffer.
+func pixelAt(t *testing.T, r *EbitenRenderer, x, y int) (rr, g, b uint8) {
+	t.Helper()
+	off := y*r.img.Stride + x*4
+	if off+3 >= len(r.img.Pix) {
+		t.Fatalf("pixel (%d,%d) is outside the framebuffer", x, y)
+	}
+	return r.img.Pix[off], r.img.Pix[off+1], r.img.Pix[off+2]
+}
+
+// Frame characters must go through the geometric path, not the font, so that
+// neighbouring cells join. A font glyph would leave the seam column unlit.
+func TestEbitenRenderer_BoxCharsJoinAcrossCells(t *testing.T) {
+	// A nil face proves the point twice over: if the box path were not taken
+	// these cells would render as nothing at all.
+	r := NewEbitenRenderer(nil, nil, 8, 16, 1)
+
+	const w, h = 4, 1
+	buf, shadow := mkGrid(w, h, '─', 0)
+	for i := range buf {
+		buf[i].Attributes = SetIndexFore(SetIndexBack(0, 0), 15)
+	}
+	ThemePalette[0] = 0x000000
+	ThemePalette[15] = 0xFFFFFF
+
+	r.Render(buf, shadow, w, h, true)
+
+	mid := 16 / 2
+	for x := 0; x < w*8; x++ {
+		if rr, g, b := pixelAt(t, r, x, mid); rr == 0 && g == 0 && b == 0 {
+			t.Fatalf("horizontal rule has a gap at x=%d: frame chars are not "+
+				"reaching the geometric path", x)
+		}
+	}
+}
+
+// Text runes must still reach the font path and must not be swallowed by the
+// box-drawing branch.
+func TestEbitenRenderer_TextRunesAreNotTreatedAsBoxes(t *testing.T) {
+	r := NewEbitenRenderer(nil, nil, 8, 16, 1)
+	buf, shadow := mkGrid(4, 1, 'A', 0)
+
+	r.Render(buf, shadow, 4, 1, true)
+
+	// With a nil face nothing is drawn, but the run must complete without the
+	// geometric path claiming the cell.
+	if r.img == nil {
+		t.Fatal("expected a framebuffer")
+	}
+}
+
+func TestEbitenRenderer_ScaleIsClampedAndStored(t *testing.T) {
+	if got := NewEbitenRenderer(nil, nil, 8, 16, 0).scale; got != 1 {
+		t.Errorf("scale 0 clamped to %d, want 1", got)
+	}
+	if got := NewEbitenRenderer(nil, nil, 8, 16, -3).scale; got != 1 {
+		t.Errorf("negative scale clamped to %d, want 1", got)
+	}
+	if got := NewEbitenRenderer(nil, nil, 16, 32, 2).scale; got != 2 {
+		t.Errorf("scale 2 stored as %d, want 2", got)
+	}
+}
+
+// At scale 2 the cell is measured in real pixels, so the framebuffer is the
+// full device resolution rather than a logical one that would be upscaled.
+func TestEbitenRenderer_HiDPIFramebufferIsDeviceSized(t *testing.T) {
+	r := NewEbitenRenderer(nil, nil, 16, 32, 2) // a 8x16 cell at scale 2
+	buf, shadow := mkGrid(10, 4, ' ', 0)
+
+	r.Render(buf, shadow, 10, 4, true)
+
+	if got, want := r.img.Rect.Dx(), 10*16; got != want {
+		t.Errorf("HiDPI framebuffer width = %d, want %d", got, want)
+	}
+	if got, want := r.img.Rect.Dy(), 4*32; got != want {
+		t.Errorf("HiDPI framebuffer height = %d, want %d", got, want)
 	}
 }

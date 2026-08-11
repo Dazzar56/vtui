@@ -28,6 +28,12 @@ type EbitenHost struct {
 	cols, rows   int
 	cellW, cellH int
 
+	// scale is the display scale factor. Ebitengine's window API and the
+	// framebuffer disagree about units on a HiDPI screen: SetWindowSize takes
+	// device-independent pixels while the cells are measured in real ones, so
+	// every crossing between the two goes through this.
+	scale int
+
 	// Last window size seen by Layout, in logical pixels.
 	winW, winH int
 
@@ -79,8 +85,14 @@ func (h *EbitenHost) requestSize(w, h2 int) {
 // ebitenGame is the ebiten.Game implementation. Update translates input,
 // Draw uploads whatever the renderer has rasterised.
 type ebitenGame struct {
-	host   *EbitenHost
-	screen *ebiten.Image
+	host *EbitenHost
+	tex  *ebiten.Image
+
+	// presented says the screen already holds a frame. Ebitengine is a fixed
+	// tick loop with no render-on-demand, but with clearing disabled it keeps
+	// the previous contents, so once a frame is up an unchanged UI needs
+	// neither an upload nor a blit and Draw becomes free.
+	presented bool
 }
 
 func (g *ebitenGame) Update() error {
@@ -90,8 +102,12 @@ func (g *ebitenGame) Update() error {
 	if h.pendingSize.valid {
 		w, ph := h.pendingSize.w, h.pendingSize.h
 		h.pendingSize.valid = false
+		sc := h.scale
 		h.mu.Unlock()
-		ebiten.SetWindowSize(w, ph)
+		if sc < 1 {
+			sc = 1
+		}
+		ebiten.SetWindowSize(w/sc, ph/sc)
 	} else {
 		h.mu.Unlock()
 	}
@@ -265,16 +281,22 @@ func (g *ebitenGame) Draw(screen *ebiten.Image) {
 		return
 	}
 
-	// The texture is rebuilt only when the rasteriser touched something. On a
-	// still screen Draw costs one DrawImage and no upload at all.
-	if g.screen == nil || g.screen.Bounds().Dx() != w || g.screen.Bounds().Dy() != h {
-		g.screen = ebiten.NewImage(w, h)
+	if g.tex == nil || g.tex.Bounds().Dx() != w || g.tex.Bounds().Dy() != h {
+		g.tex = ebiten.NewImage(w, h)
 		changed = true
+		g.presented = false
+	}
+
+	// Nothing moved and the screen already shows the last frame: skip both the
+	// upload and the blit. This is what keeps an idle file manager off the GPU.
+	if !changed && g.presented {
+		return
 	}
 	if changed {
-		g.screen.WritePixels(pix)
+		g.tex.WritePixels(pix)
 	}
-	screen.DrawImage(g.screen, nil)
+	screen.DrawImage(g.tex, nil)
+	g.presented = true
 }
 
 // Layout maps the window size onto the character grid and tells the running
@@ -283,10 +305,19 @@ func (g *ebitenGame) Layout(outsideWidth, outsideHeight int) (int, int) {
 	h := g.host
 
 	h.mu.Lock()
-	changed := outsideWidth != h.winW || outsideHeight != h.winH
-	h.winW, h.winH = outsideWidth, outsideHeight
+	scale := h.scale
+	if scale < 1 {
+		scale = 1
+	}
+	// The logical screen is requested at full device resolution so that the
+	// framebuffer maps one to one onto physical pixels; anything less would
+	// have Ebitengine upscale text that was rasterised sharp.
+	pixW, pixH := outsideWidth*scale, outsideHeight*scale
+
+	changed := pixW != h.winW || pixH != h.winH
+	h.winW, h.winH = pixW, pixH
 	if h.cellW > 0 && h.cellH > 0 {
-		cols, rows := outsideWidth/h.cellW, outsideHeight/h.cellH
+		cols, rows := pixW/h.cellW, pixH/h.cellH
 		if cols < 1 {
 			cols = 1
 		}
@@ -305,31 +336,43 @@ func (g *ebitenGame) Layout(outsideWidth, outsideHeight int) (int, int) {
 	if changed {
 		h.sendEvent(&vtinput.InputEvent{Type: vtinput.ResizeEventType})
 	}
-	return outsideWidth, outsideHeight
+	return pixW, pixH
 }
 
 // RunEbitenHost opens an Ebitengine window and runs the application in it.
 // It blocks until the window closes, and must be called from the main
 // goroutine because that is where Ebitengine insists on running its loop.
 func RunEbitenHost(cols, rows int, fontName string, fontSize float64, setupApp func()) error {
-	face, cellW, cellH := loadBestFont(fontName, fontSize, 72)
-	if cellW <= 0 || cellH <= 0 {
-		cellW, cellH = 7, 13
+	// The scale factor has to be known before the font is measured, because a
+	// HiDPI screen needs the face rasterised at the larger size. Scaling a
+	// face built for 96dpi up afterwards is what makes text look soft.
+	// DeviceScaleFactor is readable before RunGame; if the window later moves
+	// to a monitor with a different factor the cells keep their pixel size,
+	// which is a visible but not a broken result and is left for later.
+	scale := int(ebiten.Monitor().DeviceScaleFactor() + 0.5)
+	if scale < 1 {
+		scale = 1
 	}
-	DebugLog("EBITEN_HOST: starting %dx%d cells, cell size %dx%d", cols, rows, cellW, cellH)
+
+	face, cellW, cellH := loadBestFont(fontName, fontSize*float64(scale), 72)
+	if cellW <= 0 || cellH <= 0 {
+		cellW, cellH = 7*scale, 13*scale
+	}
+	DebugLog("EBITEN_HOST: starting %dx%d cells, cell size %dx%d, scale %d", cols, rows, cellW, cellH, scale)
 
 	host := &EbitenHost{
 		cols:       cols,
 		rows:       rows,
 		cellW:      cellW,
 		cellH:      cellH,
+		scale:      scale,
 		winW:       cols * cellW,
 		winH:       rows * cellH,
 		lastMouseX: -1,
 		lastMouseY: -1,
 	}
 
-	renderer := NewEbitenRenderer(host, face, cellW, cellH)
+	renderer := NewEbitenRenderer(host, face, cellW, cellH, scale)
 	host.renderer = renderer
 
 	scr := NewScreenBuf()
@@ -354,7 +397,7 @@ func RunEbitenHost(cols, rows int, fontName string, fontSize float64, setupApp f
 	setupApp()
 
 	ebiten.SetWindowTitle(AppName)
-	ebiten.SetWindowSize(cols*cellW, rows*cellH)
+	ebiten.SetWindowSize(cols*cellW/scale, rows*cellH/scale)
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 	// The screen is fully repainted from our own framebuffer every frame, so
 	// letting Ebitengine clear it first would only waste a pass.
