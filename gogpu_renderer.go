@@ -434,22 +434,6 @@ func (r *GogpuRenderer) DrawToScreen(ctx *gogpu.Context) {
 				ascent = float64(r.face.Metrics().Ascent)
 			}
 
-			type rect struct {
-				x, y, w, h float64
-			}
-			type textDraw struct {
-				str  string
-				x, y float64
-			}
-			type boxDraw struct {
-				char       rune
-				x, y, w, h float64
-			}
-
-			bgMap := make(map[uint32][]rect)
-			fgTextMap := make(map[uint32][]textDraw)
-			fgBoxMap := make(map[uint32][]boxDraw)
-
 			for y := 0; y < drawRows; y++ {
 				rowOff := y * drawCols
 				ly := float64(y * r.cellH)
@@ -474,7 +458,10 @@ func (r *GogpuRenderer) DrawToScreen(ctx *gogpu.Context) {
 					lx := float64(x * r.cellW)
 					spanPixW := float64(spanW * r.cellW)
 
-					bgMap[bg] = append(bgMap[bg], rect{lx, ly, spanPixW + 1, float64(r.cellH) + 1})
+					dc.SetColor(bg)
+					dc.DrawRectangle(lx, ly, spanPixW+1, float64(r.cellH)+1)
+					dc.Fill()
+					dc.SetColor(fg)
 
 					for sx := 0; sx < spanW; {
 						idx := rowOff + x + sx
@@ -494,42 +481,20 @@ func (r *GogpuRenderer) DrawToScreen(ctx *gogpu.Context) {
 						isBox := (char >= 0x2500 && char <= 0x25BF) || (char >= 0x2190 && char <= 0x2195)
 
 						if isBox {
-							fgBoxMap[fg] = append(fgBoxMap[fg], boxDraw{char, lx + float64(sx*r.cellW), ly, float64(rw * r.cellW), float64(r.cellH)})
-						} else {
-							str := CellString(currCell.Char)
-							if str != "" && str != " " && r.face != nil {
-								fgTextMap[fg] = append(fgTextMap[fg], textDraw{str, lx + float64(sx*r.cellW), ly + ascent})
+							if r.drawCustomChar(dc, char, lx+float64(sx*r.cellW), ly, float64(rw*r.cellW), float64(r.cellH)) {
+								sx += rw
+								continue
 							}
+						}
+
+						str := CellString(currCell.Char)
+						if str != "" && str != " " && r.face != nil {
+							dc.DrawString(str, lx+float64(sx*r.cellW), ly+ascent)
 						}
 						sx += rw
 					}
+
 					x += spanW
-				}
-			}
-
-			// Draw all backgrounds
-			for color32, rects := range bgMap {
-				dc.SetColor(color.RGBA{R: uint8(color32 >> 16), G: uint8(color32 >> 8), B: uint8(color32), A: 255})
-				for _, r := range rects {
-					dc.DrawRectangle(r.x, r.y, r.w, r.h)
-				}
-				dc.Fill()
-			}
-
-			// Draw all box characters
-			for color32, boxes := range fgBoxMap {
-				col := color.RGBA{R: uint8(color32 >> 16), G: uint8(color32 >> 8), B: uint8(color32), A: 255}
-				dc.SetColor(col)
-				for _, b := range boxes {
-					r.drawCustomChar(dc, b.char, b.x, b.y, b.w, b.h)
-				}
-			}
-
-			// Draw all texts
-			for color32, texts := range fgTextMap {
-				dc.SetColor(color.RGBA{R: uint8(color32 >> 16), G: uint8(color32 >> 8), B: uint8(color32), A: 255})
-				for _, t := range texts {
-					dc.DrawString(t.str, t.x, t.y)
 				}
 			}
 
@@ -574,7 +539,7 @@ func (r *GogpuRenderer) DrawToScreen(ctx *gogpu.Context) {
 func (r *GogpuRenderer) SetWindowTitle(title string) {
 	r.host.app.SetTitle(title)
 }
-func (r *GogpuRenderer) getCellColors(cell CharInfo) (uint32, uint32) {
+func (r *GogpuRenderer) getCellColors(cell CharInfo) (color.Color, color.Color) {
 	bg := GetRGBBack(cell.Attributes)
 	if cell.Attributes&IsBgRGB == 0 {
 		bg = ThemePalette[GetIndexBack(cell.Attributes)]
@@ -583,5 +548,8 @@ func (r *GogpuRenderer) getCellColors(cell CharInfo) (uint32, uint32) {
 	if cell.Attributes&IsFgRGB == 0 {
 		fg = ThemePalette[GetIndexFore(cell.Attributes)]
 	}
-	return fg, bg
+
+	f := color.RGBA{uint8(fg >> 16), uint8(fg >> 8), uint8(fg), 255}
+	b := color.RGBA{uint8(bg >> 16), uint8(bg >> 8), uint8(bg), 255}
+	return f, b
 }
