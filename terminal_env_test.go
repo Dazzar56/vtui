@@ -225,3 +225,11 @@ func TestSetCursorStyleOS(t *testing.T) {
 	SetCursorStyleOS(true, CursorShapeUnderline)
 	SetCursorStyleOS(false, CursorShapeBlock)
 }
+func TestInitTerminalOS_NoPanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("initTerminalOS panicked: %v", r)
+		}
+	}()
+	initTerminalOS()
+}

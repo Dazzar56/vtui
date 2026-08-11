@@ -22,6 +22,18 @@ func watchResizeSignal(c chan os.Signal) {
 	// FrameManager already polls terminal size on Windows.
 }
 
+func isHandleValid(stdHandle uint32) bool {
+	h, err := windows.GetStdHandle(stdHandle)
+	if err != nil || h == windows.InvalidHandle || h == 0 {
+		return false
+	}
+	fileType, err := windows.GetFileType(h)
+	if err != nil || fileType == windows.FILE_TYPE_UNKNOWN {
+		return false
+	}
+	return true
+}
+
 func initTerminalOS() {
 	// Ensure that Windows Console handles UTF-8 output properly.
 	// 65001 is the ID for CP_UTF8
@@ -30,13 +42,19 @@ func initTerminalOS() {
 
 	// Set binary mode for Stdin and Stdout to prevent CRLF translation and improve speed.
 	// This is the "secret trick" for high-performance console output in Windows.
-	procSetMode.Call(uintptr(0), uintptr(_O_BINARY))
-	procSetMode.Call(uintptr(1), uintptr(_O_BINARY))
-	procSetMode.Call(uintptr(2), uintptr(_O_BINARY))
+	if isHandleValid(windows.STD_INPUT_HANDLE) {
+		procSetMode.Call(uintptr(0), uintptr(_O_BINARY))
+	}
+	if isHandleValid(windows.STD_OUTPUT_HANDLE) {
+		procSetMode.Call(uintptr(1), uintptr(_O_BINARY))
+	}
+	if isHandleValid(windows.STD_ERROR_HANDLE) {
+		procSetMode.Call(uintptr(2), uintptr(_O_BINARY))
+	}
 
 	// Enable VT processing for Windows Console (conhost)
 	hOut, err := windows.GetStdHandle(windows.STD_OUTPUT_HANDLE)
-	if err == nil {
+	if err == nil && hOut != windows.InvalidHandle && hOut != 0 {
 		var mode uint32
 		if err := windows.GetConsoleMode(hOut, &mode); err == nil {
 			mode |= windows.ENABLE_VIRTUAL_TERMINAL_PROCESSING | windows.ENABLE_WRAP_AT_EOL_OUTPUT
@@ -46,7 +64,7 @@ func initTerminalOS() {
 
 	// Отключаем режим QuickEdit на Windows, чтобы консоль отдавала нам правый и средний клики
 	hIn, err := windows.GetStdHandle(windows.STD_INPUT_HANDLE)
-	if err == nil {
+	if err == nil && hIn != windows.InvalidHandle && hIn != 0 {
 		var mode uint32
 		if err := windows.GetConsoleMode(hIn, &mode); err == nil {
 			const ENABLE_QUICK_EDIT_MODE = 0x0040
@@ -71,7 +89,7 @@ var (
 
 func SetCursorStyleOS(visible bool, shape CursorShape) {
 	hOut, err := syscall.GetStdHandle(syscall.STD_OUTPUT_HANDLE)
-	if err != nil {
+	if err != nil || hOut == syscall.InvalidHandle || hOut == 0 {
 		return
 	}
 
