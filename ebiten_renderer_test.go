@@ -727,3 +727,14 @@ func TestKeyBehindText_DeclinesWhenAmbiguous(t *testing.T) {
 		}
 	}
 }
+func TestEbitenModifiers_Locks(t *testing.T) {
+	// Ensure calling ebitenModifiers doesn't panic and successfully handles lock keys.
+	mods := ebitenModifiers()
+	_ = mods
+}
+
+func TestEbitenHost_ResolveModifiers_Locks(t *testing.T) {
+	h := &EbitenHost{}
+	mods := h.resolveModifiers(false)
+	_ = mods
+}

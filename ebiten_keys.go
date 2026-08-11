@@ -204,6 +204,12 @@ func ebitenModifiers() vtinput.ControlKeyState {
 	if ebiten.IsKeyPressed(ebiten.KeyAltRight) {
 		mods |= vtinput.RightAltPressed
 	}
+	if ebiten.IsCapsLockOn() {
+		mods |= vtinput.CapsLockOn
+	}
+	if ebiten.IsNumLockOn() {
+		mods |= vtinput.NumLockOn
+	}
 	return mods
 }
 
