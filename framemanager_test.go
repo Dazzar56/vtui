@@ -2115,6 +2115,39 @@ func TestFrameManager_CtrlTabDirectAndMenuModes(t *testing.T) {
 		t.Fatalf("menu Ctrl+Tab active=%d menu=%v, want active=1 with menu", menu.ActiveIdx, menu.switcherMenu != nil)
 	}
 }
+func TestFrameManager_CtrlTabNeverMode(t *testing.T) {
+	newManager := func() *frameManager {
+		scr := NewSilentScreenBuf()
+		scr.AllocBuf(80, 25)
+		fm := &frameManager{}
+		fm.Init(scr)
+		fm.Push(newMockFrame(0, 0, 80, 25, false))
+		fm.AddScreen(newMockFrame(0, 0, 80, 25, false))
+		return fm
+	}
+
+	fm := newManager()
+	fm.ConfigureWorkspaceTabs(WorkspaceTabsNever, WorkspaceCtrlTabDirect)
+
+	if fm.WorkspaceTopInset() != 0 {
+		t.Fatalf("WorkspaceTopInset with WorkspaceTabsNever = %d, want 0", fm.WorkspaceTopInset())
+	}
+	if fm.workspaceTabsVisible() {
+		t.Fatal("workspaceTabsVisible should be false for WorkspaceTabsNever")
+	}
+
+	fm.ctrlPressed = true
+	fm.dispatchEvent(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_TAB,
+		ControlKeyState: vtinput.LeftCtrlPressed,
+	}, false)
+
+	if fm.ActiveIdx != 1 || fm.switcherMenu == nil {
+		t.Fatalf("Never mode Ctrl+Tab active=%d menu=%v, want active=1 with switcher menu", fm.ActiveIdx, fm.switcherMenu != nil)
+	}
+}
 
 func TestFrameManager_AltNumberSelectsStableWorkspaceNumber(t *testing.T) {
 	scr := NewSilentScreenBuf()

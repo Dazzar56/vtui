@@ -30,6 +30,7 @@ const (
 	WorkspaceTabsAlways WorkspaceTabMode = iota
 	WorkspaceTabsMultiple
 	WorkspaceTabsOnCtrl
+	WorkspaceTabsNever
 )
 
 // WorkspaceCtrlTabMode controls whether Ctrl+Tab cycles immediately or opens
@@ -2366,7 +2367,7 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 		if ev.VirtualKeyCode == vtinput.VK_TAB && (fm.ctrlPressed || fm.switcherMenu != nil) {
 			shift := (ev.ControlKeyState & vtinput.ShiftPressed) != 0
 			cycled := false
-			if fm.WorkspaceCtrlTabMode == WorkspaceCtrlTabMenu {
+			if fm.WorkspaceCtrlTabMode == WorkspaceCtrlTabMenu || fm.WorkspaceTabMode == WorkspaceTabsNever {
 				cycled = fm.CycleWindows(!shift)
 			} else {
 				cycled = fm.cycleScreensDirect(!shift)
