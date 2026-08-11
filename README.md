@@ -54,6 +54,7 @@ The framework abstracts the physical output through the `SurfaceRenderer` interf
 
 *   **AnsiRenderer:** The default backend. Translates buffer changes into optimized ANSI escape sequences for standard terminals.
 *   **GogpuRenderer:** A hardware-accelerated backend that draws directly to a GPU-backed window using the `gogpu` library. Provides crisp text rendering and high FPS.
+*   **EbitenRenderer:** A cgo-free backend built on [Ebitengine](https://ebitengine.org). The grid is rasterised on the CPU and uploaded as a single GPU texture per frame. Its reason to exist is dependency independence: it needs neither cgo nor the gogpu stack, so `CGO_ENABLED=0` cross-compilation keeps working on Linux, Windows and macOS.
 *   **X11/Wayland Renderers:** Native Unix backends that draw to software bitmapped windows without requiring a terminal emulator.
 *   **PureX11Renderer:** A 100% pure Go X11 backend using the XGB library and SHM. Experimental and requires further testing.
 
@@ -135,4 +136,17 @@ go run ./cmd/test-app                 # Default terminal mode
 go run ./cmd/test-app --gui=gogpu     # Hardware-accelerated GPU window
 go run ./cmd/test-app --gui=x11       # Native X11 window
 go run ./cmd/test-app --gui=wayland   # Native Wayland window
+go run ./cmd/test-app --gui=ebiten    # Ebitengine window, no cgo required
 ```
+
+### Building the ebiten backend without cgo
+
+```
+CGO_ENABLED=0 go build ./...
+```
+
+Cgo-free builds of this backend need Ebitengine `main` (v2.10.0-alpha or later).
+The last tagged release, v2.9.9, still requires cgo on Linux and macOS: the
+purego ports of GLFW and of the Metal driver landed after it. On 32-bit ARM and
+on the BSDs the backend is compiled out and `--gui=ebiten` reports that the
+platform is unsupported.

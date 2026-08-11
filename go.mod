@@ -19,7 +19,9 @@ require (
 )
 
 require (
-	github.com/ebitengine/purego v0.8.0 // indirect
+	github.com/ebitengine/gomobile v0.0.0-20260211053922-3d992dae95d1 // indirect
+	github.com/ebitengine/hideconsole v1.0.0 // indirect
+	github.com/ebitengine/purego v0.11.0-alpha.8 // indirect
 	github.com/emmansun/base64 v0.9.0 // indirect
 	github.com/fogleman/gg v1.3.0 // indirect
 	github.com/go-webgpu/goffi v0.6.3 // indirect
@@ -28,6 +30,7 @@ require (
 	github.com/gogpu/naga v0.18.0 // indirect
 	github.com/gogpu/wgpu v0.30.37 // indirect
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
+	github.com/hajimehoshi/ebiten/v2 v2.10.0-alpha.13.0.20260810130116-34df2187de81 // indirect
 	github.com/neurlang/winc v0.1.2 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/unxed/winkeys v0.1.1 // indirect
@@ -37,6 +40,7 @@ require (
 	golang.design/x/clipboard v0.7.0 // indirect
 	golang.org/x/exp v0.0.0-20190731235908-ec7cb31e5a56 // indirect
 	golang.org/x/mobile v0.0.0-20230301163155-e0f57694e12c // indirect
+	golang.org/x/sync v0.22.0 // indirect
 )
 
 replace github.com/ebitengine/purego => github.com/unxed/pureffi v0.1.12

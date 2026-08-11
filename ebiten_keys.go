@@ -1,0 +1,208 @@
+//go:build (linux || windows || darwin) && !arm
+
+package vtui
+
+import (
+	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/unxed/vtinput"
+)
+
+// ebitenKeyToVK translates an Ebitengine key code into the Win32 virtual key
+// code that vtinput speaks. Zero means "no equivalent": the caller must drop
+// the event rather than send VK 0, which the framework would read as a real
+// key.
+//
+// Ebitengine reports physical keys, so the letter and digit rows map by
+// position and not by the character the layout produces. That character
+// arrives separately through AppendInputChars, which is why the host pairs
+// each keydown with the text input of the same frame instead of deriving a
+// rune from the key code here.
+func ebitenKeyToVK(k ebiten.Key) uint16 {
+	switch k {
+	// Editing and navigation.
+	case ebiten.KeyEscape:
+		return vtinput.VK_ESCAPE
+	case ebiten.KeyEnter:
+		return vtinput.VK_RETURN
+	case ebiten.KeyNumpadEnter:
+		return vtinput.VK_RETURN
+	case ebiten.KeyTab:
+		return vtinput.VK_TAB
+	case ebiten.KeyBackspace:
+		return vtinput.VK_BACK
+	case ebiten.KeyDelete:
+		return vtinput.VK_DELETE
+	case ebiten.KeyInsert:
+		return vtinput.VK_INSERT
+	case ebiten.KeyHome:
+		return vtinput.VK_HOME
+	case ebiten.KeyEnd:
+		return vtinput.VK_END
+	case ebiten.KeyPageUp:
+		return vtinput.VK_PRIOR
+	case ebiten.KeyPageDown:
+		return vtinput.VK_NEXT
+	case ebiten.KeyArrowUp:
+		return vtinput.VK_UP
+	case ebiten.KeyArrowDown:
+		return vtinput.VK_DOWN
+	case ebiten.KeyArrowLeft:
+		return vtinput.VK_LEFT
+	case ebiten.KeyArrowRight:
+		return vtinput.VK_RIGHT
+	case ebiten.KeySpace:
+		return vtinput.VK_SPACE
+
+	// Modifiers. vtui distinguishes sides, so we keep them apart.
+	case ebiten.KeyControlLeft:
+		return vtinput.VK_LCONTROL
+	case ebiten.KeyControlRight:
+		return vtinput.VK_RCONTROL
+	case ebiten.KeyShiftLeft:
+		return vtinput.VK_LSHIFT
+	case ebiten.KeyShiftRight:
+		return vtinput.VK_RSHIFT
+	case ebiten.KeyAltLeft:
+		return vtinput.VK_LMENU
+	case ebiten.KeyAltRight:
+		return vtinput.VK_RMENU
+	case ebiten.KeyMetaLeft:
+		return vtinput.VK_LWIN
+	case ebiten.KeyMetaRight:
+		return vtinput.VK_RWIN
+	case ebiten.KeyContextMenu:
+		return vtinput.VK_APPS
+
+	// Locks.
+	case ebiten.KeyCapsLock:
+		return vtinput.VK_CAPITAL
+	case ebiten.KeyNumLock:
+		return vtinput.VK_NUMLOCK
+	case ebiten.KeyScrollLock:
+		return vtinput.VK_SCROLL
+	case ebiten.KeyPause:
+		return vtinput.VK_PAUSE
+	case ebiten.KeyPrintScreen:
+		return vtinput.VK_SNAPSHOT
+
+	// Function keys.
+	case ebiten.KeyF1:
+		return vtinput.VK_F1
+	case ebiten.KeyF2:
+		return vtinput.VK_F2
+	case ebiten.KeyF3:
+		return vtinput.VK_F3
+	case ebiten.KeyF4:
+		return vtinput.VK_F4
+	case ebiten.KeyF5:
+		return vtinput.VK_F5
+	case ebiten.KeyF6:
+		return vtinput.VK_F6
+	case ebiten.KeyF7:
+		return vtinput.VK_F7
+	case ebiten.KeyF8:
+		return vtinput.VK_F8
+	case ebiten.KeyF9:
+		return vtinput.VK_F9
+	case ebiten.KeyF10:
+		return vtinput.VK_F10
+	case ebiten.KeyF11:
+		return vtinput.VK_F11
+	case ebiten.KeyF12:
+		return vtinput.VK_F12
+
+	// Numeric keypad.
+	case ebiten.KeyNumpad0:
+		return vtinput.VK_NUMPAD0
+	case ebiten.KeyNumpad1:
+		return vtinput.VK_NUMPAD1
+	case ebiten.KeyNumpad2:
+		return vtinput.VK_NUMPAD2
+	case ebiten.KeyNumpad3:
+		return vtinput.VK_NUMPAD3
+	case ebiten.KeyNumpad4:
+		return vtinput.VK_NUMPAD4
+	case ebiten.KeyNumpad5:
+		return vtinput.VK_NUMPAD5
+	case ebiten.KeyNumpad6:
+		return vtinput.VK_NUMPAD6
+	case ebiten.KeyNumpad7:
+		return vtinput.VK_NUMPAD7
+	case ebiten.KeyNumpad8:
+		return vtinput.VK_NUMPAD8
+	case ebiten.KeyNumpad9:
+		return vtinput.VK_NUMPAD9
+	case ebiten.KeyNumpadAdd:
+		return vtinput.VK_ADD
+	case ebiten.KeyNumpadSubtract:
+		return vtinput.VK_SUBTRACT
+	case ebiten.KeyNumpadMultiply:
+		return vtinput.VK_MULTIPLY
+	case ebiten.KeyNumpadDivide:
+		return vtinput.VK_DIVIDE
+	case ebiten.KeyNumpadDecimal:
+		return vtinput.VK_DECIMAL
+
+	// Punctuation. These are the US positions; the layout-dependent character
+	// still comes from AppendInputChars, so a non-US layout gets the right
+	// text even though the VK reflects the physical key.
+	case ebiten.KeyMinus:
+		return vtinput.VK_OEM_MINUS
+	case ebiten.KeyEqual:
+		return vtinput.VK_OEM_PLUS
+	case ebiten.KeyComma:
+		return vtinput.VK_OEM_COMMA
+	case ebiten.KeyPeriod:
+		return vtinput.VK_OEM_PERIOD
+	case ebiten.KeySlash:
+		return vtinput.VK_OEM_2
+	case ebiten.KeySemicolon:
+		return vtinput.VK_OEM_1
+	case ebiten.KeyQuote:
+		return vtinput.VK_OEM_7
+	case ebiten.KeyBracketLeft:
+		return vtinput.VK_OEM_4
+	case ebiten.KeyBracketRight:
+		return vtinput.VK_OEM_6
+	case ebiten.KeyBackslash:
+		return vtinput.VK_OEM_5
+	case ebiten.KeyBackquote:
+		return vtinput.VK_OEM_3
+	case ebiten.KeyIntlBackslash:
+		return vtinput.VK_OEM_102
+	}
+
+	// Letters and digits are contiguous in both encodings, so a range check
+	// beats another sixty case labels.
+	if k >= ebiten.KeyA && k <= ebiten.KeyZ {
+		return vtinput.VK_A + uint16(k-ebiten.KeyA)
+	}
+	if k >= ebiten.KeyDigit0 && k <= ebiten.KeyDigit9 {
+		return vtinput.VK_0 + uint16(k-ebiten.KeyDigit0)
+	}
+
+	return 0
+}
+
+// ebitenModifiers reads the current modifier state straight from Ebitengine.
+// It is polled per frame rather than accumulated from key events, so a
+// modifier released while the window was unfocused cannot get stuck down.
+func ebitenModifiers() vtinput.ControlKeyState {
+	var mods vtinput.ControlKeyState
+	if ebiten.IsKeyPressed(ebiten.KeyShiftLeft) || ebiten.IsKeyPressed(ebiten.KeyShiftRight) {
+		mods |= vtinput.ShiftPressed
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyControlLeft) {
+		mods |= vtinput.LeftCtrlPressed
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyControlRight) {
+		mods |= vtinput.RightCtrlPressed
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyAltLeft) {
+		mods |= vtinput.LeftAltPressed
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyAltRight) {
+		mods |= vtinput.RightAltPressed
+	}
+	return mods
+}

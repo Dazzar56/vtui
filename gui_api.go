@@ -19,6 +19,9 @@ func RunInGUIWindow(cols, rows int, backend string, fontName string, fontSize fl
 	if backend == "gogpu" {
 		return runInGogpuWindow(cols, rows, fontName, fontSize, setupApp)
 	}
+	if backend == "ebiten" {
+		return runInEbitenWindow(cols, rows, fontName, fontSize, setupApp)
+	}
 
 	if os.Getenv("WAYLAND_DISPLAY") != "" {
 		DebugLog("GUI: WAYLAND_DISPLAY detected, starting Wayland Host (default)")
@@ -35,4 +38,8 @@ func RunInGUIWindow(cols, rows int, backend string, fontName string, fontSize fl
 
 func runInGogpuWindow(cols, rows int, fontName string, fontSize float64, setupApp func()) error {
 	return RunGogpuHost(cols, rows, fontName, fontSize, setupApp)
+}
+
+func runInEbitenWindow(cols, rows int, fontName string, fontSize float64, setupApp func()) error {
+	return RunEbitenHost(cols, rows, fontName, fontSize, setupApp)
 }

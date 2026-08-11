@@ -556,6 +556,14 @@ func main() {
 				}
 			}
 		}
+		// ebiten is tried last, as the backend that depends on the least:
+		// it needs no cgo and no gogpu stack, so it is the one most likely to
+		// still come up when the others have already failed.
+		if err := runGuiWithBackend("ebiten"); err == nil {
+			return nil
+		} else {
+			errs = append(errs, fmt.Sprintf("ebiten: %v", err))
+		}
 		if len(errs) > 0 {
 			return fmt.Errorf("all GUI backends failed: %s", strings.Join(errs, "; "))
 		}

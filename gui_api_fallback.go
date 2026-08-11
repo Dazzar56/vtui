@@ -14,6 +14,9 @@ func RunInGUIWindow(cols, rows int, backend string, fontName string, fontSize fl
 	if backend == "x11" {
 		return runInX11Window(cols, rows, fontName, fontSize, setupApp)
 	}
+	if backend == "ebiten" {
+		return runInEbitenWindow(cols, rows, fontName, fontSize, setupApp)
+	}
 	if backend == "gogpu" || backend == "" {
 		if os.Getenv("DISPLAY") != "" && backend == "" {
 			return runInX11Window(cols, rows, fontName, fontSize, setupApp)
@@ -25,4 +28,8 @@ func RunInGUIWindow(cols, rows int, backend string, fontName string, fontSize fl
 
 func runInGogpuWindow(cols, rows int, fontName string, fontSize float64, setupApp func()) error {
 	return RunGogpuHost(cols, rows, fontName, fontSize, setupApp)
+}
+
+func runInEbitenWindow(cols, rows int, fontName string, fontSize float64, setupApp func()) error {
+	return RunEbitenHost(cols, rows, fontName, fontSize, setupApp)
 }
