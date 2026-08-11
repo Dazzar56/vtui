@@ -92,6 +92,12 @@ type WorkspaceTabTitleProvider interface {
 	GetWorkspaceTabTitle() string
 }
 
+// WorkspaceTabMarkerProvider exposes a short workspace-type marker that is
+// rendered separately from the title so it can use a subdued foreground.
+type WorkspaceTabMarkerProvider interface {
+	GetWorkspaceTabMarker() string
+}
+
 // WorkspaceMenuInfo describes the richer, full-width representation of a
 // workspace used by the Screens popup. Secondary is shown as an aligned second
 // column when present (for example, the right panel path).
@@ -115,7 +121,22 @@ func (s *AppScreen) GetTitle() string {
 	return strings.TrimSpace(s.Frames[len(s.Frames)-1].GetTitle())
 }
 
-func (s *AppScreen) GetTabTitle() string {
+// GetWorkspaceTitle returns the title of the active non-modal frame. Menus and
+// dialogs are transient overlays and must not replace the host terminal's tab
+// title while they are open.
+func (s *AppScreen) GetWorkspaceTitle() string {
+	for i := len(s.Frames) - 1; i >= 0; i-- {
+		if s.Frames[i].IsModal() {
+			continue
+		}
+		if title := strings.TrimSpace(s.Frames[i].GetTitle()); title != "" {
+			return title
+		}
+	}
+	return s.GetTitle()
+}
+
+func (s *AppScreen) getTabContentTitle() string {
 	for i := len(s.Frames) - 1; i >= 0; i-- {
 		if provider, ok := s.Frames[i].(WorkspaceTabTitleProvider); ok {
 			if title := strings.TrimSpace(provider.GetWorkspaceTabTitle()); title != "" {
@@ -124,6 +145,25 @@ func (s *AppScreen) GetTabTitle() string {
 		}
 	}
 	return s.GetTitle()
+}
+
+func (s *AppScreen) GetTabMarker() string {
+	for i := len(s.Frames) - 1; i >= 0; i-- {
+		if provider, ok := s.Frames[i].(WorkspaceTabMarkerProvider); ok {
+			if marker := strings.TrimSpace(provider.GetWorkspaceTabMarker()); marker != "" {
+				return marker
+			}
+		}
+	}
+	return ""
+}
+
+func (s *AppScreen) GetTabTitle() string {
+	title := s.getTabContentTitle()
+	if marker := s.GetTabMarker(); marker != "" {
+		return marker + " " + title
+	}
+	return title
 }
 
 func (s *AppScreen) GetMenuInfo() WorkspaceMenuInfo {
@@ -1132,11 +1172,16 @@ func (fm *frameManager) drawWorkspaceTabs() {
 
 		number := strconv.Itoa(screen.Number)
 		numberWidth := runewidth.StringWidth(number)
+		marker := screen.GetTabMarker()
+		markerWidth := runewidth.StringWidth(marker)
 		titleWidth := maxTabWidth - numberWidth - 3
+		if markerWidth > 0 {
+			titleWidth -= markerWidth
+		}
 		if titleWidth < 0 {
 			titleWidth = 0
 		}
-		title := TruncateMiddle(screen.GetTabTitle(), titleWidth)
+		title := TruncateMiddle(screen.getTabContentTitle(), titleWidth)
 
 		attr := baseAttr
 		if i == fm.ActiveIdx {
@@ -1153,6 +1198,10 @@ func (fm *frameManager) drawWorkspaceTabs() {
 		x++
 		fm.scr.Write(x, 0, StringToCharInfo(number, numberAttr))
 		x += numberWidth
+		if marker != "" && x < tabsLimit {
+			fm.scr.Write(x, 0, StringToCharInfo(marker, workspaceTitleSeparatorAttr(attr)))
+			x += markerWidth
+		}
 		if title != "" && x < tabsLimit {
 			parts := strings.Split(" "+title, "─")
 			for partIndex, part := range parts {

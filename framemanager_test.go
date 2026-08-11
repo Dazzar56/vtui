@@ -17,6 +17,7 @@ type mockFrame struct {
 	onProcessKey       func(e *vtinput.InputEvent) bool
 	onHandleCommand    func(cmd int, args any) bool
 	tabTitle           string
+	tabMarker          string
 	resizedW, resizedH int
 }
 
@@ -55,6 +56,22 @@ func (m *mockFrame) HandleCommand(cmd int, args any) bool {
 func (m *mockFrame) GetType() FrameType           { return TypeUser }
 func (m *mockFrame) GetTitle() string             { return "MockFrame" }
 func (m *mockFrame) GetWorkspaceTabTitle() string { return m.tabTitle }
+func (m *mockFrame) GetWorkspaceTabMarker() string {
+	return m.tabMarker
+}
+
+func TestAppScreen_GetWorkspaceTitleIgnoresModalFrames(t *testing.T) {
+	workspace := newMockFrame(0, 0, 40, 20, false)
+	menu := NewVMenu("Commands")
+	screen := &AppScreen{Frames: []Frame{workspace, menu}}
+
+	if got := screen.GetTitle(); got != "Commands" {
+		t.Fatalf("top-frame title = %q, want transient menu title", got)
+	}
+	if got := screen.GetWorkspaceTitle(); got != "MockFrame" {
+		t.Fatalf("workspace title = %q, want underlying frame title", got)
+	}
+}
 
 func TestFrameManager_DuplicateMouseMoveDoesNotHoverNewMenu(t *testing.T) {
 	oldFM := FrameManager
@@ -1712,7 +1729,10 @@ func TestFrameManager_WorkspaceTabsAndCounterRendering(t *testing.T) {
 	scr.AllocBuf(60, 10)
 	fm := &frameManager{}
 	fm.Init(scr)
-	fm.Push(NewWindow(0, 0, 20, 5, "Panels ─ Files"))
+	panels := newMockFrame(0, 0, 20, 5, false)
+	panels.tabTitle = "Panels ─ Files"
+	panels.tabMarker = "P"
+	fm.Push(panels)
 	fm.AddScreen(NewWindow(0, 0, 20, 5, "Editor"))
 	fm.ConfigureWorkspaceTabs(WorkspaceTabsMultiple, WorkspaceCtrlTabDirect)
 	fm.ConfigureWorkspaceTabColors(
@@ -1729,7 +1749,7 @@ func TestFrameManager_WorkspaceTabsAndCounterRendering(t *testing.T) {
 		row.WriteRune(rune(scr.GetCell(x, 0).Char))
 	}
 	text := row.String()
-	if !strings.Contains(text, "1 Panels") || !strings.Contains(text, "2 Editor") {
+	if !strings.Contains(text, "1P Panels") || !strings.Contains(text, "2 Editor") {
 		t.Fatalf("tab row does not contain both workspaces: %q", text)
 	}
 	if !strings.Contains(text, "Files │ 2 Editor") {
@@ -1760,6 +1780,13 @@ func TestFrameManager_WorkspaceTabsAndCounterRendering(t *testing.T) {
 	}
 	if got := GetRGBFore(scr.GetCell(titleSeparatorX, 0).Attributes); got != 0x5D5D5D {
 		t.Fatalf("workspace title separator foreground = %#x, want half-brightness %#x", got, uint32(0x5D5D5D))
+	}
+	typeMarkerX := strings.Index(text, "P Panels")
+	if typeMarkerX < 0 {
+		t.Fatalf("workspace type marker is missing: %q", text)
+	}
+	if got := GetRGBFore(scr.GetCell(typeMarkerX, 0).Attributes); got != 0x5D5D5D {
+		t.Fatalf("workspace type marker foreground = %#x, want half-brightness %#x", got, uint32(0x5D5D5D))
 	}
 	counterCurrentX := scr.width - runewidth.StringWidth("[2/2]") + 1
 	if tabFG, counterFG := GetRGBFore(scr.GetCell(fm.workspaceTabHits[0].x1+1, 0).Attributes), GetRGBFore(scr.GetCell(counterCurrentX, 0).Attributes); tabFG != counterFG {
