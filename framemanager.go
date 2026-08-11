@@ -267,7 +267,7 @@ func (fm *frameManager) WorkspaceTopInset() int {
 // ConfigureWorkspaceTabs applies workspace presentation and Ctrl+Tab policy.
 // Frames are resized because the persistent modes can add or remove a top row.
 func (fm *frameManager) ConfigureWorkspaceTabs(tabMode WorkspaceTabMode, ctrlTabMode WorkspaceCtrlTabMode) {
-	if tabMode < WorkspaceTabsAlways || tabMode > WorkspaceTabsOnCtrl {
+	if tabMode < WorkspaceTabsAlways || tabMode > WorkspaceTabsNever {
 		tabMode = WorkspaceTabsMultiple
 	}
 	if ctrlTabMode < WorkspaceCtrlTabDirect || ctrlTabMode > WorkspaceCtrlTabMenu {
