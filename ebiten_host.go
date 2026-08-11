@@ -123,13 +123,27 @@ func (g *ebitenGame) Update() error {
 	// because only the platform knows what character the current layout
 	// produces for that physical key. Sending both would double every
 	// keystroke.
-	h.keyBuf = inpututil.AppendJustPressedKeys(h.keyBuf[:0])
+	//
+	// Repeat is synthesised from how long each key has been held. Ebitengine
+	// reports only the transition into the pressed state, so without this a
+	// held arrow key moves the cursor exactly once. Printable keys are left
+	// out: the platform already repeats those through the text stream, and
+	// adding to it would repeat them twice.
+	tps := ebiten.TPS()
+	h.keyBuf = inpututil.AppendPressedKeys(h.keyBuf[:0])
 	for _, k := range h.keyBuf {
 		vk := ebitenKeyToVK(k)
-		if vk == 0 {
+		if vk == 0 || !isSpecialOrModifiedKey(vk, mods) {
 			continue
 		}
-		if !isSpecialOrModifiedKey(vk, mods) {
+		d := inpututil.KeyPressDuration(k)
+		if isModifierVK(vk) {
+			// A modifier is a state, not a stream: report it once when it
+			// goes down and then leave it alone.
+			if d != 1 {
+				continue
+			}
+		} else if !keyRepeatFires(d, tps) {
 			continue
 		}
 		h.sendEvent(&vtinput.InputEvent{
@@ -173,6 +187,7 @@ func (g *ebitenGame) Update() error {
 	}
 
 	g.updateMouse(mods)
+	g.pollDroppedFiles(mods)
 	return nil
 }
 
@@ -399,6 +414,7 @@ func RunEbitenHost(cols, rows int, fontName string, fontSize float64, setupApp f
 	// xclip, xsel or pbcopy elsewhere. Only the terminal escape fallback has
 	// to go, since this is a window and there is no terminal to receive it.
 	DisableTerminalClipboard()
+	SetDragBackend(host)
 
 	setupApp()
 

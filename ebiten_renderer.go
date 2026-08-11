@@ -47,6 +47,11 @@ type EbitenRenderer struct {
 
 	glyphCache map[glyphKey]*image.RGBA
 
+	gfxList  []ImagePlacement
+	gfxCache nativeGraphicsCache
+	gfxGen   uint64
+	gfxKnown bool
+
 	cursorX, cursorY int
 	cursorVis        bool
 	cursorShape      CursorShape
@@ -319,6 +324,37 @@ func (r *EbitenRenderer) invertCursor(img *image.RGBA, px, py, rw int) {
 			}
 		}
 	}
+}
+
+// RenderGraphics implements GraphicsRenderer, drawing the image layer over
+// the text that Render has just laid down.
+//
+// It follows the X11 backend: the placements go into the same framebuffer, so
+// images and text share one upload and cannot tear apart from each other. The
+// work is skipped unless the layer changed or the cells beneath it did, since
+// a picture that nothing has disturbed is already on screen.
+func (r *EbitenRenderer) RenderGraphics(layer *GraphicsLayer, buf, shadow []CharInfo, w, h int, force bool) {
+	if layer == nil || layer.Protocol() != GraphicsNative {
+		return
+	}
+
+	gen := layer.Generation()
+	if !force && r.gfxKnown && gen == r.gfxGen && !layer.DirtyRowsUnder(buf, shadow, w, h) {
+		return
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.img == nil || r.cellW <= 0 || r.cellH <= 0 {
+		return
+	}
+	r.gfxGen = gen
+	r.gfxKnown = true
+
+	r.gfxList, _ = layer.Snapshot(r.gfxList)
+	drawNativePlacements(r.img, r.gfxList, r.cellW, r.cellH, &r.gfxCache)
+	r.dirty = true
 }
 
 func (r *EbitenRenderer) SetCursor(x, y int, visible bool, shape CursorShape) {

@@ -206,3 +206,53 @@ func ebitenModifiers() vtinput.ControlKeyState {
 	}
 	return mods
 }
+
+// isModifierVK reports whether a virtual key is a modifier or a lock.
+//
+// These are excluded from auto-repeat: holding Shift means one sustained
+// modifier state, not a stream of Shift presses, and repeating them would
+// flood the queue for the whole time a chord is held down.
+func isModifierVK(vk uint16) bool {
+	switch vk {
+	case vtinput.VK_LCONTROL, vtinput.VK_RCONTROL,
+		vtinput.VK_LSHIFT, vtinput.VK_RSHIFT,
+		vtinput.VK_LMENU, vtinput.VK_RMENU,
+		vtinput.VK_LWIN, vtinput.VK_RWIN,
+		vtinput.VK_CAPITAL, vtinput.VK_NUMLOCK, vtinput.VK_SCROLL:
+		return true
+	}
+	return false
+}
+
+// keyRepeatFires decides whether a key held for d ticks should deliver an
+// event on this tick, given the loop's tick rate.
+//
+// Ebitengine reports only the transition into the pressed state, so a held key
+// would otherwise fire exactly once. The X11 and Wayland backends get repeat
+// from the display server; here it has to be synthesised, using the usual
+// desktop feel of roughly half a second before the first repeat and about
+// thirty a second after that. Deriving both from tps rather than hardcoding
+// tick counts keeps the timing right if the loop rate ever changes.
+func keyRepeatFires(d, tps int) bool {
+	if d <= 0 {
+		return false
+	}
+	if d == 1 {
+		return true
+	}
+	if tps <= 0 {
+		tps = 60
+	}
+	delay := tps / 2
+	if delay < 1 {
+		delay = 1
+	}
+	interval := tps / 30
+	if interval < 1 {
+		interval = 1
+	}
+	if d <= delay {
+		return false
+	}
+	return (d-delay)%interval == 0
+}

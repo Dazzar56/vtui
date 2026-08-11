@@ -15,6 +15,9 @@ func (r *EbitenRenderer) SetWindowTitle(title string)                           
 func (r *EbitenRenderer) ResizeWindow(cols, rows int)                                        {}
 func (r *EbitenRenderer) Flush()                                                             {}
 
+func (r *EbitenRenderer) RenderGraphics(layer *GraphicsLayer, buf, shadow []CharInfo, w, h int, force bool) {
+}
+
 // RunEbitenHost reports that this platform has no Ebitengine backend.
 //
 // The cut is not arbitrary: Ebitengine reaches the system through purego, and

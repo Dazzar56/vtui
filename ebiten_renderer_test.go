@@ -368,3 +368,149 @@ func TestEbitenRenderer_HiDPIFramebufferIsDeviceSized(t *testing.T) {
 		t.Errorf("HiDPI framebuffer height = %d, want %d", got, want)
 	}
 }
+
+// Auto-repeat: Ebitengine only reports the transition into the pressed state,
+// so without synthesis a held arrow key fires exactly once.
+func TestKeyRepeatFires(t *testing.T) {
+	const tps = 60
+	if !keyRepeatFires(1, tps) {
+		t.Error("the initial press must fire")
+	}
+	for d := 2; d <= tps/2; d++ {
+		if keyRepeatFires(d, tps) {
+			t.Fatalf("fired at tick %d, inside the initial delay", d)
+		}
+	}
+
+	fires := 0
+	for d := tps/2 + 1; d <= tps/2+tps; d++ { // one second past the delay
+		if keyRepeatFires(d, tps) {
+			fires++
+		}
+	}
+	if fires < 25 || fires > 35 {
+		t.Errorf("%d repeats in the second after the delay, want about 30", fires)
+	}
+}
+
+// A held key must keep firing rather than stopping after the first repeat,
+// which is the bug this replaced.
+func TestKeyRepeatFires_ContinuesWhileHeld(t *testing.T) {
+	const tps = 60
+	var ticks []int
+	for d := 1; d <= tps*5; d++ {
+		if keyRepeatFires(d, tps) {
+			ticks = append(ticks, d)
+		}
+	}
+	if len(ticks) < 2 {
+		t.Fatalf("only %d fires in five seconds of holding", len(ticks))
+	}
+	if ticks[0] != 1 {
+		t.Errorf("first fire at tick %d, want the initial press at 1", ticks[0])
+	}
+	// The gap from the initial press to the first repeat is the deliberate
+	// half-second delay; every gap after it is the steady repeat rate.
+	if gap := ticks[1] - ticks[0]; gap < tps/2 {
+		t.Errorf("first repeat came after %d ticks, want at least %d", gap, tps/2)
+	}
+	for i := 2; i < len(ticks); i++ {
+		if gap := ticks[i] - ticks[i-1]; gap > tps/10 {
+			t.Fatalf("gap of %d ticks between repeats at tick %d", gap, ticks[i])
+		}
+	}
+	if last := ticks[len(ticks)-1]; last < tps*4 {
+		t.Errorf("repeats stopped at tick %d of %d", last, tps*5)
+	}
+}
+
+func TestKeyRepeatFires_HandlesOddTPS(t *testing.T) {
+	for _, tps := range []int{0, -1, 1, 15, 30, 120, 240} {
+		if !keyRepeatFires(1, tps) {
+			t.Errorf("tps %d: the initial press must always fire", tps)
+		}
+		got := 0
+		for d := 1; d <= 600; d++ {
+			if keyRepeatFires(d, tps) {
+				got++
+			}
+		}
+		if got == 0 {
+			t.Errorf("tps %d: no repeats at all in 600 ticks", tps)
+		}
+	}
+	if keyRepeatFires(0, 60) || keyRepeatFires(-5, 60) {
+		t.Error("a key that is not held must not fire")
+	}
+}
+
+// Modifiers are a sustained state, not a stream; repeating them would flood
+// the queue for as long as a chord is held.
+func TestIsModifierVK(t *testing.T) {
+	for _, vk := range []uint16{
+		vtinput.VK_LCONTROL, vtinput.VK_RCONTROL, vtinput.VK_LSHIFT, vtinput.VK_RSHIFT,
+		vtinput.VK_LMENU, vtinput.VK_RMENU, vtinput.VK_LWIN, vtinput.VK_RWIN,
+		vtinput.VK_CAPITAL, vtinput.VK_NUMLOCK, vtinput.VK_SCROLL,
+	} {
+		if !isModifierVK(vk) {
+			t.Errorf("VK %d should be treated as a modifier", vk)
+		}
+	}
+	for _, vk := range []uint16{
+		vtinput.VK_LEFT, vtinput.VK_RIGHT, vtinput.VK_UP, vtinput.VK_DOWN,
+		vtinput.VK_BACK, vtinput.VK_DELETE, vtinput.VK_RETURN, vtinput.VK_A, vtinput.VK_F1,
+	} {
+		if isModifierVK(vk) {
+			t.Errorf("VK %d must be allowed to repeat", vk)
+		}
+	}
+}
+
+// The arrow keys, Backspace and Delete are exactly what the user holds down,
+// so they must reach the repeating virtual-key path rather than the text
+// stream, which never sees them.
+func TestArrowsAndEditingKeysTakeTheRepeatingPath(t *testing.T) {
+	for _, k := range []ebiten.Key{
+		ebiten.KeyArrowLeft, ebiten.KeyArrowRight, ebiten.KeyArrowUp, ebiten.KeyArrowDown,
+		ebiten.KeyBackspace, ebiten.KeyDelete, ebiten.KeyPageUp, ebiten.KeyPageDown,
+		ebiten.KeyHome, ebiten.KeyEnd, ebiten.KeyTab, ebiten.KeyEnter,
+	} {
+		vk := ebitenKeyToVK(k)
+		if vk == 0 {
+			t.Errorf("%v has no virtual key code", k)
+			continue
+		}
+		if !isSpecialOrModifiedKey(vk, 0) {
+			t.Errorf("%v is not treated as special, so it would fall to the text stream and never repeat", k)
+		}
+		if isModifierVK(vk) {
+			t.Errorf("%v is misclassified as a modifier and would not repeat", k)
+		}
+	}
+}
+
+func TestEbitenRenderer_ImplementsGraphicsRenderer(t *testing.T) {
+	var _ GraphicsRenderer = (*EbitenRenderer)(nil)
+}
+
+func TestEbitenHost_ImplementsDragBackend(t *testing.T) {
+	var _ DragBackend = (*EbitenHost)(nil)
+
+	h := &EbitenHost{}
+	if !h.AcceptsDrops() {
+		t.Error("the ebiten window does accept dropped files")
+	}
+	// Ebitengine's drop support is receive-only, so a drag out must say so
+	// rather than appear to start something that never completes.
+	if _, err := h.StartDrag(DragPayload{Paths: []string{"/tmp/x"}}, DropCopy); err != ErrDragUnsupported {
+		t.Errorf("StartDrag error = %v, want ErrDragUnsupported", err)
+	}
+}
+
+// RenderGraphics must ignore a nil or non-native layer instead of panicking.
+func TestEbitenRenderer_RenderGraphicsIgnoresUnusableLayer(t *testing.T) {
+	r := NewEbitenRenderer(nil, nil, 8, 16, 1)
+	buf, shadow := mkGrid(4, 2, ' ', 0)
+	r.Render(buf, shadow, 4, 2, true)
+	r.RenderGraphics(nil, buf, shadow, 4, 2, true)
+}
