@@ -25,6 +25,26 @@ func TestFallbackFace_Delegation(t *testing.T) {
 	}
 }
 
+func TestFallbackFontPaths_Sane(t *testing.T) {
+	if len(fallbackFontPaths) == 0 {
+		t.Fatal("fallbackFontPaths must not be empty")
+	}
+
+	seen := make(map[string]bool, len(fallbackFontPaths))
+	for _, path := range fallbackFontPaths {
+		if seen[path] {
+			t.Errorf("duplicate fallback font path: %s", path)
+		}
+		seen[path] = true
+
+		unix := strings.HasPrefix(path, "/")
+		windows := strings.HasPrefix(path, `C:\`)
+		if !unix && !windows {
+			t.Errorf("fallback font path must be absolute: %s", path)
+		}
+	}
+}
+
 func TestGetFontCandidates(t *testing.T) {
 	// 1. Тестируем пустой шрифт (должен вернуть встроенные дефолты)
 	defaults := getFontCandidates("")

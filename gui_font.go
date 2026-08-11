@@ -15,29 +15,64 @@ import (
 	"golang.org/x/image/math/fixed"
 )
 
+// fallbackFontPaths is consulted in order, so the entries are sorted by how
+// much of Unicode they carry rather than by how likely they are to exist: a
+// missing file costs one failed stat, whereas a narrow font that happens to
+// be listed first would answer for glyphs a later, wider font renders better.
+//
+// The list is deliberately long. Distributions disagree about where Noto CJK
+// lives, and a Windows install outside a CJK locale has none of the Japanese
+// supplemental fonts, so a short list quietly degrades to no fallback at all.
 var fallbackFontPaths = []string{
-	// Linux CJK & Emoji
-	"/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
+	// Linux — CJK
+	"/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+	"/usr/share/fonts/opentype/noto/NotoSansCJK-VF.otf.ttc",
+	"/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+	"/usr/share/fonts/noto-cjk/NotoSansCJK-VF.otf.ttc",
+	"/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc",
+	"/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
 	"/usr/share/fonts/noto/NotoSansCJK-Regular.ttc",
-	"/usr/share/fonts/noto/NotoColorEmoji.ttf",
-	"/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
+	"/usr/share/fonts/opentype/source-han-sans/SourceHanSans-Regular.otc",
+	"/usr/share/fonts/adobe-source-han-sans/SourceHanSans-Regular.otc",
+	"/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
 	"/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
 	"/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
 	"/usr/share/fonts/wqy-microhei/wqy-microhei.ttc",
 	"/usr/share/fonts/truetype/arphic/uming.ttc",
-	"/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+	"/usr/share/fonts/truetype/arphic/ukai.ttc",
+	// Linux — emoji and general symbol coverage
+	"/usr/share/fonts/noto/NotoColorEmoji.ttf",
+	"/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
 	"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
 	"/usr/share/fonts/TTF/DejaVuSans.ttf",
-	// Windows
+	"/usr/share/fonts/truetype/unifont/unifont.ttf",
+	// Windows — CJK. Only the Yu Gothic and Microsoft families ship outside a
+	// CJK locale; msgothic/msmincho/meiryo arrive with the Japanese
+	// supplemental fonts and are frequently absent.
+	`C:\Windows\Fonts\msyh.ttc`,
+	`C:\Windows\Fonts\msjh.ttc`,
+	`C:\Windows\Fonts\YuGothM.ttc`,
+	`C:\Windows\Fonts\YuGothR.ttc`,
+	`C:\Windows\Fonts\simsun.ttc`,
+	`C:\Windows\Fonts\malgun.ttf`,
 	`C:\Windows\Fonts\msgothic.ttc`,
 	`C:\Windows\Fonts\msmincho.ttc`,
-	`C:\Windows\Fonts\segoeui.ttf`,
-	`C:\Windows\Fonts\seguiemj.ttf`,
 	`C:\Windows\Fonts\meiryo.ttc`,
+	`C:\Windows\Fonts\mingliu.ttc`,
+	`C:\Windows\Fonts\batang.ttc`,
+	`C:\Windows\Fonts\gulim.ttc`,
+	`C:\Windows\Fonts\arialuni.ttf`,
+	// Windows — emoji and symbols
+	`C:\Windows\Fonts\seguiemj.ttf`,
+	`C:\Windows\Fonts\seguisym.ttf`,
+	`C:\Windows\Fonts\segoeui.ttf`,
 	// macOS
 	"/System/Library/Fonts/PingFang.ttc",
-	"/System/Library/Fonts/Apple Color Emoji.ttc",
+	"/System/Library/Fonts/Hiragino Sans GB.ttc",
+	"/System/Library/Fonts/AppleSDGothicNeo.ttc",
 	"/System/Library/Fonts/STHeiti Light.ttc",
+	"/System/Library/Fonts/Supplemental/Songti.ttc",
+	"/System/Library/Fonts/Apple Color Emoji.ttc",
 	"/Library/Fonts/Arial Unicode.ttf",
 }
 
