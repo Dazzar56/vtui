@@ -258,22 +258,22 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 			}
 
 			if isSpecialOrModifiedKey(vk, currMods) {
-                // Buggy
-                /*
-				// A modified key carries its character too. The X11 and
-				// Wayland backends put the virtual key and the character in
-				// one event unconditionally, and accelerators such as
-				// Alt+letter need the character to know what to search for.
-				// This branch used to send Char zero while the three other
-				// send sites in this function all filled it in, so the same
-				// keystroke meant different things depending on the backend.
-				if ev.Char == 0 && host.lastRuneForVK != nil {
-					ev.Char = host.lastRuneForVK[vk]
-				}
-				if ev.Char == 0 {
-					ev.Char = defaultRuneForVK(vk)
-				}
-                */
+				// Buggy
+				/*
+					// A modified key carries its character too. The X11 and
+					// Wayland backends put the virtual key and the character in
+					// one event unconditionally, and accelerators such as
+					// Alt+letter need the character to know what to search for.
+					// This branch used to send Char zero while the three other
+					// send sites in this function all filled it in, so the same
+					// keystroke meant different things depending on the backend.
+					if ev.Char == 0 && host.lastRuneForVK != nil {
+						ev.Char = host.lastRuneForVK[vk]
+					}
+					if ev.Char == 0 {
+						ev.Char = defaultRuneForVK(vk)
+					}
+				*/
 				host.sendEvent(ev)
 			} else {
 				if host.lastRuneForVK != nil {
