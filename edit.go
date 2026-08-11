@@ -36,8 +36,11 @@ type Edit struct {
 	ColorSelectedIdx   int
 	HistoryID          string
 	OnTextChange       func(string)
-	mouseSelecting     bool
-	mouseSelectAnchor  int
+	// PathHintsEnabled lets the autocomplete menu ask PathHintProvider for
+	// file path suggestions in addition to history matches.
+	PathHintsEnabled  bool
+	mouseSelecting    bool
+	mouseSelectAnchor int
 }
 
 // HistoryProvider is an interface for external history persistence (e.g. from f4).
@@ -837,6 +840,15 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 		if e.OnTextChange != nil {
 			e.OnTextChange(string(e.text))
 		}
+		// Path hints: typing a path separator in an enabled edit opens the
+		// autocomplete menu when the host provider has anything to suggest.
+		if (testChar == '/' || testChar == '\\') && e.PathHintsEnabled && PathHintProvider != nil && FrameManager != nil {
+			if _, isAc := FrameManager.GetTopFrame().(*AutoCompleteMenu); !isAc {
+				if ac := NewAutoCompleteMenu(e); ac.HasMatches() {
+					FrameManager.Push(ac)
+				}
+			}
+		}
 		return true
 	}
 
@@ -1136,6 +1148,29 @@ func (e *Edit) selectWordAtCursor() {
 	e.selAnchor = start
 	e.curPos = end
 	e.clearFlag = false
+}
+
+// WordUnderCursor returns the whitespace-bounded token around the cursor as
+// a rune span [from, to) plus its text. The boundary rule is word_nav's
+// character classification: only the space class (space/tab) terminates the
+// token, so path separators and other divider characters stay inside it.
+func (e *Edit) WordUnderCursor() (from, to int, text string) {
+	cur := e.curPos
+	if cur < 0 {
+		cur = 0
+	}
+	if cur > len(e.text) {
+		cur = len(e.text)
+	}
+	from = cur
+	for from > 0 && getCharCategory(e.text[from-1]) != catSpace {
+		from--
+	}
+	to = cur
+	for to < len(e.text) && getCharCategory(e.text[to]) != catSpace {
+		to++
+	}
+	return from, to, string(e.text[from:to])
 }
 
 func (e *Edit) cursorPositionAtX(x int) int {
