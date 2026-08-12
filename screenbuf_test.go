@@ -50,8 +50,8 @@ func TestAttributesToANSI(t *testing.T) {
 	// 1. Simple Bold + Index Red
 	attr := ForegroundIntensity | SetIndexFore(0, 9)
 	got := attributesToANSI(attr, 0, nil, ColorProfileTrueColor, nil)
-	// Expected: 1 (Bold) and 38;5;9 as separate chunks
-	want := "\x1b[1m\x1b[38;5;9m"
+	// Expected: Bold and 38;5;9 in one CSI
+	want := "\x1b[1;38;5;9m"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
@@ -90,13 +90,13 @@ func TestAttributesToANSI_ResetBug(t *testing.T) {
 }
 
 func TestAttributesToANSI_FullSplitting(t *testing.T) {
-	// Verify that style, foreground, and background are all split into separate escape sequences.
-	// This is critical for FreeBSD console compatibility.
+	// Verify that style, foreground, and background are combined into a single CSI.
 	attr := ForegroundIntensity | SetIndexFore(0, 1) | SetIndexBack(0, 2)
 	got := attributesToANSI(attr, 0, nil, ColorProfileTrueColor, nil)
 
-	// We expect three separate \x1b[...]m blocks
-	want := "\x1b[1m\x1b[38;5;1m\x1b[48;5;2m"
+	// We expect one shared \x1b[...]m block (shorter than separate sequences,
+	// identical terminal semantics)
+	want := "\x1b[1;38;5;1;48;5;2m"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
@@ -436,5 +436,41 @@ func TestInvalidateHostPalette_ForcesResend(t *testing.T) {
 	scr.Flush()
 	if !strings.Contains(buf.String(), "\x1b]4;") {
 		t.Error("palette not resent after InvalidateHostPalette")
+	}
+}
+
+// TestAnsiRenderer_RelativeCursorMoves verifies that sparse cells on the
+// same row are reached with short relative moves (CSI n C) instead of
+// absolute "\x1b[Y;XH" positioning, and that the stream stays equivalent.
+func TestAnsiRenderer_RelativeCursorMoves(t *testing.T) {
+	r := &AnsiRenderer{parent: &ScreenBuf{ColorProfile: ColorProfileTrueColor}}
+	w, h := 12, 1
+	buf := make([]CharInfo, w*h)
+	shadow := make([]CharInfo, w*h)
+	for i := range buf {
+		buf[i] = CharInfo{Char: 'a'}
+		shadow[i] = buf[i]
+	}
+	attr := SetRGBBoth(0, 0xff0000, 0x0033ff)
+	buf[0] = CharInfo{Char: 'X', Attributes: attr}
+	buf[3] = CharInfo{Char: 'Y', Attributes: attr}
+	buf[9] = CharInfo{Char: 'Z', Attributes: attr}
+
+	r.Render(buf, shadow, w, h, false)
+	got := r.frameOut.String()
+
+	var want strings.Builder
+	want.WriteString("\x1b[?25l")
+	want.WriteString("\x1b[1;1H")
+	var lastAttr uint64 = ^uint64(0)
+	writeAttributesToANSI(&want, attr, lastAttr, nil, ColorProfileTrueColor, nil)
+	want.WriteString("X")
+	want.WriteString("\x1b[2C") // col 1 -> 3
+	// attr unchanged between X and Y: no new CSI
+	want.WriteString("Y")
+	want.WriteString("\x1b[5C") // col 4 -> 9
+	want.WriteString("Z")
+	if got != want.String() {
+		t.Fatalf("render\ngot  %q\nwant %q", got, want.String())
 	}
 }

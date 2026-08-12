@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -646,6 +647,7 @@ type AnsiRenderer struct {
 	parent   *ScreenBuf
 	lastAttr uint64
 	frameOut strings.Builder
+	frameCap int
 
 	cursorX, cursorY int
 	cursorVis        bool
@@ -702,6 +704,11 @@ func (r *AnsiRenderer) Render(buf, shadow []CharInfo, w, h int, force bool) {
 		return
 	}
 
+	// Reuse last frame's capacity; avoids mid-render realloc copies.
+	if r.frameCap > 0 && r.frameOut.Len() == 0 {
+		r.frameOut.Grow(r.frameCap)
+	}
+
 	r.frameOut.WriteString("\x1b[?25l") // Hide cursor during draw
 
 	r.termCursorInvalid = true
@@ -723,11 +730,22 @@ func (r *AnsiRenderer) Render(buf, shadow []CharInfo, w, h int, force bool) {
 			}
 
 			if x != lastX+1 || y != lastY {
-				r.frameOut.WriteString(fmt.Sprintf("\x1b[%d;%dH", y+1, x+1))
+				if y == lastY {
+					// Sparse cells on the same row: relative moves are shorter
+					// than absolute "\x1b[Y;XH" (~4-5 bytes vs ~9) and avoid
+					// column recomputation on the terminal side.
+					if x > lastX+1 {
+						r.writeRelCursor(x-lastX-1, 'C')
+					} else {
+						r.writeRelCursor(lastX+1-x, 'D')
+					}
+				} else {
+					r.writeCursorPos(y+1, x+1)
+				}
 			}
 
 			attr := buf[idx].Attributes
-			r.frameOut.WriteString(attributesToANSI(attr, r.lastAttr, activePal, r.parent.ColorProfile, r.parent.quantCache))
+			writeAttributesToANSI(&r.frameOut, attr, r.lastAttr, activePal, r.parent.ColorProfile, r.parent.quantCache)
 			r.lastAttr = attr
 
 			char := buf[idx].Char
@@ -746,6 +764,36 @@ func (r *AnsiRenderer) SetCursor(x, y int, vis bool, shape CursorShape) {
 	r.cursorY = y
 	r.cursorVis = vis
 	r.cursorShape = shape
+}
+
+// writeCursorPos emits CSI Y;X H allocation-free.
+func (r *AnsiRenderer) writeCursorPos(row, col int) {
+	var buf [16]byte
+	buf[0] = '\x1b'
+	buf[1] = '['
+	n := 2
+	n += copy(buf[n:], strconv.AppendInt(buf[n:n], int64(row), 10))
+	buf[n] = ';'
+	n++
+	n += copy(buf[n:], strconv.AppendInt(buf[n:n], int64(col), 10))
+	buf[n] = 'H'
+	n++
+	r.frameOut.Write(buf[:n])
+}
+
+// writeRelCursor emits CSI n C / CSI n D (relative horizontal move)
+// allocation-free; 'C' moves right, 'D' moves left.
+func (r *AnsiRenderer) writeRelCursor(n int, dir byte) {
+	var buf [12]byte
+	buf[0] = '\x1b'
+	buf[1] = '['
+	idx := 2
+	if n != 1 {
+		idx += copy(buf[idx:], strconv.AppendInt(buf[idx:idx], int64(n), 10))
+	}
+	buf[idx] = dir
+	idx++
+	r.frameOut.Write(buf[:idx])
 }
 
 func (r *AnsiRenderer) SetWindowTitle(title string) {
@@ -775,7 +823,7 @@ func (r *AnsiRenderer) Flush() {
 // before a write that may block for an unbounded time.
 func (r *AnsiRenderer) PrepareFlush() func() {
 	if !r.firstInit || r.termCursorInvalid || r.cursorX != r.lastSentCursorX || r.cursorY != r.lastSentCursorY || r.cursorVis != r.lastSentCursorVis || r.cursorShape != r.lastSentCursorShape {
-		r.frameOut.WriteString(fmt.Sprintf("\x1b[%d;%dH", r.cursorY+1, r.cursorX+1))
+		r.writeCursorPos(r.cursorY+1, r.cursorX+1)
 		if r.cursorVis {
 			r.frameOut.WriteString("\x1b[?25h")
 			if ManageCursorStyle {
@@ -806,11 +854,15 @@ func (r *AnsiRenderer) PrepareFlush() func() {
 		r.firstInit = true
 	}
 
-	payload := r.frameOut.String()
-	r.frameOut.Reset()
-	if payload == "" {
+	payloadLen := r.frameOut.Len()
+	if payloadLen == 0 {
 		return nil
 	}
+
+	// String() is an alias, not a copy (Go 1.20+); valid until the next write.
+	payload := r.frameOut.String()
+	r.frameOut.Reset()
+	r.frameCap = payloadLen
 
 	return func() {
 		writeStart := time.Now()
@@ -818,7 +870,7 @@ func (r *AnsiRenderer) PrepareFlush() func() {
 		writeDur := time.Since(writeStart)
 
 		if writeDur > 10*time.Millisecond {
-			DebugLog("PROFILE: Atomic Write Slow! Time:%v Bytes:%d", writeDur, len(payload))
+			DebugLog("PROFILE: Atomic Write Slow! Time:%v Bytes:%d", writeDur, payloadLen)
 		}
 	}
 }
