@@ -304,7 +304,6 @@ func (m *MultiLineEdit) ProcessKey(event *vtinput.InputEvent) bool {
 		return true
 	}
 
-	switch event.VirtualKeyCode {
 	if ctrl && !alt && !shift && event.VirtualKeyCode == vtinput.VK_A {
 		m.SelectAll()
 		return true
@@ -316,6 +315,7 @@ func (m *MultiLineEdit) ProcessKey(event *vtinput.InputEvent) bool {
 		return true
 	}
 
+	switch event.VirtualKeyCode {
 	case vtinput.VK_LEFT:
 		if ctrl || alt {
 			return false
