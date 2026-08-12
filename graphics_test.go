@@ -52,6 +52,19 @@ func TestImageSurfacePixelAccess(t *testing.T) {
 	}
 }
 
+func TestImageSurfaceRejectsOverflowGeometry(t *testing.T) {
+	maxInt := int(^uint(0) >> 1)
+	if NewImageSurface(maxInt, maxInt) != nil {
+		t.Fatal("overflowing allocation must be rejected")
+	}
+	if NewImageSurfaceFromPix(maxInt, 2, maxInt, nil) != nil {
+		t.Fatal("overflowing wrapped geometry must be rejected")
+	}
+	if (&ImageSurface{Width: maxInt, Height: 2, Stride: maxInt}).Valid() {
+		t.Fatal("overflowing surface must be invalid")
+	}
+}
+
 func TestNewImageSurfaceFromPixValidation(t *testing.T) {
 	if NewImageSurfaceFromPix(4, 4, 16, make([]byte, 8)) != nil {
 		t.Error("undersized buffer must be rejected")

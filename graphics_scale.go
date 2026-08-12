@@ -117,6 +117,9 @@ func ScaleSurface(src *ImageSurface, w, h int) *ImageSurface {
 	}
 
 	out := NewImageSurface(w, h)
+	if out == nil {
+		return nil
+	}
 	for y := 0; y < h; y++ {
 		dstOff := y * out.Stride
 		for x := 0; x < w; x++ {

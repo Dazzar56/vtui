@@ -108,6 +108,17 @@ type ImageSurface struct {
 	hashValid bool
 }
 
+func surfaceByteLen(w, h, stride int) (int, bool) {
+	if w <= 0 || h <= 0 || stride < 0 || w > int(^uint(0)>>1)/4 {
+		return 0, false
+	}
+	row := w * 4
+	if stride < row || h-1 > (int(^uint(0)>>1)-row)/stride {
+		return 0, false
+	}
+	return (h-1)*stride + row, true
+}
+
 // NewImageSurface allocates a zeroed (fully transparent) surface.
 func NewImageSurface(w, h int) *ImageSurface {
 	if w < 0 {
@@ -116,18 +127,25 @@ func NewImageSurface(w, h int) *ImageSurface {
 	if h < 0 {
 		h = 0
 	}
+	if w == 0 || h == 0 {
+		return &ImageSurface{Width: w, Height: h, Stride: w * 4}
+	}
+	stride := w * 4
+	if _, ok := surfaceByteLen(w, h, stride); !ok {
+		return nil
+	}
 	return &ImageSurface{
 		Width:  w,
 		Height: h,
-		Stride: w * 4,
-		Pix:    make([]byte, w*h*4),
+		Stride: stride,
+		Pix:    make([]byte, (h-1)*stride+stride),
 	}
 }
 
 // NewImageSurfaceFromPix wraps an existing RGBA buffer without copying it.
 // It returns nil when the buffer is too small for the declared geometry.
 func NewImageSurfaceFromPix(w, h, stride int, pix []byte) *ImageSurface {
-	if w <= 0 || h <= 0 || stride < w*4 || len(pix) < stride*(h-1)+w*4 {
+	if required, ok := surfaceByteLen(w, h, stride); !ok || len(pix) < required {
 		return nil
 	}
 	return &ImageSurface{Width: w, Height: h, Stride: stride, Pix: pix}
@@ -135,8 +153,11 @@ func NewImageSurfaceFromPix(w, h, stride int, pix []byte) *ImageSurface {
 
 // Valid reports whether the surface can be sampled at all.
 func (s *ImageSurface) Valid() bool {
-	return s != nil && s.Width > 0 && s.Height > 0 && s.Stride >= s.Width*4 &&
-		len(s.Pix) >= s.Stride*(s.Height-1)+s.Width*4
+	if s == nil {
+		return false
+	}
+	required, ok := surfaceByteLen(s.Width, s.Height, s.Stride)
+	return ok && len(s.Pix) >= required
 }
 
 // SetPixel writes one RGBA pixel. Out of range coordinates are ignored.
@@ -225,6 +246,9 @@ func (s *ImageSurface) Crop(x, y, w, h int) *ImageSurface {
 		return nil
 	}
 	out := NewImageSurface(w, h)
+	if out == nil {
+		return nil
+	}
 	for row := 0; row < h; row++ {
 		src := (y+row)*s.Stride + x*4
 		dst := row * out.Stride
