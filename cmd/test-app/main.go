@@ -262,8 +262,11 @@ func buildTableDialog() *vtui.Window {
 		demoTableRow{"changelog.md", "doc", "11 KB", "2026-08-04 15:58", "Release notes since v0.1"},
 	})
 
-	// The blank row between the table and the button row fits a hint line.
-	hint := vtui.NewLabel(dlg.X1+2, dlg.Y1+h-4, "Type to fuzzy-filter, click a header to sort, Esc clears the filter", nil)
+	// The hint takes the table's last row, not the blank row above the
+	// buttons: the layout contract wants that row kept as air.
+	tx1, ty1, tx2, ty2 := table.GetPosition()
+	table.SetPosition(tx1, ty1, tx2, ty2-1)
+	hint := vtui.NewLabel(dlg.X1+2, dlg.Y1+h-5, "Type to fuzzy-filter, click a header to sort, Esc clears the filter", nil)
 	hint.SetGrowMode(vtui.GrowLoY | vtui.GrowHiY)
 	dlg.AddItem(hint)
 

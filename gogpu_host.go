@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -21,6 +22,12 @@ var (
 	debugLastMouseX, debugLastMouseY float64 = -1, -1
 	debugLastCtxW, debugLastCtxH     int     = -1, -1
 )
+
+// gogpuCmdIsCtrl folds the Super modifier into Ctrl. On macOS the Command key
+// is the shortcut modifier — Cmd+C must reach the application as Ctrl+C or no
+// clipboard shortcut works at all — while on Windows and Linux the Super/Win
+// key belongs to the OS and must stay out of the application's way.
+var gogpuCmdIsCtrl = runtime.GOOS == "darwin"
 
 type GogpuHost struct {
 	mu              sync.Mutex
@@ -43,6 +50,15 @@ type GogpuHost struct {
 	lCtrl, rCtrl      bool
 	lAlt, rAlt        bool
 	lShift, rShift    bool
+	// lSuper/rSuper live apart from lCtrl/rCtrl on purpose: with Cmd folded
+	// into Ctrl, Left Cmd and Left Ctrl both arrive as VK_LCONTROL, and
+	// releasing one must not clear a side the other still holds down.
+	lSuper, rSuper bool
+	// superDown mirrors the Super (Command) modifier of the last key event.
+	// With Cmd folded into Ctrl, macOS still reports the plain character for
+	// the shortcut key ([NSEvent characters] for Cmd+C is "c"), and that text
+	// must not additionally arrive as typed input.
+	superDown bool
 
 	// Cached sizes to prevent deadlocks and speed up GetTerminalSize
 	lastAppW, lastAppH int
@@ -96,53 +112,42 @@ func isSpecialOrModifiedKey(vk uint16, mods vtinput.ControlKeyState) bool {
 	return false
 }
 
-func (h *GogpuHost) syncMods(vk uint16, mods gpucontext.Modifiers, isDown bool) vtinput.ControlKeyState {
-	if isDown {
-		if vk == vtinput.VK_LCONTROL {
-			h.lCtrl = true
-		}
-		if vk == vtinput.VK_RCONTROL {
-			h.rCtrl = true
-		}
-		if vk == vtinput.VK_LMENU {
-			h.lAlt = true
-		}
-		if vk == vtinput.VK_RMENU {
-			h.rAlt = true
-		}
-		if vk == vtinput.VK_LSHIFT {
-			h.lShift = true
-		}
-		if vk == vtinput.VK_RSHIFT {
-			h.rShift = true
-		}
-	} else {
-		if vk == vtinput.VK_LCONTROL {
-			h.lCtrl = false
-		}
-		if vk == vtinput.VK_RCONTROL {
-			h.rCtrl = false
-		}
-		if vk == vtinput.VK_LMENU {
-			h.lAlt = false
-		}
-		if vk == vtinput.VK_RMENU {
-			h.rAlt = false
-		}
-		if vk == vtinput.VK_LSHIFT {
-			h.lShift = false
-		}
-		if vk == vtinput.VK_RSHIFT {
-			h.rShift = false
+func (h *GogpuHost) syncMods(key gpucontext.Key, mods gpucontext.Modifiers, isDown bool) vtinput.ControlKeyState {
+	// The Super keys are tracked by physical key, everything else by virtual
+	// key. With Cmd folded into Ctrl the Super keys map to the very Ctrl
+	// virtual keys the real Ctrl keys use, and tracking them by that shared
+	// code let a Cmd release clear a Ctrl side a physical Ctrl key was still
+	// holding down.
+	switch key {
+	case gpucontext.KeyLeftSuper:
+		h.lSuper = isDown
+	case gpucontext.KeyRightSuper:
+		h.rSuper = isDown
+	default:
+		switch gogpuKeyToVK(key, 0) {
+		case vtinput.VK_LCONTROL:
+			h.lCtrl = isDown
+		case vtinput.VK_RCONTROL:
+			h.rCtrl = isDown
+		case vtinput.VK_LMENU:
+			h.lAlt = isDown
+		case vtinput.VK_RMENU:
+			h.rAlt = isDown
+		case vtinput.VK_LSHIFT:
+			h.lShift = isDown
+		case vtinput.VK_RSHIFT:
+			h.rShift = isDown
 		}
 	}
+
+	h.superDown = mods.HasSuper()
 
 	var sysMods vtinput.ControlKeyState
 	if mods.HasShift() {
 		sysMods |= vtinput.ShiftPressed
 	}
-	if mods.HasControl() {
-		if h.rCtrl {
+	if mods.HasControl() || (gogpuCmdIsCtrl && mods.HasSuper()) {
+		if h.rCtrl || (gogpuCmdIsCtrl && h.rSuper) {
 			sysMods |= vtinput.RightCtrlPressed
 		} else {
 			sysMods |= vtinput.LeftCtrlPressed
@@ -249,10 +254,8 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 	})
 
 	app.EventSource().OnKeyPress(func(key gpucontext.Key, mods gpucontext.Modifiers) {
-		vkBase := gogpuKeyToVK(key, 0)
-
 		host.mu.Lock()
-		currMods := host.syncMods(vkBase, mods, true)
+		currMods := host.syncMods(key, mods, true)
 
 		vk := gogpuKeyToVK(key, currMods)
 		if vk != 0 {
@@ -354,6 +357,15 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 			return
 		}
 
+		// A Cmd chord is a shortcut, not typing. It already went out as a
+		// Ctrl-modified key event, but macOS reports the plain character for
+		// it anyway; the other platforms deliver no printable text for their
+		// Ctrl chords, so none may be delivered here either.
+		if gogpuCmdIsCtrl && host.superDown {
+			DebugLog("GOGPU_HOST_EVENT: dropped text %q, Super held (Cmd shortcut)", text)
+			return
+		}
+
 		if host.lastRuneForVK == nil {
 			host.lastRuneForVK = make(map[uint16]rune)
 		}
@@ -391,10 +403,8 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 	})
 
 	app.EventSource().OnKeyRelease(func(key gpucontext.Key, mods gpucontext.Modifiers) {
-		vkBase := gogpuKeyToVK(key, 0)
-
 		host.mu.Lock()
-		currMods := host.syncMods(vkBase, mods, false)
+		currMods := host.syncMods(key, mods, false)
 
 		vk := gogpuKeyToVK(key, currMods)
 		if vk == 0 {
@@ -415,6 +425,19 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 		host.mu.Unlock()
 
 		if vk == 0 {
+			return
+		}
+		// With Cmd folded into Ctrl, two physical keys share each Ctrl virtual
+		// key. If the Ctrl bit is still set after this release, the other key
+		// of the pair is still down, and a key-up now would tell the
+		// application Ctrl was released mid-chord — the Switcher commits its
+		// selection on exactly that. Only where the fold is active: macOS
+		// reports the post-change flags on the modifier's own event, while on
+		// Wayland the modifiers event trails the key event, so a genuine final
+		// Ctrl release still carries the Ctrl bit and would be swallowed here.
+		if gogpuCmdIsCtrl && (vk == vtinput.VK_LCONTROL || vk == vtinput.VK_RCONTROL) &&
+			currMods&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed) != 0 {
+			DebugLog("GOGPU_HOST_EVENT: withheld Ctrl key-up, Ctrl still held (key=%v)", key)
 			return
 		}
 		host.sendEvent(&vtinput.InputEvent{
@@ -913,6 +936,21 @@ func gogpuKeyToVK(k gpucontext.Key, mods vtinput.ControlKeyState) uint16 {
 		return vtinput.VK_LMENU
 	case gpucontext.KeyRightAlt:
 		return vtinput.VK_RMENU
+	// Where Super acts as Ctrl (macOS Command), the key itself must arrive as
+	// a Ctrl key too: the application distinguishes a bare modifier press
+	// from a chord by it. The real Ctrl keys share these virtual keys then;
+	// syncMods keeps their sides apart, and OnKeyRelease withholds the key-up
+	// while the other key of the pair still holds Ctrl down.
+	case gpucontext.KeyLeftSuper:
+		if gogpuCmdIsCtrl {
+			return vtinput.VK_LCONTROL
+		}
+		return vtinput.VK_LWIN
+	case gpucontext.KeyRightSuper:
+		if gogpuCmdIsCtrl {
+			return vtinput.VK_RCONTROL
+		}
+		return vtinput.VK_RWIN
 	case gpucontext.KeyA:
 		return vtinput.VK_A
 	case gpucontext.KeyB:

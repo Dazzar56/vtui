@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogpu/gpucontext"
 	"github.com/unxed/vtinput"
 )
 
@@ -137,6 +138,83 @@ func TestGogpuHost_LastRuneForVK_KeyRepeat(t *testing.T) {
 		t.Errorf("Expected restored Char 'a', got %c", ev.Char)
 	}
 }
+
+// The macOS Command key must act as Ctrl: Cmd+C has to reach the application
+// as Ctrl+C, and the Command key itself as a Ctrl key. Everywhere else the
+// Super/Win key belongs to the OS and stays a Win key with no Ctrl folding.
+func TestGogpuHost_SuperAsCtrl(t *testing.T) {
+	oldCmdIsCtrl := gogpuCmdIsCtrl
+	defer func() { gogpuCmdIsCtrl = oldCmdIsCtrl }()
+
+	gogpuCmdIsCtrl = true
+	if got := gogpuKeyToVK(gpucontext.KeyLeftSuper, 0); got != vtinput.VK_LCONTROL {
+		t.Errorf("Cmd-as-Ctrl: KeyLeftSuper mapped to vk %d, want VK_LCONTROL", got)
+	}
+	if got := gogpuKeyToVK(gpucontext.KeyRightSuper, 0); got != vtinput.VK_RCONTROL {
+		t.Errorf("Cmd-as-Ctrl: KeyRightSuper mapped to vk %d, want VK_RCONTROL", got)
+	}
+
+	host := &GogpuHost{}
+	mods := host.syncMods(gpucontext.KeyC, gpucontext.ModSuper, true)
+	if mods&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed) == 0 {
+		t.Errorf("Cmd-as-Ctrl: Super chord produced mods %v, want a Ctrl bit", mods)
+	}
+	if !host.superDown {
+		t.Error("Cmd-as-Ctrl: superDown not set while Super is held")
+	}
+	mods = host.syncMods(gpucontext.KeyC, 0, false)
+	if mods != 0 {
+		t.Errorf("Cmd-as-Ctrl: mods after Super release = %v, want 0", mods)
+	}
+	if host.superDown {
+		t.Error("Cmd-as-Ctrl: superDown still set after Super release")
+	}
+
+	gogpuCmdIsCtrl = false
+	if got := gogpuKeyToVK(gpucontext.KeyLeftSuper, 0); got != vtinput.VK_LWIN {
+		t.Errorf("plain Super: KeyLeftSuper mapped to vk %d, want VK_LWIN", got)
+	}
+	if got := gogpuKeyToVK(gpucontext.KeyRightSuper, 0); got != vtinput.VK_RWIN {
+		t.Errorf("plain Super: KeyRightSuper mapped to vk %d, want VK_RWIN", got)
+	}
+	if mods := (&GogpuHost{}).syncMods(gpucontext.KeyC, gpucontext.ModSuper, true); mods&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed) != 0 {
+		t.Errorf("plain Super: Super chord produced Ctrl bits %v, want none", mods)
+	}
+}
+
+// With Cmd folded into Ctrl, Left Ctrl and Left Cmd collide on VK_LCONTROL.
+// Releasing one of the pair while the other is still held must keep both the
+// held side flag and the Ctrl bit; the phantom full release used to commit an
+// open Switcher mid-chord.
+func TestGogpuHost_SuperReleaseKeepsHeldCtrl(t *testing.T) {
+	oldCmdIsCtrl := gogpuCmdIsCtrl
+	defer func() { gogpuCmdIsCtrl = oldCmdIsCtrl }()
+	gogpuCmdIsCtrl = true
+
+	host := &GogpuHost{}
+	host.syncMods(gpucontext.KeyLeftControl, gpucontext.ModControl, true)
+	host.syncMods(gpucontext.KeyLeftSuper, gpucontext.ModControl|gpucontext.ModSuper, true)
+	mods := host.syncMods(gpucontext.KeyLeftSuper, gpucontext.ModControl, false)
+	if !host.lCtrl {
+		t.Error("Cmd release cleared the Ctrl side while physical Ctrl is held")
+	}
+	if mods&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed) == 0 {
+		t.Errorf("mods after Cmd release = %v, want a Ctrl bit while physical Ctrl is held", mods)
+	}
+
+	// The mirror image: Ctrl released first, Cmd still held.
+	host = &GogpuHost{}
+	host.syncMods(gpucontext.KeyLeftSuper, gpucontext.ModSuper, true)
+	host.syncMods(gpucontext.KeyLeftControl, gpucontext.ModControl|gpucontext.ModSuper, true)
+	mods = host.syncMods(gpucontext.KeyLeftControl, gpucontext.ModSuper, false)
+	if host.lCtrl {
+		t.Error("physical Ctrl release left the Ctrl side flag set")
+	}
+	if mods&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed) == 0 {
+		t.Errorf("mods after Ctrl release = %v, want a Ctrl bit while Cmd is held", mods)
+	}
+}
+
 func TestGetSystemScrollLines(t *testing.T) {
 	lines := getSystemScrollLines()
 	if lines <= 0 {
