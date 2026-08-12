@@ -104,6 +104,11 @@ type ImageSurface struct {
 	Stride int
 	Pix    []byte
 
+	// Opaque reports that every pixel has alpha 255. Decoders set it from
+	// the source format; the block renderer uses it to skip per-pixel
+	// alpha blending (99% of pictures have no alpha).
+	Opaque bool
+
 	hash      uint64
 	hashValid bool
 }
@@ -170,6 +175,7 @@ func (s *ImageSurface) SetPixel(x, y int, r, g, b, a byte) {
 	s.Pix[o+1] = g
 	s.Pix[o+2] = b
 	s.Pix[o+3] = a
+	s.Opaque = s.Opaque && a == 255
 	s.hashValid = false
 }
 
@@ -187,6 +193,7 @@ func (s *ImageSurface) PixelAt(x, y int) (r, g, b, a byte) {
 func (s *ImageSurface) Invalidate() {
 	if s != nil {
 		s.hashValid = false
+		s.Opaque = false
 	}
 }
 
@@ -254,6 +261,7 @@ func (s *ImageSurface) Crop(x, y, w, h int) *ImageSurface {
 		dst := row * out.Stride
 		copy(out.Pix[dst:dst+w*4], s.Pix[src:src+w*4])
 	}
+	out.Opaque = s.Opaque
 	return out
 }
 
