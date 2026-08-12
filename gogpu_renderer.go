@@ -60,6 +60,8 @@ type GogpuRenderer struct {
 	gfxCache nativeGraphicsCache
 	gfxGen   uint64
 	gfxKnown bool
+
+	glyphMemo map[rune]glyphMemoEntry // font-glyph run cache, see glyphRectsCached
 }
 
 func NewGogpuRenderer(host *GogpuHost, face text.Face, cw, ch int) *GogpuRenderer {
@@ -83,6 +85,7 @@ func (r *GogpuRenderer) SetFallbackFontChain(chain *fontFallbackChain) {
 	defer r.mu.Unlock()
 	r.chain = chain
 	r.faceCache = nil
+	r.glyphMemo = nil
 }
 
 // faceFor resolves the face that actually owns a glyph for ch, memoising the
@@ -211,8 +214,118 @@ func (r *GogpuRenderer) ResizeWindow(cols, rows int) {
 	}
 }
 
-func (r *GogpuRenderer) drawCustomChar(dc *gg.Context, char rune, x, y, w, h float64) bool {
+// glyphMemoEntry caches a rune's mask-space rects and bbox offset from the
+// cell origin (bx) and baseline (by). The baseline itself is not stored: it
+// always comes from the primary font, like DrawString does for fallback text.
+type glyphMemoEntry struct {
+	rects []glyphRect
+	bx    float64
+	by    float64
+}
+
+// glyphRectsFromFace rasterizes char through the same gogpu pipeline as
+// DrawString (same face, HintingFull), thresholds the mask at coverage 128
+// and returns horizontal rect runs - pixel-identical to the font text.
+func glyphRectsFromFace(face text.Face, char rune) (glyphMemoEntry, bool) {
+	var e glyphMemoEntry
+	if face == nil || !face.HasGlyph(char) {
+		return e, false
+	}
+	src := face.Source()
+	if src == nil {
+		return e, false
+	}
+	var gid text.GlyphID
+	found := false
+	for g := range face.Glyphs(string(char)) {
+		gid, found = g.GID, true
+		break
+	}
+	if !found {
+		return e, false
+	}
+	m := face.Metrics()
+	ppem := m.Ascent + m.Descent
+	if ppem <= 0 {
+		return e, false
+	}
+	res, err := text.NewGlyphMaskRasterizer().RasterizeHinted(src.Parsed(), gid, ppem, 0, 0, text.HintingFull)
+	if err != nil || res == nil || res.Width == 0 || res.Height == 0 {
+		return e, false
+	}
+	const cutoff = 128
+	for j := 0; j < res.Height; j++ {
+		row := res.Mask[j*res.Width : (j+1)*res.Width]
+		for i := 0; i < res.Width; {
+			if row[i] <= cutoff {
+				i++
+				continue
+			}
+			k := i
+			for k+1 < res.Width && row[k+1] > cutoff {
+				k++
+			}
+			e.rects = append(e.rects, glyphRect{y0: j, y1: j, x0: i, x1: k})
+			i = k + 1
+		}
+	}
+	e.rects = mergeGlyphRectsV(e.rects)
+	if len(e.rects) == 0 {
+		return e, false
+	}
+	e.bx = float64(res.BearingX)
+	e.by = float64(res.BearingY)
+	return e, true
+}
+
+// mergeGlyphRectsV merges consecutive rows with the same x-range into taller
+// rects: identical pixels, fewer single-rect fills. Shared with the generator.
+// The merge runs in place: the caller's rects are consumed and reused.
+func mergeGlyphRectsV(rects []glyphRect) []glyphRect {
+	out := rects[:0]
+	for _, r := range rects {
+		if n := len(out); n > 0 && out[n-1].y1+1 == r.y0 && out[n-1].x0 == r.x0 && out[n-1].x1 == r.x1 {
+			out[n-1].y1 = r.y0
+			continue
+		}
+		out = append(out, r)
+	}
+	return out
+}
+
+// glyphRectsCached returns char's decomposition, memoised per rune. Negative
+// results are cached too, else box runes the font lacks would be re-probed
+// every frame. Uses the same faceFor chain as DrawString.
+func (r *GogpuRenderer) glyphRectsCached(char rune) (glyphMemoEntry, bool) {
+	if e, ok := r.glyphMemo[char]; ok {
+		return e, e.rects != nil
+	}
+	e, ok := glyphRectsFromFace(r.faceFor(char), char)
+	if r.glyphMemo == nil {
+		r.glyphMemo = make(map[rune]glyphMemoEntry, 64)
+	}
+	r.glyphMemo[char] = e // nil rects encodes a negative entry
+	return e, ok
+}
+
+// drawCustomChar draws one cell of a box/arrow/block rune. ascent is the
+// primary font's ascent; glyphs are placed on that baseline like DrawString
+// does for fallback text. Shapes are independent single-rect fills only:
+// composite paths rasterize as solid boxes on some Windows GPU stacks.
+func (r *GogpuRenderer) drawCustomChar(dc *gg.Context, char rune, x, y, w, h, ascent float64) bool {
 	thick := 1.0
+	fillR := func(rx, ry, rw, rh float64) {
+		dc.DrawRectangle(rx, ry, rw, rh)
+		dc.Fill()
+	}
+
+	if e, ok := r.glyphRectsCached(char); ok {
+		baseY := y + ascent
+		for _, rc := range e.rects {
+			fillR(x+e.bx+float64(rc.x0), baseY-e.by+float64(rc.y0), float64(rc.x1-rc.x0+1), float64(rc.y1-rc.y0+1))
+		}
+		return true
+	}
 
 	mx := math.Floor(x + w/2 - thick/2)
 	my := math.Floor(y + h/2 - thick/2)
@@ -229,208 +342,209 @@ func (r *GogpuRenderer) drawCustomChar(dc *gg.Context, char rune, x, y, w, h flo
 		if char == '━' {
 			t *= 2
 		}
-		dc.DrawRectangle(x, math.Floor(y+h/2-t/2), w, t)
+		fillR(x, math.Floor(y+h/2-t/2), w, t)
 	case '│', '┃':
 		t := thick
 		if char == '┃' {
 			t *= 2
 		}
-		dc.DrawRectangle(math.Floor(x+w/2-t/2), y, t, h)
+		fillR(math.Floor(x+w/2-t/2), y, t, h)
 	case '┌', '┏':
 		t := thick
 		if char == '┏' {
 			t *= 2
 		}
 		mxx, myy := math.Floor(x+w/2-t/2), math.Floor(y+h/2-t/2)
-		dc.DrawRectangle(mxx, myy, w-(mxx-x), t)
-		dc.DrawRectangle(mxx, myy, t, h-(myy-y))
+		fillR(mxx, myy, w-(mxx-x), t)
+		fillR(mxx, myy, t, h-(myy-y))
 	case '┐', '┓':
 		t := thick
 		if char == '┓' {
 			t *= 2
 		}
 		mxx, myy := math.Floor(x+w/2-t/2), math.Floor(y+h/2-t/2)
-		dc.DrawRectangle(x, myy, mxx-x+t, t)
-		dc.DrawRectangle(mxx, myy, t, h-(myy-y))
+		fillR(x, myy, mxx-x+t, t)
+		fillR(mxx, myy, t, h-(myy-y))
 	case '└', '┗':
 		t := thick
 		if char == '┗' {
 			t *= 2
 		}
 		mxx, myy := math.Floor(x+w/2-t/2), math.Floor(y+h/2-t/2)
-		dc.DrawRectangle(mxx, myy, w-(mxx-x), t)
-		dc.DrawRectangle(mxx, y, t, myy-y+t)
+		fillR(mxx, myy, w-(mxx-x), t)
+		fillR(mxx, y, t, myy-y+t)
 	case '┘', '┛':
 		t := thick
 		if char == '┛' {
 			t *= 2
 		}
 		mxx, myy := math.Floor(x+w/2-t/2), math.Floor(y+h/2-t/2)
-		dc.DrawRectangle(x, myy, mxx-x+t, t)
-		dc.DrawRectangle(mxx, y, t, myy-y+t)
+		fillR(x, myy, mxx-x+t, t)
+		fillR(mxx, y, t, myy-y+t)
 	case '├', '┣':
 		t := thick
 		if char == '┣' {
 			t *= 2
 		}
 		mxx, myy := math.Floor(x+w/2-t/2), math.Floor(y+h/2-t/2)
-		dc.DrawRectangle(mxx, myy, w-(mxx-x), t)
-		dc.DrawRectangle(mxx, y, t, h)
+		fillR(mxx, myy, w-(mxx-x), t)
+		fillR(mxx, y, t, h)
 	case '┤', '┫':
 		t := thick
 		if char == '┫' {
 			t *= 2
 		}
 		mxx, myy := math.Floor(x+w/2-t/2), math.Floor(y+h/2-t/2)
-		dc.DrawRectangle(x, myy, mxx-x+t, t)
-		dc.DrawRectangle(mxx, y, t, h)
+		fillR(x, myy, mxx-x+t, t)
+		fillR(mxx, y, t, h)
 	case '┬', '┳':
 		t := thick
 		if char == '┳' {
 			t *= 2
 		}
 		mxx, myy := math.Floor(x+w/2-t/2), math.Floor(y+h/2-t/2)
-		dc.DrawRectangle(x, myy, w, t)
-		dc.DrawRectangle(mxx, myy, t, h-(myy-y))
+		fillR(x, myy, w, t)
+		fillR(mxx, myy, t, h-(myy-y))
 	case '┴', '┻':
 		t := thick
 		if char == '┻' {
 			t *= 2
 		}
 		mxx, myy := math.Floor(x+w/2-t/2), math.Floor(y+h/2-t/2)
-		dc.DrawRectangle(x, myy, w, t)
-		dc.DrawRectangle(mxx, y, t, myy-y+t)
+		fillR(x, myy, w, t)
+		fillR(mxx, y, t, myy-y+t)
 	case '┼', '╋':
 		t := thick
 		if char == '╋' {
 			t *= 2
 		}
 		mxx, myy := math.Floor(x+w/2-t/2), math.Floor(y+h/2-t/2)
-		dc.DrawRectangle(x, myy, w, t)
-		dc.DrawRectangle(mxx, y, t, h)
+		fillR(x, myy, w, t)
+		fillR(mxx, y, t, h)
 
 	// Double lines
 	case '═':
-		dc.DrawRectangle(x, my-ofs, w, thick)
-		dc.DrawRectangle(x, my+ofs, w, thick)
+		fillR(x, my-ofs, w, thick)
+		fillR(x, my+ofs, w, thick)
 	case '║':
-		dc.DrawRectangle(mx-ofs, y, thick, h)
-		dc.DrawRectangle(mx+ofs, y, thick, h)
+		fillR(mx-ofs, y, thick, h)
+		fillR(mx+ofs, y, thick, h)
 	case '╔':
-		dc.DrawRectangle(mx+ofs, my-ofs, w-(mx-x+ofs), thick)
-		dc.DrawRectangle(mx-ofs, my+ofs, w-(mx-x-ofs), thick)
-		dc.DrawRectangle(mx-ofs, my+ofs, thick, (y+h)-(my+ofs))
-		dc.DrawRectangle(mx+ofs, my-ofs, thick, (y+h)-(my-ofs))
+		fillR(mx+ofs, my-ofs, w-(mx-x+ofs), thick)
+		fillR(mx-ofs, my+ofs, w-(mx-x-ofs), thick)
+		fillR(mx-ofs, my+ofs, thick, (y+h)-(my+ofs))
+		fillR(mx+ofs, my-ofs, thick, (y+h)-(my-ofs))
 	case '╗':
-		dc.DrawRectangle(x, my-ofs, mx-x-ofs+thick, thick)
-		dc.DrawRectangle(x, my+ofs, mx-x+ofs+thick, thick)
-		dc.DrawRectangle(mx+ofs, my+ofs, thick, (y+h)-(my+ofs))
-		dc.DrawRectangle(mx-ofs, my-ofs, thick, (y+h)-(my-ofs))
+		fillR(x, my-ofs, mx-x-ofs+thick, thick)
+		fillR(x, my+ofs, mx-x+ofs+thick, thick)
+		fillR(mx+ofs, my+ofs, thick, (y+h)-(my+ofs))
+		fillR(mx-ofs, my-ofs, thick, (y+h)-(my-ofs))
 	case '╚':
-		dc.DrawRectangle(mx-ofs, my-ofs, w-(mx-x-ofs), thick)
-		dc.DrawRectangle(mx+ofs, my+ofs, w-(mx-x+ofs), thick)
-		dc.DrawRectangle(mx-ofs, y, thick, (my-ofs)-y+thick)
-		dc.DrawRectangle(mx+ofs, y, thick, (my+ofs)-y+thick)
+		fillR(mx-ofs, my-ofs, w-(mx-x-ofs), thick)
+		fillR(mx+ofs, my+ofs, w-(mx-x+ofs), thick)
+		fillR(mx-ofs, y, thick, (my-ofs)-y+thick)
+		fillR(mx+ofs, y, thick, (my+ofs)-y+thick)
 	case '╝':
-		dc.DrawRectangle(x, my-ofs, mx-x+ofs+thick, thick)
-		dc.DrawRectangle(x, my+ofs, mx-x-ofs+thick, thick)
-		dc.DrawRectangle(mx+ofs, y, thick, (my-ofs)-y+thick)
-		dc.DrawRectangle(mx-ofs, y, thick, (my+ofs)-y+thick)
+		fillR(x, my-ofs, mx-x+ofs+thick, thick)
+		fillR(x, my+ofs, mx-x-ofs+thick, thick)
+		fillR(mx+ofs, y, thick, (my-ofs)-y+thick)
+		fillR(mx-ofs, y, thick, (my+ofs)-y+thick)
 	case '╠':
-		dc.DrawRectangle(mx-ofs, my-ofs, w-(mx-x-ofs), thick)
-		dc.DrawRectangle(mx+ofs, my+ofs, w-(mx-x+ofs), thick)
-		dc.DrawRectangle(mx-ofs, y, thick, h)
-		dc.DrawRectangle(mx+ofs, y, thick, h)
+		fillR(mx-ofs, my-ofs, w-(mx-x-ofs), thick)
+		fillR(mx+ofs, my+ofs, w-(mx-x+ofs), thick)
+		fillR(mx-ofs, y, thick, h)
+		fillR(mx+ofs, y, thick, h)
 	case '╣':
-		dc.DrawRectangle(x, my-ofs, mx-x+ofs+thick, thick)
-		dc.DrawRectangle(x, my+ofs, mx-x-ofs+thick, thick)
-		dc.DrawRectangle(mx+ofs, y, thick, h)
-		dc.DrawRectangle(mx-ofs, y, thick, h)
+		fillR(x, my-ofs, mx-x+ofs+thick, thick)
+		fillR(x, my+ofs, mx-x-ofs+thick, thick)
+		fillR(mx+ofs, y, thick, h)
+		fillR(mx-ofs, y, thick, h)
 	case '╦':
-		dc.DrawRectangle(x, my-ofs, w, thick)
-		dc.DrawRectangle(x, my+ofs, w, thick)
-		dc.DrawRectangle(mx-ofs, my+ofs, thick, h-(my-y+ofs))
-		dc.DrawRectangle(mx+ofs, my+ofs, thick, h-(my-y+ofs))
+		fillR(x, my-ofs, w, thick)
+		fillR(x, my+ofs, w, thick)
+		fillR(mx-ofs, my+ofs, thick, h-(my-y+ofs))
+		fillR(mx+ofs, my+ofs, thick, h-(my-y+ofs))
 	case '╩':
-		dc.DrawRectangle(x, my-ofs, w, thick)
-		dc.DrawRectangle(x, my+ofs, w, thick)
-		dc.DrawRectangle(mx-ofs, y, thick, my-y-ofs+thick)
-		dc.DrawRectangle(mx+ofs, y, thick, my-y-ofs+thick)
+		fillR(x, my-ofs, w, thick)
+		fillR(x, my+ofs, w, thick)
+		fillR(mx-ofs, y, thick, my-y-ofs+thick)
+		fillR(mx+ofs, y, thick, my-y-ofs+thick)
 	case '╬':
-		dc.DrawRectangle(x, my-ofs, w, thick)
-		dc.DrawRectangle(x, my+ofs, w, thick)
-		dc.DrawRectangle(mx-ofs, y, thick, h)
-		dc.DrawRectangle(mx+ofs, y, thick, h)
+		fillR(x, my-ofs, w, thick)
+		fillR(x, my+ofs, w, thick)
+		fillR(mx-ofs, y, thick, h)
+		fillR(mx+ofs, y, thick, h)
 
 	// Mixed (used in VMenu)
 	case '╟':
-		dc.DrawRectangle(mx+ofs, my, w-(mx-x+ofs), thick)
-		dc.DrawRectangle(mx-ofs, y, thick, h)
-		dc.DrawRectangle(mx+ofs, y, thick, h)
+		fillR(mx+ofs, my, w-(mx-x+ofs), thick)
+		fillR(mx-ofs, y, thick, h)
+		fillR(mx+ofs, y, thick, h)
 	case '╢':
-		dc.DrawRectangle(x, my, mx-x-ofs+thick, thick)
-		dc.DrawRectangle(mx-ofs, y, thick, h)
-		dc.DrawRectangle(mx+ofs, y, thick, h)
+		fillR(x, my, mx-x-ofs+thick, thick)
+		fillR(mx-ofs, y, thick, h)
+		fillR(mx+ofs, y, thick, h)
 
-	// Arrows and Triangles
-	case '↑':
-		dc.DrawLine(mx, y+h*0.15, mx, y+h*0.85)
-		dc.DrawLine(mx, y+h*0.15, mx-w*0.25, y+h*0.4)
-		dc.DrawLine(mx, y+h*0.15, mx+w*0.25, y+h*0.4)
-		dc.SetLineWidth(thick)
-		dc.Stroke()
-		dc.SetLineWidth(0)
-		return true
-	case '↓':
-		dc.DrawLine(mx, y+h*0.15, mx, y+h*0.85)
-		dc.DrawLine(mx, y+h*0.85, mx-w*0.25, y+h*0.6)
-		dc.DrawLine(mx, y+h*0.85, mx+w*0.25, y+h*0.6)
-		dc.SetLineWidth(thick)
-		dc.Stroke()
-		dc.SetLineWidth(0)
-		return true
-	case '↕':
-		dc.DrawLine(mx, y+h*0.15, mx, y+h*0.85)
-		dc.DrawLine(mx, y+h*0.15, mx-w*0.25, y+h*0.35)
-		dc.DrawLine(mx, y+h*0.15, mx+w*0.25, y+h*0.35)
-		dc.DrawLine(mx, y+h*0.85, mx-w*0.25, y+h*0.65)
-		dc.DrawLine(mx, y+h*0.85, mx+w*0.25, y+h*0.65)
-		dc.SetLineWidth(thick)
-		dc.Stroke()
-		dc.SetLineWidth(0)
-		return true
-	case '▲':
-		dc.MoveTo(mx, y+h*0.2)
-		dc.LineTo(mx-w*0.3, y+h*0.8)
-		dc.LineTo(mx+w*0.3, y+h*0.8)
-		dc.ClosePath()
-		dc.Fill()
-		return true
-	case '▼':
-		dc.MoveTo(mx-w*0.3, y+h*0.2)
-		dc.LineTo(mx+w*0.3, y+h*0.2)
-		dc.LineTo(mx, y+h*0.8)
-		dc.ClosePath()
-		dc.Fill()
-		return true
+	// Fallback for fonts without these runes: the reference-font raster from
+	// gogpu_glyph_table.go (see gogpu_glyphgen_test.go), scaled to the cell.
+	// Fonts that cover the runes never reach this case.
+	case '↑', '↓', '↕', '←', '→', '↔', '▲', '▼':
+		if rects, ok := glyphTable[char]; ok {
+			sx := w / glyphCellW
+			sy := h / glyphCellH
+			for _, rc := range rects {
+				fillR(x+float64(rc.x0)*sx, y+float64(rc.y0)*sy, float64(rc.x1-rc.x0+1)*sx, float64(rc.y1-rc.y0+1)*sy)
+			}
+			return true
+		}
+		return false
 
 	// Solid Blocks
 	case '█':
-		dc.DrawRectangle(x, y, w, h)
+		fillR(x, y, w, h)
 	case '▀':
-		dc.DrawRectangle(x, y, w, h/2)
+		fillR(x, y, w, h/2)
 	case '▄':
-		dc.DrawRectangle(x, y+h/2, w, h/2)
+		fillR(x, y+h/2, w, h/2)
 	case '▌':
-		dc.DrawRectangle(x, y, w/2, h)
+		fillR(x, y, w/2, h)
 	case '▐':
-		dc.DrawRectangle(x+w/2, y, w/2, h)
+		fillR(x+w/2, y, w/2, h)
+
+	case '░', '▒', '▓': // scrollbar shades: 25% / 50% / 75% bar patterns
+		if char == '░' {
+			for bar := 2; bar < 16; bar += 4 {
+				fillR(x, y+float64(bar), w, thick)
+			}
+		} else if char == '▒' {
+			for bar := 1; bar < 16; bar += 2 {
+				fillR(x, y+float64(bar), w, thick)
+			}
+		} else {
+			for bar := 1; bar < 16; bar++ {
+				if bar == 1 || bar == 6 || bar == 11 {
+					continue
+				}
+				fillR(x, y+float64(bar), w, thick)
+			}
+		}
+	case '▔':
+		fillR(x, y, w, thick)
+	case '▕':
+		fillR(x+w-thick, y, thick, h)
+	case '▖': // bottom-left quarter block
+		fillR(x, y+h/2, w/2, h/2)
+	case '▗': // top-right quarter block
+		fillR(x+w/2, y, w/2, h/2)
+	case '▘': // top-left quarter block
+		fillR(x, y, w/2, h/2)
+	case '▝': // bottom-right quarter block
+		fillR(x+w/2, y+h/2, w/2, h/2)
 
 	default:
 		return false
 	}
 
-	dc.Fill()
 	return true
 }
 
@@ -512,7 +626,6 @@ func (r *GogpuRenderer) DrawToScreen(ctx *gogpu.Context) {
 				dc.SetFont(r.face)
 				ascent = float64(r.face.Metrics().Ascent)
 			}
-
 			// The baseline stays the primary font's for the whole frame even
 			// when a fallback draws the glyph: a CJK face with its own ascent
 			// would make text jump between lines that mix scripts.
@@ -566,11 +679,10 @@ func (r *GogpuRenderer) DrawToScreen(ctx *gogpu.Context) {
 						}
 
 						char := CellBaseRune(currCell.Char)
-						isBox := (char >= 0x2500 && char <= 0x25BF) || (char >= 0x2190 && char <= 0x2195)
 
-						if isBox {
+						if isBoxDrawRune(char) {
 							tBox := gogpuProfNow()
-							drawn := r.drawCustomChar(dc, char, lx+float64(sx*r.cellW), ly, float64(rw*r.cellW), float64(r.cellH))
+							drawn := r.drawCustomChar(dc, char, lx+float64(sx*r.cellW), ly, float64(rw*r.cellW), float64(r.cellH), ascent)
 							prof.boxTime += gogpuProfSince(tBox)
 							if drawn {
 								prof.boxChars++
