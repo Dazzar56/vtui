@@ -1,0 +1,24 @@
+name: macOS tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build
+        run: go build ./...
+
+      # go vet is deliberately not run as its own step: the repo has
+      # pre-existing vet findings (test_main_test.go unreachable code) that
+      # would keep CI red. go test still applies its own vet subset.
+      - name: Test
+        run: go test -race -count=1 ./...
