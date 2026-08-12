@@ -43,6 +43,6 @@ require (
 	golang.org/x/sync v0.22.0 // indirect
 )
 
-replace github.com/ebitengine/purego => github.com/unxed/pureffi v0.1.12
+replace github.com/ebitengine/purego => github.com/unxed/pureffi v0.1.14
 
 replace github.com/ebitengine/hideconsole => ./internal/hideconsole
