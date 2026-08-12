@@ -140,8 +140,10 @@ func TestGogpuHost_LastRuneForVK_KeyRepeat(t *testing.T) {
 }
 
 // The macOS Command key must act as Ctrl: Cmd+C has to reach the application
-// as Ctrl+C, and the Command key itself as a Ctrl key. Everywhere else the
-// Super/Win key belongs to the OS and stays a Win key with no Ctrl folding.
+// as Ctrl+C, and the Command key itself as a Ctrl key. Cmd owns the left Ctrl
+// channel (VK_LCONTROL, LeftCtrlPressed) and physical Ctrl the right one, so
+// the two never share a virtual key. Everywhere else the Super/Win key
+// belongs to the OS and stays a Win key with no Ctrl folding.
 func TestGogpuHost_SuperAsCtrl(t *testing.T) {
 	oldCmdIsCtrl := gogpuCmdIsCtrl
 	defer func() { gogpuCmdIsCtrl = oldCmdIsCtrl }()
@@ -150,14 +152,23 @@ func TestGogpuHost_SuperAsCtrl(t *testing.T) {
 	if got := gogpuKeyToVK(gpucontext.KeyLeftSuper, 0); got != vtinput.VK_LCONTROL {
 		t.Errorf("Cmd-as-Ctrl: KeyLeftSuper mapped to vk %d, want VK_LCONTROL", got)
 	}
-	if got := gogpuKeyToVK(gpucontext.KeyRightSuper, 0); got != vtinput.VK_RCONTROL {
-		t.Errorf("Cmd-as-Ctrl: KeyRightSuper mapped to vk %d, want VK_RCONTROL", got)
+	if got := gogpuKeyToVK(gpucontext.KeyRightSuper, 0); got != vtinput.VK_LCONTROL {
+		t.Errorf("Cmd-as-Ctrl: KeyRightSuper mapped to vk %d, want VK_LCONTROL", got)
+	}
+	if got := gogpuKeyToVK(gpucontext.KeyLeftControl, 0); got != vtinput.VK_RCONTROL {
+		t.Errorf("Cmd-as-Ctrl: KeyLeftControl mapped to vk %d, want VK_RCONTROL", got)
+	}
+	if got := gogpuKeyToVK(gpucontext.KeyRightControl, 0); got != vtinput.VK_RCONTROL {
+		t.Errorf("Cmd-as-Ctrl: KeyRightControl mapped to vk %d, want VK_RCONTROL", got)
 	}
 
 	host := &GogpuHost{}
 	mods := host.syncMods(gpucontext.KeyC, gpucontext.ModSuper, true)
-	if mods&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed) == 0 {
-		t.Errorf("Cmd-as-Ctrl: Super chord produced mods %v, want a Ctrl bit", mods)
+	if mods&vtinput.LeftCtrlPressed == 0 {
+		t.Errorf("Cmd-as-Ctrl: Super chord produced mods %v, want LeftCtrlPressed", mods)
+	}
+	if mods&vtinput.RightCtrlPressed != 0 {
+		t.Errorf("Cmd-as-Ctrl: Super chord produced mods %v, RightCtrlPressed belongs to physical Ctrl", mods)
 	}
 	if !host.superDown {
 		t.Error("Cmd-as-Ctrl: superDown not set while Super is held")
@@ -177,41 +188,55 @@ func TestGogpuHost_SuperAsCtrl(t *testing.T) {
 	if got := gogpuKeyToVK(gpucontext.KeyRightSuper, 0); got != vtinput.VK_RWIN {
 		t.Errorf("plain Super: KeyRightSuper mapped to vk %d, want VK_RWIN", got)
 	}
+	if got := gogpuKeyToVK(gpucontext.KeyLeftControl, 0); got != vtinput.VK_LCONTROL {
+		t.Errorf("plain Super: KeyLeftControl mapped to vk %d, want VK_LCONTROL", got)
+	}
+	if got := gogpuKeyToVK(gpucontext.KeyRightControl, 0); got != vtinput.VK_RCONTROL {
+		t.Errorf("plain Super: KeyRightControl mapped to vk %d, want VK_RCONTROL", got)
+	}
 	if mods := (&GogpuHost{}).syncMods(gpucontext.KeyC, gpucontext.ModSuper, true); mods&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed) != 0 {
 		t.Errorf("plain Super: Super chord produced Ctrl bits %v, want none", mods)
 	}
 }
 
-// With Cmd folded into Ctrl, Left Ctrl and Left Cmd collide on VK_LCONTROL.
-// Releasing one of the pair while the other is still held must keep both the
-// held side flag and the Ctrl bit; the phantom full release used to commit an
-// open Switcher mid-chord.
-func TestGogpuHost_SuperReleaseKeepsHeldCtrl(t *testing.T) {
+// Cmd and physical Ctrl each own a Ctrl channel. Holding both sets both bits,
+// and releasing one channel must not disturb the bit the other still holds —
+// a phantom full release used to commit an open Switcher mid-chord.
+func TestGogpuHost_CtrlChannelSurvivesOtherRelease(t *testing.T) {
 	oldCmdIsCtrl := gogpuCmdIsCtrl
 	defer func() { gogpuCmdIsCtrl = oldCmdIsCtrl }()
 	gogpuCmdIsCtrl = true
 
 	host := &GogpuHost{}
-	host.syncMods(gpucontext.KeyLeftControl, gpucontext.ModControl, true)
-	host.syncMods(gpucontext.KeyLeftSuper, gpucontext.ModControl|gpucontext.ModSuper, true)
-	mods := host.syncMods(gpucontext.KeyLeftSuper, gpucontext.ModControl, false)
-	if !host.lCtrl {
-		t.Error("Cmd release cleared the Ctrl side while physical Ctrl is held")
+	mods := host.syncMods(gpucontext.KeyLeftControl, gpucontext.ModControl, true)
+	if mods&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed) != vtinput.RightCtrlPressed {
+		t.Errorf("physical Ctrl produced mods %v, want exactly RightCtrlPressed", mods)
 	}
-	if mods&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed) == 0 {
-		t.Errorf("mods after Cmd release = %v, want a Ctrl bit while physical Ctrl is held", mods)
+	mods = host.syncMods(gpucontext.KeyLeftSuper, gpucontext.ModControl|gpucontext.ModSuper, true)
+	if mods&vtinput.LeftCtrlPressed == 0 || mods&vtinput.RightCtrlPressed == 0 {
+		t.Errorf("Ctrl and Cmd held together produced mods %v, want both Ctrl bits", mods)
+	}
+	mods = host.syncMods(gpucontext.KeyLeftSuper, gpucontext.ModControl, false)
+	if mods&vtinput.RightCtrlPressed == 0 {
+		t.Errorf("mods after Cmd release = %v, want RightCtrlPressed while physical Ctrl is held", mods)
+	}
+	if mods&vtinput.LeftCtrlPressed != 0 {
+		t.Errorf("mods after Cmd release = %v, LeftCtrlPressed should be gone", mods)
 	}
 
 	// The mirror image: Ctrl released first, Cmd still held.
 	host = &GogpuHost{}
-	host.syncMods(gpucontext.KeyLeftSuper, gpucontext.ModSuper, true)
+	mods = host.syncMods(gpucontext.KeyLeftSuper, gpucontext.ModSuper, true)
+	if mods&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed) != vtinput.LeftCtrlPressed {
+		t.Errorf("Cmd produced mods %v, want exactly LeftCtrlPressed", mods)
+	}
 	host.syncMods(gpucontext.KeyLeftControl, gpucontext.ModControl|gpucontext.ModSuper, true)
 	mods = host.syncMods(gpucontext.KeyLeftControl, gpucontext.ModSuper, false)
-	if host.lCtrl {
-		t.Error("physical Ctrl release left the Ctrl side flag set")
+	if mods&vtinput.LeftCtrlPressed == 0 {
+		t.Errorf("mods after Ctrl release = %v, want LeftCtrlPressed while Cmd is held", mods)
 	}
-	if mods&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed) == 0 {
-		t.Errorf("mods after Ctrl release = %v, want a Ctrl bit while Cmd is held", mods)
+	if mods&vtinput.RightCtrlPressed != 0 {
+		t.Errorf("mods after Ctrl release = %v, RightCtrlPressed should be gone", mods)
 	}
 }
 
