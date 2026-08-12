@@ -30,6 +30,9 @@ type MultiLineEdit struct {
 	leftPos      int // horizontal scroll for the current row
 	topPos       int // vertical scroll for the whole buffer
 	pasting      bool
+	selActive    bool
+	selStartRow  int
+	selStartCol  int
 	pasteBuffer  []rune
 	OnTextChange func(string)
 	// ColorTextIdx allows callers to override the default palette entry
@@ -81,6 +84,7 @@ func (m *MultiLineEdit) SetText(text string) {
 	m.curCol = 0
 	m.leftPos = 0
 	m.topPos = 0
+	m.selActive = false
 	m.notifyChange()
 }
 
@@ -107,6 +111,7 @@ func (m *MultiLineEdit) SetLines(lines []string) {
 	m.curCol = 0
 	m.leftPos = 0
 	m.topPos = 0
+	m.selActive = false
 	m.notifyChange()
 }
 
@@ -225,6 +230,7 @@ func (m *MultiLineEdit) DisplayObject(scr *ScreenBuf) {
 	}
 	scr.FillRect(m.X1, m.Y1, m.X2, m.Y2, ' ', attr)
 
+	selAttr := Palette[ColDialogEditSelected]
 	vw := m.viewWidth()
 	vh := m.viewHeight()
 	for row := 0; row < vh; row++ {
@@ -243,7 +249,11 @@ func (m *MultiLineEdit) DisplayObject(scr *ScreenBuf) {
 			if x+w > vw {
 				break
 			}
-			scr.Write(m.X1+x, m.Y1+row, StringToCharInfo(string(line[i]), attr))
+			cAttr := attr
+			if m.isSelected(idx, i) {
+				cAttr = selAttr
+			}
+			scr.Write(m.X1+x, m.Y1+row, StringToCharInfo(string(line[i]), cAttr))
 			x += w
 		}
 	}
@@ -295,10 +305,22 @@ func (m *MultiLineEdit) ProcessKey(event *vtinput.InputEvent) bool {
 	}
 
 	switch event.VirtualKeyCode {
+	if ctrl && !alt && !shift && event.VirtualKeyCode == vtinput.VK_A {
+		m.SelectAll()
+		return true
+	}
+	if ctrl && !alt && !shift && (event.VirtualKeyCode == vtinput.VK_C || event.VirtualKeyCode == vtinput.VK_INSERT) {
+		if text := m.CopySelection(); text != "" {
+			SetClipboard(text)
+		}
+		return true
+	}
+
 	case vtinput.VK_LEFT:
-		if ctrl || alt || shift {
+		if ctrl || alt {
 			return false
 		}
+		m.handleNav(shift)
 		if m.curCol > 0 {
 			m.curCol--
 		} else if m.curRow > 0 {
@@ -308,9 +330,10 @@ func (m *MultiLineEdit) ProcessKey(event *vtinput.InputEvent) bool {
 		m.ensureVisible()
 		return true
 	case vtinput.VK_RIGHT:
-		if ctrl || alt || shift {
+		if ctrl || alt {
 			return false
 		}
+		m.handleNav(shift)
 		line := m.lines[m.curRow]
 		if m.curCol < len(line) {
 			m.curCol++
@@ -321,27 +344,30 @@ func (m *MultiLineEdit) ProcessKey(event *vtinput.InputEvent) bool {
 		m.ensureVisible()
 		return true
 	case vtinput.VK_UP:
-		if ctrl || alt || shift {
+		if ctrl || alt {
 			return false
 		}
+		m.handleNav(shift)
 		if m.curRow > 0 {
 			m.curRow--
 			m.ensureVisible()
 		}
 		return true
 	case vtinput.VK_DOWN:
-		if ctrl || alt || shift {
+		if ctrl || alt {
 			return false
 		}
+		m.handleNav(shift)
 		if m.curRow+1 < len(m.lines) {
 			m.curRow++
 			m.ensureVisible()
 		}
 		return true
 	case vtinput.VK_HOME:
-		if alt || shift {
+		if alt {
 			return false
 		}
+		m.handleNav(shift)
 		if ctrl {
 			m.curRow = 0
 		}
@@ -349,9 +375,10 @@ func (m *MultiLineEdit) ProcessKey(event *vtinput.InputEvent) bool {
 		m.ensureVisible()
 		return true
 	case vtinput.VK_END:
-		if alt || shift {
+		if alt {
 			return false
 		}
+		m.handleNav(shift)
 		if ctrl {
 			m.curRow = len(m.lines) - 1
 		}
@@ -359,18 +386,20 @@ func (m *MultiLineEdit) ProcessKey(event *vtinput.InputEvent) bool {
 		m.ensureVisible()
 		return true
 	case vtinput.VK_PRIOR:
-		if ctrl || alt || shift {
+		if ctrl || alt {
 			return false
 		}
+		m.handleNav(shift)
 		step := m.viewHeight()
 		m.curRow -= step
 		m.topPos -= step
 		m.ensureVisible()
 		return true
 	case vtinput.VK_NEXT:
-		if ctrl || alt || shift {
+		if ctrl || alt {
 			return false
 		}
+		m.handleNav(shift)
 		step := m.viewHeight()
 		m.curRow += step
 		m.topPos += step
@@ -458,6 +487,9 @@ func (m *MultiLineEdit) ProcessMouse(event *vtinput.InputEvent) bool {
 
 // insertRune inserts r at the cursor and advances curCol.
 func (m *MultiLineEdit) insertRune(r rune) {
+	if m.selActive {
+		m.DeleteSelection()
+	}
 	line := m.lines[m.curRow]
 	newLine := make([]rune, 0, len(line)+1)
 	newLine = append(newLine, line[:m.curCol]...)
@@ -473,6 +505,9 @@ func (m *MultiLineEdit) insertRune(r rune) {
 func (m *MultiLineEdit) insertString(text string) {
 	if text == "" {
 		return
+	}
+	if m.selActive {
+		m.DeleteSelection()
 	}
 	// Normalize CRLF and LF.
 	text = strings.ReplaceAll(text, "\r\n", "\n")
@@ -519,6 +554,9 @@ func (m *MultiLineEdit) insertString(text string) {
 
 // splitLine breaks the current row at the cursor. Enter without modifiers.
 func (m *MultiLineEdit) splitLine() {
+	if m.selActive {
+		m.DeleteSelection()
+	}
 	line := m.lines[m.curRow]
 	head := append([]rune{}, line[:m.curCol]...)
 	tail := append([]rune{}, line[m.curCol:]...)
@@ -537,6 +575,10 @@ func (m *MultiLineEdit) splitLine() {
 // backspace deletes the char before the cursor, or merges with the
 // previous row when the cursor is at column zero.
 func (m *MultiLineEdit) backspace() {
+	if m.selActive {
+		m.DeleteSelection()
+		return
+	}
 	if m.curCol > 0 {
 		line := m.lines[m.curRow]
 		m.lines[m.curRow] = append(line[:m.curCol-1], line[m.curCol:]...)
@@ -561,6 +603,10 @@ func (m *MultiLineEdit) backspace() {
 // deleteForward deletes the char at the cursor, or joins with the next
 // row when the cursor is at end-of-line.
 func (m *MultiLineEdit) deleteForward() {
+	if m.selActive {
+		m.DeleteSelection()
+		return
+	}
 	line := m.lines[m.curRow]
 	if m.curCol < len(line) {
 		m.lines[m.curRow] = append(line[:m.curCol], line[m.curCol+1:]...)
@@ -590,3 +636,106 @@ func (m *MultiLineEdit) SetCursorPos(row, col int) {
 
 // LineCount returns the number of rows in the buffer.
 func (m *MultiLineEdit) LineCount() int { return len(m.lines) }
+func (m *MultiLineEdit) handleNav(shift bool) {
+	if shift {
+		if !m.selActive {
+			m.selActive = true
+			m.selStartRow, m.selStartCol = m.curRow, m.curCol
+		}
+	} else {
+		m.selActive = false
+	}
+}
+
+func (m *MultiLineEdit) isSelected(row, col int) bool {
+	if !m.selActive {
+		return false
+	}
+	r1, c1 := m.selStartRow, m.selStartCol
+	r2, c2 := m.curRow, m.curCol
+	if r1 > r2 || (r1 == r2 && c1 > c2) {
+		r1, c1, r2, c2 = r2, c2, r1, c1
+	}
+	if r1 == r2 && c1 == c2 {
+		return false
+	}
+	if row < r1 || row > r2 {
+		return false
+	}
+	if row == r1 && col < c1 {
+		return false
+	}
+	if row == r2 && col >= c2 {
+		return false
+	}
+	return true
+}
+
+func (m *MultiLineEdit) SelectAll() {
+	m.selActive = true
+	m.selStartRow, m.selStartCol = 0, 0
+	m.curRow = len(m.lines) - 1
+	m.curCol = len(m.lines[m.curRow])
+	m.ensureVisible()
+	m.notifyChange()
+}
+
+func (m *MultiLineEdit) CopySelection() string {
+	if !m.selActive {
+		return ""
+	}
+	r1, c1 := m.selStartRow, m.selStartCol
+	r2, c2 := m.curRow, m.curCol
+	if r1 > r2 || (r1 == r2 && c1 > c2) {
+		r1, c1, r2, c2 = r2, c2, r1, c1
+	}
+	if r1 == r2 && c1 == c2 {
+		return ""
+	}
+	var sb strings.Builder
+	for r := r1; r <= r2; r++ {
+		line := m.lines[r]
+		start := 0
+		if r == r1 {
+			start = c1
+		}
+		end := len(line)
+		if r == r2 {
+			end = c2
+		}
+		if start < end {
+			sb.WriteString(string(line[start:end]))
+		}
+		if r < r2 {
+			sb.WriteRune('\n')
+		}
+	}
+	return sb.String()
+}
+
+func (m *MultiLineEdit) DeleteSelection() {
+	if !m.selActive {
+		return
+	}
+	r1, c1 := m.selStartRow, m.selStartCol
+	r2, c2 := m.curRow, m.curCol
+	if r1 > r2 || (r1 == r2 && c1 > c2) {
+		r1, c1, r2, c2 = r2, c2, r1, c1
+	}
+	if r1 == r2 && c1 == c2 {
+		m.selActive = false
+		return
+	}
+	m.selActive = false
+	head := m.lines[r1][:c1]
+	tail := m.lines[r2][c2:]
+	newLines := append([][]rune(nil), m.lines[:r1]...)
+	merged := append([]rune(nil), head...)
+	merged = append(merged, tail...)
+	newLines = append(newLines, merged)
+	newLines = append(newLines, m.lines[r2+1:]...)
+	m.lines = newLines
+	m.curRow, m.curCol = r1, c1
+	m.ensureVisible()
+	m.notifyChange()
+}
