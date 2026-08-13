@@ -147,7 +147,7 @@ func (r *GogpuRenderer) gogpuAdvMatches(f text.Face, ch rune, cells int) bool {
 	if !f.HasGlyph(ch) {
 		return false
 	}
-	return gogpuAdvFits(f.Advance(string(rune(ch))), r.cellW, cells)
+	return gogpuAdvFits(f.Advance(cellRuneString(uint64(ch))), r.cellW, cells)
 }
 
 // gogpuTextRun extends a batched DrawString run across the cells of one
@@ -915,7 +915,14 @@ func (r *GogpuRenderer) DrawToScreen(ctx *gogpu.Context) {
 func (r *GogpuRenderer) SetWindowTitle(title string) {
 	r.host.app.SetTitle(title)
 }
-func (r *GogpuRenderer) getCellColors(cell CharInfo) (color.Color, color.Color) {
+
+// getCellColors decodes a cell attribute into foreground/background RGBA
+// values. It returns concrete color.RGBA structs: boxing them into the
+// color.Color interface on every one of the ~4000 cells per frame was a
+// third of the renderer's allocations. The palette is read live from the
+// global ThemePalette on every call, so palette changes apply immediately
+// and no invalidation is needed.
+func (r *GogpuRenderer) getCellColors(cell CharInfo) (color.RGBA, color.RGBA) {
 	bg := GetRGBBack(cell.Attributes)
 	if cell.Attributes&IsBgRGB == 0 {
 		bg = ThemePalette[GetIndexBack(cell.Attributes)]
@@ -925,7 +932,6 @@ func (r *GogpuRenderer) getCellColors(cell CharInfo) (color.Color, color.Color) 
 		fg = ThemePalette[GetIndexFore(cell.Attributes)]
 	}
 
-	f := color.RGBA{uint8(fg >> 16), uint8(fg >> 8), uint8(fg), 255}
-	b := color.RGBA{uint8(bg >> 16), uint8(bg >> 8), uint8(bg), 255}
-	return f, b
+	return color.RGBA{uint8(fg >> 16), uint8(fg >> 8), uint8(fg), 255},
+		color.RGBA{uint8(bg >> 16), uint8(bg >> 8), uint8(bg), 255}
 }

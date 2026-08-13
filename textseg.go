@@ -110,8 +110,58 @@ func CellString(ch uint64) string {
 		}
 		return clusters.byID[idx]
 	default:
-		return string(rune(ch))
+		return cellRuneString(ch)
 	}
+}
+
+// asciiRuneStrings is the single-rune string for each ASCII code point.
+// string(rune(ch)) allocates even for ASCII runes when the value is not a
+// compile-time constant (measured: ~14MB over a 1000-frame profile), so the
+// hot per-cell paths read this table instead. Built once, never mutated.
+var asciiRuneStrings [128]string
+
+func init() {
+	for i := 0; i < len(asciiRuneStrings); i++ {
+		asciiRuneStrings[i] = string(rune(i))
+	}
+}
+
+// cellRuneCache is a fixed-size direct-mapped cache of single-rune strings
+// for plain non-ASCII cell values. string(rune(ch)) allocates for every
+// non-ASCII rune, and the per-cell render paths (gogpu per-cell fallback,
+// CellString in other backends) convert the same runes — file names repeat
+// — frame after frame. The mapping rune -> string is immutable, so the
+// cache can never go stale; the 256-slot array is fixed, so memory never
+// grows.
+var cellRuneCache = struct {
+	sync.Mutex
+	slots [256]struct {
+		ch  uint64
+		str string
+	}
+}{}
+
+func cellRuneString(ch uint64) string {
+	if ch < 0x80 {
+		return asciiRuneStrings[ch]
+	}
+	idx := int(ch % 256)
+	cellRuneCache.Lock()
+	slot := &cellRuneCache.slots[idx]
+	if slot.ch == ch {
+		s := slot.str
+		cellRuneCache.Unlock()
+		return s
+	}
+	cellRuneCache.Unlock()
+	s := string(rune(ch))
+	cellRuneCache.Lock()
+	cellRuneCache.slots[idx] = struct {
+		ch  uint64
+		str string
+	}{ch, s}
+	cellRuneCache.Unlock()
+	return s
 }
 
 // CellRunes returns the runes a cell carries, base character first.
