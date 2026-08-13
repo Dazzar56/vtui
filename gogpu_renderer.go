@@ -5,6 +5,7 @@ package vtui
 import (
 	"image/color"
 	"math"
+	"os"
 	"sync"
 	"time"
 	"unicode/utf8"
@@ -66,6 +67,9 @@ type GogpuRenderer struct {
 
 	// textRunBuf is the reusable scratch buffer for batched DrawString runs.
 	textRunBuf []byte
+	// noBatch disables DrawString batching (VTUI_GOGPU_NO_BATCH); it exists
+	// so the batching cost can be measured against the per-cell path.
+	noBatch bool
 }
 
 func NewGogpuRenderer(host *GogpuHost, face text.Face, cw, ch int) *GogpuRenderer {
@@ -78,6 +82,7 @@ func NewGogpuRenderer(host *GogpuHost, face text.Face, cw, ch int) *GogpuRendere
 		lastBlinkState:  true,
 		blinkState:      true,
 		lastBlinkTime:   time.Now(),
+		noBatch:         os.Getenv("VTUI_GOGPU_NO_BATCH") != "",
 	}
 }
 
@@ -676,6 +681,177 @@ func (r *GogpuRenderer) Flush() {
 	}
 }
 
+// drawFrame issues every drawing command of one frame into dc — the GPU
+// canvas closure in production, a software-renderer gg.Context in the
+// headless benchmarks — and returns the per-frame stats. The cell loop is
+// the CPU-side per-frame cost of the gogpu backend: colour resolution,
+// span detection and text batching.
+func (r *GogpuRenderer) drawFrame(dc *gg.Context, w, h int) gogpuFrameStats {
+	var prof gogpuFrameStats
+	dc.SetRGB(0, 0, 0)
+	dc.DrawRectangle(0, 0, float64(w), float64(h))
+	dc.Fill()
+
+	drawCols := r.cols
+	drawRows := r.rows
+
+	// The nil check below is not decoration: every other use of the
+	// face in this function is guarded, and an unguarded Metrics()
+	// call here would fault exactly the way the render thread did.
+	var ascent float64
+	if r.face != nil {
+		dc.SetFont(r.face)
+		ascent = float64(r.face.Metrics().Ascent)
+	}
+	// The baseline stays the primary font's for the whole frame even
+	// when a fallback draws the glyph: a CJK face with its own ascent
+	// would make text jump between lines that mix scripts.
+	curFace := r.face
+
+	for y := 0; y < drawRows; y++ {
+		rowOff := y * drawCols
+		ly := float64(y * r.cellH)
+		for x := 0; x < drawCols; {
+			cell := r.renderBuf[rowOff+x]
+			fg, bg := r.getCellColors(cell)
+
+			spanW := 0
+			for x+spanW < drawCols {
+				nextCell := r.renderBuf[rowOff+x+spanW]
+				if nextCell.Char == WideCharFiller {
+					spanW++
+					continue
+				}
+				nextFg, nextBg := r.getCellColors(nextCell)
+				if nextBg != bg || nextFg != fg {
+					break
+				}
+				spanW++
+			}
+
+			lx := float64(x * r.cellW)
+			spanPixW := float64(spanW * r.cellW)
+
+			prof.spans++
+			tBg := gogpuProfNow()
+			dc.SetColor(bg)
+			dc.DrawRectangle(lx, ly, spanPixW+1, float64(r.cellH)+1)
+			dc.Fill()
+			prof.bgFills++
+			prof.bgTime += gogpuProfSince(tBg)
+			dc.SetColor(fg)
+
+			for sx := 0; sx < spanW; {
+				idx := rowOff + x + sx
+				currCell := r.renderBuf[idx]
+
+				if currCell.Char == WideCharFiller {
+					sx++
+					continue
+				}
+
+				rw := 1
+				if x+sx+1 < drawCols && r.renderBuf[idx+1].Char == WideCharFiller {
+					rw = 2
+				}
+
+				char := CellBaseRune(currCell.Char)
+
+				if isBoxDrawRune(char) {
+					tBox := gogpuProfNow()
+					drawn := r.drawCustomChar(dc, char, lx+float64(sx*r.cellW), ly, float64(rw*r.cellW), float64(r.cellH), ascent)
+					prof.boxTime += gogpuProfSince(tBox)
+					if drawn {
+						prof.boxChars++
+						sx += rw
+						continue
+					}
+				}
+
+				if r.face == nil {
+					sx += rw
+					continue
+				}
+
+				if !r.noBatch && gogpuBatchRune(currCell.Char) {
+					// Consecutive plain single-rune cells on the same face go
+					// out in one DrawString. The natural advance equals
+					// per-cell placement only for glyphs the face advances
+					// exactly one cell (two for wide ones), which
+					// gogpuTextRun verifies; emoji, CJK fallbacks and
+					// proportional fonts stay per-cell.
+					tTxt := gogpuProfNow()
+					run, consumed, f, batched := r.gogpuTextRun(r.renderBuf, rowOff, x, sx, spanW, drawCols, curFace, r.textRunBuf[:0])
+					r.textRunBuf = run
+					if batched {
+						if f != curFace {
+							curFace = f
+							dc.SetFont(f)
+						}
+						dc.DrawString(string(run), lx+float64(sx*r.cellW), ly+ascent)
+						prof.textTime += gogpuProfSince(tTxt)
+						prof.strings++
+						prof.glyphs += utf8.RuneCount(run)
+						sx += consumed
+						continue
+					}
+					// The first cell cannot join a run: fall through and
+					// draw it per-cell, exactly as before batching.
+				}
+
+				str := CellString(currCell.Char)
+				if str != "" && str != " " {
+					tTxt := gogpuProfNow()
+					if f := r.faceFor(char); f != nil && f != curFace {
+						curFace = f
+						dc.SetFont(f)
+					}
+					dc.DrawString(str, lx+float64(sx*r.cellW), ly+ascent)
+					prof.textTime += gogpuProfSince(tTxt)
+					prof.strings++
+					prof.glyphs += gogpuRuneCount(str)
+				}
+				sx += rw
+			}
+
+			x += spanW
+		}
+	}
+
+	for i := range r.gfxList {
+		p := &r.gfxList[i]
+		px, py, pw, ph := placementPixelRect(p, r.cellW, r.cellH)
+		if pw <= 0 || ph <= 0 {
+			continue
+		}
+		entry := r.gfxCache.scaled(p, pw, ph)
+		if entry == nil {
+			continue
+		}
+
+		dc.SetRGBA(1, 1, 1, 1)
+		dc.DrawImage(gg.ImageBufFromImage(entry.asImage()), float64(px), float64(py))
+	}
+
+	cursorVisible := r.cursorVis && r.blinkState
+
+	if cursorVisible {
+		dc.SetColor(color.White)
+		curX, curSpan := CellSpanAt(r.renderBuf, drawCols, r.cursorX, r.cursorY)
+		cx := float64(curX * r.cellW)
+		cy := float64(r.cursorY * r.cellH)
+		curW := float64(curSpan * r.cellW)
+		if r.cursorShape == CursorShapeBlock {
+			dc.DrawRectangle(cx, cy, curW, float64(r.cellH))
+		} else {
+			cy += float64(r.cellH) - 2
+			dc.DrawRectangle(cx, cy, curW, 2)
+		}
+		dc.Fill()
+	}
+	return prof
+}
+
 func (r *GogpuRenderer) DrawToScreen(ctx *gogpu.Context) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -719,167 +895,7 @@ func (r *GogpuRenderer) DrawToScreen(ctx *gogpu.Context) {
 	drawCanvas := func() {
 		tDraw := gogpuProfNow()
 		r.canvas.Draw(func(dc *gg.Context) {
-			dc.SetRGB(0, 0, 0)
-			dc.DrawRectangle(0, 0, float64(w), float64(h))
-			dc.Fill()
-
-			drawCols := r.cols
-			drawRows := r.rows
-
-			// The nil check below is not decoration: every other use of the
-			// face in this function is guarded, and an unguarded Metrics()
-			// call here would fault exactly the way the render thread did.
-			var ascent float64
-			if r.face != nil {
-				dc.SetFont(r.face)
-				ascent = float64(r.face.Metrics().Ascent)
-			}
-			// The baseline stays the primary font's for the whole frame even
-			// when a fallback draws the glyph: a CJK face with its own ascent
-			// would make text jump between lines that mix scripts.
-			curFace := r.face
-
-			for y := 0; y < drawRows; y++ {
-				rowOff := y * drawCols
-				ly := float64(y * r.cellH)
-				for x := 0; x < drawCols; {
-					cell := r.renderBuf[rowOff+x]
-					fg, bg := r.getCellColors(cell)
-
-					spanW := 0
-					for x+spanW < drawCols {
-						nextCell := r.renderBuf[rowOff+x+spanW]
-						if nextCell.Char == WideCharFiller {
-							spanW++
-							continue
-						}
-						nextFg, nextBg := r.getCellColors(nextCell)
-						if nextBg != bg || nextFg != fg {
-							break
-						}
-						spanW++
-					}
-
-					lx := float64(x * r.cellW)
-					spanPixW := float64(spanW * r.cellW)
-
-					prof.spans++
-					tBg := gogpuProfNow()
-					dc.SetColor(bg)
-					dc.DrawRectangle(lx, ly, spanPixW+1, float64(r.cellH)+1)
-					dc.Fill()
-					prof.bgFills++
-					prof.bgTime += gogpuProfSince(tBg)
-					dc.SetColor(fg)
-
-					for sx := 0; sx < spanW; {
-						idx := rowOff + x + sx
-						currCell := r.renderBuf[idx]
-
-						if currCell.Char == WideCharFiller {
-							sx++
-							continue
-						}
-
-						rw := 1
-						if x+sx+1 < drawCols && r.renderBuf[idx+1].Char == WideCharFiller {
-							rw = 2
-						}
-
-						char := CellBaseRune(currCell.Char)
-
-						if isBoxDrawRune(char) {
-							tBox := gogpuProfNow()
-							drawn := r.drawCustomChar(dc, char, lx+float64(sx*r.cellW), ly, float64(rw*r.cellW), float64(r.cellH), ascent)
-							prof.boxTime += gogpuProfSince(tBox)
-							if drawn {
-								prof.boxChars++
-								sx += rw
-								continue
-							}
-						}
-
-						if r.face == nil {
-							sx += rw
-							continue
-						}
-
-						if gogpuBatchRune(currCell.Char) {
-							// Consecutive plain single-rune cells on the same face go
-							// out in one DrawString. The natural advance equals
-							// per-cell placement only for glyphs the face advances
-							// exactly one cell (two for wide ones), which
-							// gogpuTextRun verifies; emoji, CJK fallbacks and
-							// proportional fonts stay per-cell.
-							tTxt := gogpuProfNow()
-							run, consumed, f, batched := r.gogpuTextRun(r.renderBuf, rowOff, x, sx, spanW, drawCols, curFace, r.textRunBuf[:0])
-							r.textRunBuf = run
-							if batched {
-								if f != curFace {
-									curFace = f
-									dc.SetFont(f)
-								}
-								dc.DrawString(string(run), lx+float64(sx*r.cellW), ly+ascent)
-								prof.textTime += gogpuProfSince(tTxt)
-								prof.strings++
-								prof.glyphs += utf8.RuneCount(run)
-								sx += consumed
-								continue
-							}
-							// The first cell cannot join a run: fall through and
-							// draw it per-cell, exactly as before batching.
-						}
-
-						str := CellString(currCell.Char)
-						if str != "" && str != " " {
-							tTxt := gogpuProfNow()
-							if f := r.faceFor(char); f != nil && f != curFace {
-								curFace = f
-								dc.SetFont(f)
-							}
-							dc.DrawString(str, lx+float64(sx*r.cellW), ly+ascent)
-							prof.textTime += gogpuProfSince(tTxt)
-							prof.strings++
-							prof.glyphs += gogpuRuneCount(str)
-						}
-						sx += rw
-					}
-
-					x += spanW
-				}
-			}
-
-			for i := range r.gfxList {
-				p := &r.gfxList[i]
-				px, py, pw, ph := placementPixelRect(p, r.cellW, r.cellH)
-				if pw <= 0 || ph <= 0 {
-					continue
-				}
-				entry := r.gfxCache.scaled(p, pw, ph)
-				if entry == nil {
-					continue
-				}
-
-				dc.SetRGBA(1, 1, 1, 1)
-				dc.DrawImage(gg.ImageBufFromImage(entry.asImage()), float64(px), float64(py))
-			}
-
-			cursorVisible := r.cursorVis && r.blinkState
-
-			if cursorVisible {
-				dc.SetColor(color.White)
-				curX, curSpan := CellSpanAt(r.renderBuf, drawCols, r.cursorX, r.cursorY)
-				cx := float64(curX * r.cellW)
-				cy := float64(r.cursorY * r.cellH)
-				curW := float64(curSpan * r.cellW)
-				if r.cursorShape == CursorShapeBlock {
-					dc.DrawRectangle(cx, cy, curW, float64(r.cellH))
-				} else {
-					cy += float64(r.cellH) - 2
-					dc.DrawRectangle(cx, cy, curW, 2)
-				}
-				dc.Fill()
-			}
+			prof = r.drawFrame(dc, w, h)
 		})
 		prof.drawTime = gogpuProfSince(tDraw)
 	}
