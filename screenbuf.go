@@ -704,7 +704,9 @@ func (r *AnsiRenderer) Render(buf, shadow []CharInfo, w, h int, force bool) {
 		return
 	}
 
-	// Reuse last frame's capacity; avoids mid-render realloc copies.
+	// frameOut.Reset (in PrepareFlush) drops the builder's buffer, so
+	// re-grow it to the last frame's size up front: one allocation instead
+	// of a realloc on every write that outgrows the previous frame.
 	if r.frameCap > 0 && r.frameOut.Len() == 0 {
 		r.frameOut.Grow(r.frameCap)
 	}
@@ -731,9 +733,8 @@ func (r *AnsiRenderer) Render(buf, shadow []CharInfo, w, h int, force bool) {
 
 			if x != lastX+1 || y != lastY {
 				if y == lastY {
-					// Sparse cells on the same row: relative moves are shorter
-					// than absolute "\x1b[Y;XH" (~4-5 bytes vs ~9) and avoid
-					// column recomputation on the terminal side.
+					// Same row, sparse cells: a short relative move (CSI n C/D)
+					// beats an absolute "\x1b[Y;XH".
 					if x > lastX+1 {
 						r.writeRelCursor(x-lastX-1, 'C')
 					} else {
@@ -753,7 +754,14 @@ func (r *AnsiRenderer) Render(buf, shadow []CharInfo, w, h int, force bool) {
 				lastX, lastY = x, y
 				continue
 			}
-			r.frameOut.WriteString(CellString(char))
+			if char == 0 {
+				r.frameOut.WriteByte(' ')
+			} else if IsCompChar(char) {
+				// Composite cells carry a shared cluster string.
+				r.frameOut.WriteString(CellString(char))
+			} else {
+				r.frameOut.WriteRune(rune(char))
+			}
 			lastX, lastY = x, y
 		}
 	}
@@ -766,7 +774,7 @@ func (r *AnsiRenderer) SetCursor(x, y int, vis bool, shape CursorShape) {
 	r.cursorShape = shape
 }
 
-// writeCursorPos emits CSI Y;X H allocation-free.
+// writeCursorPos emits CSI Y;X H without allocating.
 func (r *AnsiRenderer) writeCursorPos(row, col int) {
 	var buf [16]byte
 	buf[0] = '\x1b'
@@ -781,8 +789,7 @@ func (r *AnsiRenderer) writeCursorPos(row, col int) {
 	r.frameOut.Write(buf[:n])
 }
 
-// writeRelCursor emits CSI n C / CSI n D (relative horizontal move)
-// allocation-free; 'C' moves right, 'D' moves left.
+// writeRelCursor emits CSI n C (right) / CSI n D (left); n is omitted for 1.
 func (r *AnsiRenderer) writeRelCursor(n int, dir byte) {
 	var buf [12]byte
 	buf[0] = '\x1b'
@@ -859,7 +866,8 @@ func (r *AnsiRenderer) PrepareFlush() func() {
 		return nil
 	}
 
-	// String() is an alias, not a copy (Go 1.20+); valid until the next write.
+	// String() aliases the builder's buffer rather than copying (Go 1.20+);
+	// the payload stays valid until the next write into frameOut.
 	payload := r.frameOut.String()
 	r.frameOut.Reset()
 	r.frameCap = payloadLen

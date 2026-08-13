@@ -12,10 +12,10 @@ func attributesToANSI(attr, lastAttr uint64, activePal *[256]uint32, profile Col
 	return b.String()
 }
 
-// writeAttributesToANSI writes styles, fg and bg into one CSI — no
-// allocations on the Render hot path.
-// Все компоненты (styles, fg, bg) сливаются в ОДИН CSI "\x1b[1;38;2;R;G;B;48;2;R;G;Bm" —
-// семантика идентична раздельным последовательностям, но на ~4 байта короче на компонент.
+// writeAttributesToANSI merges style, fg and bg into a single CSI
+// ("\x1b[1;38;2;R;G;B;48;2;R;G;Bm") instead of one escape per component:
+// identical terminal semantics, ~4 bytes shorter per component. Stack
+// buffers only, so the Render hot path stays allocation-free.
 func writeAttributesToANSI(b *strings.Builder, attr, lastAttr uint64, activePal *[256]uint32, profile ColorProfile, quantCache map[uint32]uint8) {
 	if attr == lastAttr {
 		return
@@ -40,43 +40,38 @@ func writeAttributesToANSI(b *strings.Builder, attr, lastAttr uint64, activePal 
 		first = false
 	}
 
-	// 1. Style Flags
-	var styles [5]byte
-	sn := 0
 	if attr&ForegroundIntensity != 0 && lastAttr&ForegroundIntensity == 0 {
-		styles[sn] = '1'
-		sn++
+		writeSep()
+		buf[n] = '1'
+		n++
 	}
 	if attr&ForegroundDim != 0 && lastAttr&ForegroundDim == 0 {
-		styles[sn] = '2'
-		sn++
+		writeSep()
+		buf[n] = '2'
+		n++
 	}
 	if attr&CommonLvbUnderscore != 0 && lastAttr&CommonLvbUnderscore == 0 {
-		styles[sn] = '4'
-		sn++
+		writeSep()
+		buf[n] = '4'
+		n++
 	}
 	if attr&CommonLvbReverse != 0 && lastAttr&CommonLvbReverse == 0 {
-		styles[sn] = '7'
-		sn++
+		writeSep()
+		buf[n] = '7'
+		n++
 	}
 	if attr&CommonLvbStrikeout != 0 && lastAttr&CommonLvbStrikeout == 0 {
-		styles[sn] = '9'
-		sn++
-	}
-	for i := 0; i < sn; i++ {
 		writeSep()
-		buf[n] = styles[i]
+		buf[n] = '9'
 		n++
 	}
 
-	// 2. Foreground Color
 	fgMask := IsFgRGB | (0xFF << 16)
 	if resetTriggered || attr&fgMask != lastAttr&fgMask || (attr&IsFgRGB != 0 && GetRGBFore(attr) != GetRGBFore(lastAttr)) {
 		writeSep()
 		n += writeColorANSI(buf[n:], false, attr, activePal, profile, quantCache)
 	}
 
-	// 3. Background Color
 	bgMask := IsBgRGB | (0xFF << 40)
 	if resetTriggered || attr&bgMask != lastAttr&bgMask || (attr&IsBgRGB != 0 && GetRGBBack(attr) != GetRGBBack(lastAttr)) {
 		writeSep()
@@ -91,28 +86,25 @@ func writeAttributesToANSI(b *strings.Builder, attr, lastAttr uint64, activePal 
 	}
 }
 
-// writeColorANSI appends a colour code (no CSI, no 'm') to dst and returns
-// the byte count.
+// writeColorANSI appends one colour component — "P;2;R;G;B" (true colour) or
+// "P;5;N" (palette), P being 38 for fg and 48 for bg — without a CSI prefix
+// or trailing 'm'; returns the byte count.
 func writeColorANSI(dst []byte, isBg bool, attr uint64, activePal *[256]uint32, profile ColorProfile, quantCache map[uint32]uint8) int {
-	isRGBFlag := IsFgRGB
-	cmd := 38
 	var rgbVal uint32
 	var idxVal uint8
-
 	if isBg {
-		isRGBFlag = IsBgRGB
-		cmd = 48
+		rgbVal = GetRGBBack(attr)
+		idxVal = GetIndexBack(attr)
+	} else {
+		rgbVal = GetRGBFore(attr)
+		idxVal = GetIndexFore(attr)
 	}
 
-	isRGB := (attr & isRGBFlag) != 0
-
-	if isRGB {
-		if isBg {
-			rgbVal = GetRGBBack(attr)
-		} else {
-			rgbVal = GetRGBFore(attr)
-		}
-
+	flag := IsFgRGB
+	if isBg {
+		flag = IsBgRGB
+	}
+	if attr&flag != 0 {
 		if profile != ColorProfileTrueColor {
 			if quantCache == nil {
 				idxVal = findNearestColor(rgbVal, activePal, 256)
@@ -129,57 +121,48 @@ func writeColorANSI(dst []byte, isBg bool, attr uint64, activePal *[256]uint32, 
 			if profile == ColorProfile16 {
 				return copy(dst, idxTo16ColorANSI(isBg, idxVal))
 			}
-			n := copy(dst, strconv.AppendInt(dst[:0], int64(cmd), 10))
-			dst[n] = ';'
-			n++
-			dst[n] = '5'
-			n++
-			dst[n] = ';'
-			n++
-			n += copy(dst[n:], strconv.AppendInt(dst[n:n], int64(idxVal), 10))
-			return n
+			return appendColor256(dst, isBg, idxVal)
 		}
-
 		r, g, b := rgb(rgbVal)
-		n := copy(dst, strconv.AppendInt(dst[:0], int64(cmd), 10))
-		dst[n] = ';'
-		n++
-		dst[n] = '2'
-		n++
-		dst[n] = ';'
-		n++
-		n += copy(dst[n:], strconv.AppendInt(dst[n:n], int64(r), 10))
-		dst[n] = ';'
-		n++
-		n += copy(dst[n:], strconv.AppendInt(dst[n:n], int64(g), 10))
-		dst[n] = ';'
-		n++
-		n += copy(dst[n:], strconv.AppendInt(dst[n:n], int64(b), 10))
-		return n
-	}
-
-	if isBg {
-		idxVal = GetIndexBack(attr)
-	} else {
-		idxVal = GetIndexFore(attr)
+		return appendColorRGB(dst, isBg, r, g, b)
 	}
 
 	if profile == ColorProfile16 {
 		return copy(dst, idxTo16ColorANSI(isBg, idxVal))
 	}
-	n := copy(dst, strconv.AppendInt(dst[:0], int64(cmd), 10))
-	dst[n] = ';'
-	n++
-	dst[n] = '5'
-	n++
-	dst[n] = ';'
-	n++
-	n += copy(dst[n:], strconv.AppendInt(dst[n:n], int64(idxVal), 10))
-	return n
+	return appendColor256(dst, isBg, idxVal)
 }
 
-// colorToANSI returns a colour code (no CSI, no 'm') as a string; wrapper
-// kept for the tests.
+// appendColor256 appends "P;5;N" to dst and returns the byte count.
+func appendColor256(dst []byte, isBg bool, idx uint8) int {
+	if isBg {
+		copy(dst, "48;5;")
+	} else {
+		copy(dst, "38;5;")
+	}
+	n := 5
+	return n + copy(dst[n:], strconv.AppendInt(dst[n:n], int64(idx), 10))
+}
+
+// appendColorRGB appends "P;2;R;G;B" to dst and returns the byte count.
+func appendColorRGB(dst []byte, isBg bool, r, g, b uint8) int {
+	if isBg {
+		copy(dst, "48;2;")
+	} else {
+		copy(dst, "38;2;")
+	}
+	n := 5
+	n += copy(dst[n:], strconv.AppendInt(dst[n:n], int64(r), 10))
+	dst[n] = ';'
+	n++
+	n += copy(dst[n:], strconv.AppendInt(dst[n:n], int64(g), 10))
+	dst[n] = ';'
+	n++
+	return n + copy(dst[n:], strconv.AppendInt(dst[n:n], int64(b), 10))
+}
+
+// colorToANSI returns one colour component (no CSI, no 'm') as a string,
+// keeping the string-based API the tests use.
 func colorToANSI(isBg bool, attr uint64, activePal *[256]uint32, profile ColorProfile, quantCache map[uint32]uint8) string {
 	var buf [24]byte
 	n := writeColorANSI(buf[:], isBg, attr, activePal, profile, quantCache)

@@ -474,3 +474,32 @@ func TestAnsiRenderer_RelativeCursorMoves(t *testing.T) {
 		t.Fatalf("render\ngot  %q\nwant %q", got, want.String())
 	}
 }
+
+// TestAnsiRenderer_RuneWriting guards the allocation-free write path for
+// plain runes (space, ASCII, non-ASCII and wide): WriteRune must emit the
+// exact same UTF-8 as the CellString call it replaced. Composite cells
+// still go through CellString.
+func TestAnsiRenderer_RuneWriting(t *testing.T) {
+	r := &AnsiRenderer{parent: &ScreenBuf{ColorProfile: ColorProfileTrueColor}}
+	w, h := 5, 1
+	buf := make([]CharInfo, w*h)
+	shadow := make([]CharInfo, w*h)
+	attr := SetRGBBoth(0, 0xff0000, 0x0033ff)
+	cases := []uint64{0, uint64('a'), uint64('Ж'), uint64('中'), WideCharFiller}
+	for i, ch := range cases {
+		buf[i] = CharInfo{Char: ch, Attributes: attr}
+		shadow[i] = CharInfo{Char: ch, Attributes: attr}
+	}
+
+	r.Render(buf, shadow, w, h, true)
+	got := r.frameOut.String()
+
+	var want strings.Builder
+	want.WriteString("\x1b[?25l")
+	want.WriteString("\x1b[1;1H")
+	writeAttributesToANSI(&want, attr, ^uint64(0), nil, ColorProfileTrueColor, nil)
+	want.WriteString(" aЖ中")
+	if got != want.String() {
+		t.Fatalf("render\ngot  %q\nwant %q", got, want.String())
+	}
+}

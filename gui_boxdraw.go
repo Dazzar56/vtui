@@ -233,8 +233,8 @@ func drawBoxGlyph(img *image.RGBA, char rune, px, py, cw, ch, thick int, rgb uin
 }
 
 // drawBoxHLine/drawBoxVLine paint one clipped segment. Package functions so
-// the caller keeps the packed uint32 (converting to color.Color allocates),
-// and per-pixel bounds checks became a single clip pass per segment.
+// the packed colour stays a uint32 (color.Color conversion allocates);
+// bounds are clamped once up front, not per pixel.
 func drawBoxHLine(img *image.RGBA, x1, x2, y, thick int, r8, g8, b8 uint8) {
 	if x1 < 0 {
 		x1 = 0
@@ -286,5 +286,3 @@ func drawBoxVLine(img *image.RGBA, x, y1, y2, thick int, r8, g8, b8 uint8) {
 		}
 	}
 }
-
-

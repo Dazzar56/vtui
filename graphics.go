@@ -104,9 +104,9 @@ type ImageSurface struct {
 	Stride int
 	Pix    []byte
 
-	// Opaque reports that every pixel has alpha 255. Decoders set it from
-	// the source format; the block renderer uses it to skip per-pixel
-	// alpha blending (99% of pictures have no alpha).
+	// Opaque reports that every pixel has alpha 255, set by decoders from
+	// the source format so the block renderer and scaler can skip per-pixel
+	// alpha work (99% of pictures have no alpha).
 	Opaque bool
 
 	hash      uint64
