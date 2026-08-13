@@ -746,8 +746,10 @@ func (r *AnsiRenderer) Render(buf, shadow []CharInfo, w, h int, force bool) {
 			}
 
 			attr := buf[idx].Attributes
-			writeAttributesToANSI(&r.frameOut, attr, r.lastAttr, activePal, r.parent.ColorProfile, r.parent.quantCache)
-			r.lastAttr = attr
+			if attr != r.lastAttr {
+				writeAttributesToANSI(&r.frameOut, attr, r.lastAttr, activePal, r.parent.ColorProfile, r.parent.quantCache)
+				r.lastAttr = attr
+			}
 
 			char := buf[idx].Char
 			if char == WideCharFiller {
@@ -756,6 +758,9 @@ func (r *AnsiRenderer) Render(buf, shadow []CharInfo, w, h int, force bool) {
 			}
 			if char == 0 {
 				r.frameOut.WriteByte(' ')
+			} else if char < 0x80 {
+				// ASCII: WriteByte directly, skipping WriteRune's wrapping.
+				r.frameOut.WriteByte(byte(char))
 			} else if IsCompChar(char) {
 				// Composite cells carry a shared cluster string.
 				r.frameOut.WriteString(CellString(char))
@@ -848,10 +853,12 @@ func (r *AnsiRenderer) PrepareFlush() func() {
 					}
 				}
 			}
-			SetCursorStyleOS(r.cursorVis, r.cursorShape)
 		} else {
 			r.frameOut.WriteString("\x1b[?25l")
-			SetCursorStyleOS(false, r.cursorShape)
+		}
+		// OS cursor API is idempotent; only call when visibility/shape changed.
+		if !r.firstInit || r.cursorVis != r.lastSentCursorVis || r.cursorShape != r.lastSentCursorShape {
+			SetCursorStyleOS(r.cursorVis, r.cursorShape)
 		}
 		r.lastSentCursorX = r.cursorX
 		r.lastSentCursorY = r.cursorY
