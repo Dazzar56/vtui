@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -114,6 +115,7 @@ func getCrashDir() string {
 func SetupStderrLog() {
 	crashDir := getCrashDir()
 	os.MkdirAll(crashDir, 0755)
+	pruneStaleStderrLogs(crashDir)
 	stderrLogPath = filepath.Join(crashDir, fmt.Sprintf("stderr_%s_%d.log", sessionTimestamp, sessionPID))
 	f, err := os.OpenFile(stderrLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err == nil {
@@ -125,6 +127,55 @@ func SetupStderrLog() {
 		// exit if nothing was written to it.
 		DebugLog("CRASH: stderr goes to %s from here on", stderrLogPath)
 	}
+}
+
+// pruneStaleStderrLogs removes empty stderr logs left behind by processes
+// that are no longer running.
+//
+// The file is created eagerly at startup, before there is anything to put in
+// it, and CleanupStderrLog only runs on an orderly exit — so every process
+// that is killed leaves a zero-length file behind. They accumulate, and at a
+// glance they are indistinguishable from real crash output, which cost real
+// time during the unxed/f4#429 investigation.
+//
+// Only empty files whose owner is provably gone are touched. A non-empty log
+// is somebody's diagnostics, and a live process may yet write its dying words
+// into its own empty one.
+func pruneStaleStderrLogs(crashDir string) {
+	entries, err := os.ReadDir(crashDir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasPrefix(name, "stderr_") || !strings.HasSuffix(name, ".log") {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil || info.Size() != 0 {
+			continue
+		}
+		pid := pidFromStderrLogName(name)
+		if pid <= 0 || pid == sessionPID || processAlive(pid) {
+			continue
+		}
+		os.Remove(filepath.Join(crashDir, name))
+	}
+}
+
+// pidFromStderrLogName extracts NNN from "stderr_<timestamp>_<NNN>.log",
+// returning 0 when the name does not follow that shape.
+func pidFromStderrLogName(name string) int {
+	base := strings.TrimSuffix(name, ".log")
+	i := strings.LastIndex(base, "_")
+	if i < 0 {
+		return 0
+	}
+	pid, err := strconv.Atoi(base[i+1:])
+	if err != nil || pid <= 0 {
+		return 0
+	}
+	return pid
 }
 
 // CleanupStderrLog deletes the stderr log file if it is empty.

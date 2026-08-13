@@ -3,6 +3,7 @@ package vtui
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -75,5 +76,45 @@ func TestRecordCrash(t *testing.T) {
 	}
 	if !strings.Contains(content, "Go Version:") {
 		t.Error("Missing Go version info")
+	}
+}
+
+func TestPruneStaleStderrLogs(t *testing.T) {
+	dir := t.TempDir()
+
+	// A pid far above any plausible live one: nothing owns this file.
+	const deadPID = 4194303
+	write := func(name, content string) string {
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, []byte(content), 0644); err != nil {
+			t.Fatalf("WriteFile %s: %v", name, err)
+		}
+		return p
+	}
+
+	stale := write(fmt.Sprintf("stderr_20260101_000000_%d.log", deadPID), "")
+	withOutput := write(fmt.Sprintf("stderr_20260101_000000_%d.log", deadPID+1), "panic: boom\n")
+	ours := write(fmt.Sprintf("stderr_20260101_000000_%d.log", sessionPID), "")
+	crash := write("crash_20260101_000000_1.log", "")
+	unrelated := write("stderr_no_pid_here.log", "")
+
+	pruneStaleStderrLogs(dir)
+
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Error("empty log of a dead process was not removed")
+	}
+	for _, keep := range []string{withOutput, ours, crash, unrelated} {
+		if _, err := os.Stat(keep); err != nil {
+			t.Errorf("%s should have been kept: %v", filepath.Base(keep), err)
+		}
+	}
+}
+
+func TestProcessAlive(t *testing.T) {
+	if !processAlive(os.Getpid()) {
+		t.Error("this very process reported as not running")
+	}
+	if processAlive(4194303) {
+		t.Skip("pid 4194303 happens to exist on this machine")
 	}
 }
