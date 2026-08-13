@@ -65,7 +65,12 @@ func init() {
 
 // ScreenBuf implements double buffering to minimize terminal write operations.
 type ScreenBuf struct {
-	mu            sync.Mutex
+	mu sync.Mutex
+	// writeMu serialises delivery of finished frames to the output. It is
+	// deliberately separate from mu: a terminal that has stopped draining
+	// blocks the write for as long as it likes, and mu must not be held
+	// across that. See Flush.
+	writeMu       sync.Mutex
 	buf           []CharInfo // 'buf' is the target screen state formed by UI logic.
 	shadow        []CharInfo // 'shadow' is the state last rendered in the terminal.
 	width, height int
@@ -126,6 +131,28 @@ func (s *ScreenBuf) HardReset() {
 	}
 	s.dirty = true
 	s.graphics.Invalidate()
+}
+
+// InvalidateHostPalette forgets which colors the terminal was last told to
+// use, so that the next Flush re-sends all 256 OSC 4 sequences.
+//
+// HostPalette/HostPaletteValid describe the state of the *terminal*, not of
+// this process. Anything that resets that state behind our back — Suspend
+// sending OSC 104, or the daemon re-attaching to a different terminal
+// altogether — must say so here, otherwise SetPalette sees a palette it
+// believes is already loaded, sends nothing, and the session runs with
+// whatever colors the terminal happened to have.
+func (s *ScreenBuf) InvalidateHostPalette() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.invalidateHostPaletteLocked()
+}
+
+func (s *ScreenBuf) invalidateHostPaletteLocked() {
+	for i := range s.HostPaletteValid {
+		s.HostPaletteValid[i] = false
+	}
+	s.quantCache = make(map[uint32]uint8)
 }
 
 // ClearBuf resets every cell of the pending buffer to a zero CharInfo.
@@ -542,12 +569,35 @@ func rgb(c uint32) (r, g, b byte) {
 }
 
 // Flush синхронизирует состояние виртуального буфера с физическим экраном через Renderer.
+//
+// The frame is composed while holding mu and delivered after releasing it.
+// Writing to a terminal is not a bounded operation: if whatever sits on the
+// other end of the tty stops reading, the write blocks until it resumes, and
+// a full-screen frame on a large terminal (~31 KB on 246x70) is far bigger
+// than a pty buffer. Holding mu across that would freeze every goroutine
+// that touches the screen, not just the render loop.
+//
+// writeMu is taken first and covers both phases, so concurrent Flushes still
+// reach the terminal whole and in order. Lock order is always writeMu -> mu.
 func (s *ScreenBuf) Flush() {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+
+	if deliver := s.composeFrame(); deliver != nil {
+		deliver()
+	}
+}
+
+// composeFrame renders the pending state and returns a closure that delivers
+// the result, or nil when there is nothing to deliver (or when the renderer
+// writes on its own, as the GUI backends do). Everything it touches is
+// protected by mu; the returned closure touches none of it.
+func (s *ScreenBuf) composeFrame() func() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if s.lockCount > 0 || s.buf == nil || s.Renderer == nil {
-		return
+		return nil
 	}
 	if s.graphics.TakeRepaintRequest() {
 		s.dirty = true
@@ -566,11 +616,29 @@ func (s *ScreenBuf) Flush() {
 	if gr, ok := s.Renderer.(GraphicsRenderer); ok {
 		gr.RenderGraphics(&s.graphics, s.buf, s.shadow, s.width, s.height, s.dirty)
 	}
-	s.Renderer.Flush()
+	var deliver func()
+	if fp, ok := s.Renderer.(framePreparer); ok {
+		deliver = fp.PrepareFlush()
+	} else {
+		s.Renderer.Flush()
+	}
 
 	s.dirty = false
 	s.cursorDirty = false
 	copy(s.shadow, s.buf)
+
+	return deliver
+}
+
+// framePreparer is implemented by renderers that can separate composing a
+// frame (which reads the screen buffer and so must happen under ScreenBuf.mu)
+// from delivering it (which must not). Renderers that don't implement it —
+// the GUI backends, which hand pixels to a windowing library rather than
+// bytes to a tty — keep being flushed inline.
+type framePreparer interface {
+	// PrepareFlush finishes the frame and returns a closure that writes it
+	// out, or nil if there is nothing to write.
+	PrepareFlush() func()
 }
 
 // AnsiRenderer реализует SurfaceRenderer через ESC-последовательности.
@@ -602,14 +670,20 @@ func (r *AnsiRenderer) SetPalette(pal *[256]uint32) {
 	if pal == nil {
 		return
 	}
+	changed := false
 	for i := 0; i < 256; i++ {
 		if !r.parent.HostPaletteValid[i] || r.parent.HostPalette[i] != pal[i] {
-			r.parent.quantCache = make(map[uint32]uint8)
+			changed = true
 			pr, pg, pb := rgb(pal[i])
 			r.frameOut.WriteString(fmt.Sprintf("\x1b]4;%d;rgb:%02x/%02x/%02x\x07", i, pr, pg, pb))
 			r.parent.HostPalette[i] = pal[i]
 			r.parent.HostPaletteValid[i] = true
 		}
+	}
+	// One rebuild for the whole palette change, not one per changed entry:
+	// a full (re)load used to allocate 256 maps in a row.
+	if changed {
+		r.parent.quantCache = make(map[uint32]uint8)
 	}
 }
 
@@ -677,7 +751,29 @@ func (r *AnsiRenderer) SetCursor(x, y int, vis bool, shape CursorShape) {
 func (r *AnsiRenderer) SetWindowTitle(title string) {
 	r.frameOut.WriteString(fmt.Sprintf("\x1b]0;%s\x07", title))
 }
+
+// Flush composes the frame and writes it out immediately. ScreenBuf.Flush
+// uses PrepareFlush instead, so that the write happens outside ScreenBuf.mu;
+// this entry point remains for direct callers.
 func (r *AnsiRenderer) Flush() {
+	deliver := r.PrepareFlush()
+	if deliver == nil {
+		return
+	}
+	// Direct callers (SetWindowTitle, for one) bypass ScreenBuf.Flush, so
+	// take writeMu here to keep their output from landing in the middle of
+	// a frame. Safe against self-deadlock: ScreenBuf.Flush reaches this
+	// renderer through PrepareFlush, never through this method.
+	r.parent.writeMu.Lock()
+	defer r.parent.writeMu.Unlock()
+	deliver()
+}
+
+// PrepareFlush appends the cursor state to the pending frame and returns a
+// closure that writes the whole payload to the terminal, or nil if the frame
+// turned out empty. Splitting the two lets the caller release its locks
+// before a write that may block for an unbounded time.
+func (r *AnsiRenderer) PrepareFlush() func() {
 	if !r.firstInit || r.termCursorInvalid || r.cursorX != r.lastSentCursorX || r.cursorY != r.lastSentCursorY || r.cursorVis != r.lastSentCursorVis || r.cursorShape != r.lastSentCursorShape {
 		r.frameOut.WriteString(fmt.Sprintf("\x1b[%d;%dH", r.cursorY+1, r.cursorX+1))
 		if r.cursorVis {
@@ -713,15 +809,17 @@ func (r *AnsiRenderer) Flush() {
 	payload := r.frameOut.String()
 	r.frameOut.Reset()
 	if payload == "" {
-		return
+		return nil
 	}
 
-	writeStart := time.Now()
-	r.write(payload)
-	writeDur := time.Since(writeStart)
+	return func() {
+		writeStart := time.Now()
+		r.write(payload)
+		writeDur := time.Since(writeStart)
 
-	if writeDur > 10*time.Millisecond {
-		DebugLog("PROFILE: Atomic Write Slow! Time:%v Bytes:%d", writeDur, len(payload))
+		if writeDur > 10*time.Millisecond {
+			DebugLog("PROFILE: Atomic Write Slow! Time:%v Bytes:%d", writeDur, len(payload))
+		}
 	}
 }
 

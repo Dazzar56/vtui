@@ -1,9 +1,12 @@
 package vtui
 
 import (
+	"bytes"
 	"os"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 )
 
 func TestScreenBuf_CursorDirtyState(t *testing.T) {
@@ -340,4 +343,98 @@ func TestScreenBuf_WidthHeightConcurrency(t *testing.T) {
 	}
 
 	<-done
+}
+
+// blockingWriter stalls its first Write until release is closed, standing in
+// for a terminal that has stopped draining its input.
+type blockingWriter struct {
+	entered chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func (w *blockingWriter) Write(p []byte) (int, error) {
+	w.once.Do(func() { close(w.entered) })
+	<-w.release
+	return len(p), nil
+}
+
+// TestFlush_DoesNotHoldScreenLockDuringWrite pins down the invariant behind
+// the #429 investigation: a write to the terminal is unbounded in time (a pty
+// nobody reads from blocks it indefinitely, and a full frame on a large
+// terminal is far bigger than the pty buffer), so ScreenBuf.mu must not be
+// held across it. Previously Flush took mu for its whole body, which turned a
+// stalled terminal into a freeze of every goroutine touching the screen.
+func TestFlush_DoesNotHoldScreenLockDuringWrite(t *testing.T) {
+	scr := NewScreenBuf()
+	w := &blockingWriter{entered: make(chan struct{}), release: make(chan struct{})}
+	scr.Writer = w
+	scr.AllocBuf(20, 5)
+
+	flushed := make(chan struct{})
+	go func() {
+		scr.Flush()
+		close(flushed)
+	}()
+
+	select {
+	case <-w.entered:
+	case <-time.After(5 * time.Second):
+		close(w.release)
+		t.Fatal("Flush never reached the write")
+	}
+
+	// The write is now stuck. Any other reader of the screen must still get
+	// through.
+	reached := make(chan struct{})
+	go func() {
+		scr.GetCell(0, 0)
+		close(reached)
+	}()
+
+	select {
+	case <-reached:
+	case <-time.After(5 * time.Second):
+		close(w.release)
+		t.Fatal("GetCell blocked while a terminal write was in progress: " +
+			"ScreenBuf.mu is being held across the write")
+	}
+
+	close(w.release)
+	<-flushed
+}
+
+// TestInvalidateHostPalette_ForcesResend guards the other half of the same
+// bug report: HostPalette/HostPaletteValid track the state of the terminal,
+// not of this process. Suspend sends OSC 104 and the daemon re-attaches to
+// terminals it has never painted, both of which drop the palette on the far
+// end. Without invalidation SetPalette sees entries it believes are already
+// loaded and sends nothing, leaving the session in the terminal's own colors.
+func TestInvalidateHostPalette_ForcesResend(t *testing.T) {
+	scr := NewScreenBuf()
+	var buf bytes.Buffer
+	scr.Writer = &buf
+	scr.AllocBuf(8, 2)
+
+	pal := XTerm256Palette
+	scr.ThemePalette = &pal
+
+	scr.Flush()
+	if !strings.Contains(buf.String(), "\x1b]4;") {
+		t.Fatal("first flush sent no OSC 4 sequences")
+	}
+
+	// Nothing changed on either side: the palette must not be resent.
+	buf.Reset()
+	scr.Flush()
+	if strings.Contains(buf.String(), "\x1b]4;") {
+		t.Error("palette resent although neither side changed")
+	}
+
+	buf.Reset()
+	scr.InvalidateHostPalette()
+	scr.Flush()
+	if !strings.Contains(buf.String(), "\x1b]4;") {
+		t.Error("palette not resent after InvalidateHostPalette")
+	}
 }

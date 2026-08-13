@@ -60,6 +60,13 @@ func Suspend() {
 		}
 		out.WriteString(seqResetPalette + seqResetAttributes)
 		out.Sync()
+		// seqResetPalette (OSC 104) throws away the colors we loaded into
+		// the terminal. Unless the screen buffer is told, it keeps believing
+		// the terminal still holds them and stays silent on the next Resume
+		// or re-attach, leaving the session with default colors.
+		if FrameManager != nil && FrameManager.scr != nil {
+			FrameManager.scr.InvalidateHostPalette()
+		}
 		if inputRestore != nil {
 			inputRestore()
 			inputRestore = nil
