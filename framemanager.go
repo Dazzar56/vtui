@@ -1964,6 +1964,14 @@ func (fm *frameManager) renderPhase() {
 			fm.StatusLine.Show(fm.scr)
 		}
 
+		if fm.OnRender != nil {
+			fm.OnRender(fm.scr)
+		}
+		fm.drawWorkspaceTabs()
+		fm.drawWorkspaceCounter()
+
+		// Draw the toast after the workspace tab bar so it overlays the top row
+		// instead of being erased by drawWorkspaceTabs' FillRect.
 		if fm.currentToast != nil {
 			if time.Now().After(fm.currentToast.Expires) {
 				fm.currentToast = nil
@@ -1977,11 +1985,6 @@ func (fm *frameManager) renderPhase() {
 				fm.scr.Write(x, 0, StringToCharInfo(msg, attr))
 			}
 		}
-		if fm.OnRender != nil {
-			fm.OnRender(fm.scr)
-		}
-		fm.drawWorkspaceTabs()
-		fm.drawWorkspaceCounter()
 
 		fm.scr.Graphics().EndFrame()
 		if semanticRenderer, ok := fm.scr.Renderer.(SemanticSceneRenderer); ok {
