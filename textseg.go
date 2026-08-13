@@ -1,6 +1,7 @@
 package vtui
 
 import (
+	"sort"
 	"strings"
 	"sync"
 	"unicode"
@@ -160,6 +161,19 @@ func ClusterWidth(cluster string) int {
 	if cluster == "" {
 		return 0
 	}
+	if r, size := utf8.DecodeRuneInString(cluster); size == len(cluster) {
+		// Single rune: no sequence to examine, except the few runes whose
+		// width rules flip on a lone occurrence (see the switch below).
+		switch r {
+		case runeZWJ, runeVS15, runeVS16, runeKeycap:
+			// fall through to the sequence rules
+		default:
+			if w := runeCellWidth(r); w > 0 {
+				return w
+			}
+			return 1
+		}
+	}
 
 	sum := 0
 	regional := 0
@@ -229,10 +243,15 @@ func SanitizeCluster(cluster string) (string, int) {
 		return "", 0
 	}
 	r, size := utf8.DecodeRuneInString(cluster)
+	// Line breaks are dropped whether the cluster is a lone CR/LF or the
+	// CRLF pair uniseg groups into one cluster; a raw \r\n must never reach
+	// the screen buffer. The rune-by-rune fast path drops each rune
+	// separately, so the two paths agree here.
+	if r == '\n' || r == '\r' {
+		return "", 0
+	}
 	if size == len(cluster) {
 		switch {
-		case r == '\n' || r == '\r':
-			return "", 0
 		case r == runeReplacement:
 			return "?", 1
 		case r < 0x20 || r == 0x7F:
@@ -240,6 +259,172 @@ func SanitizeCluster(cluster string) (string, int) {
 		}
 	}
 	return cluster, ClusterWidth(cluster)
+} // clusterFormingRange is a closed interval of code points that can join a
+// multi-rune grapheme cluster under UAX #29.
+type clusterFormingRange struct {
+	lo, hi rune
+}
+
+// clusterFormingBMP is a 65536-bit bitmap of the BMP code points that can
+// join a multi-rune grapheme cluster; clusterFormingSup is the sorted,
+// coalesced range list for the supplementary planes. Both are built once from
+// the Unicode categories Mn (combining marks of every script — Latin
+// diacritics, Cyrillic, Arabic harakat, Devanagari virama, Hiragana dakuten),
+// Me (enclosing marks such as the keycap), Mc (spacing marks) and Cf (format
+// characters such as ZWJ, variation selectors and emoji tag characters), plus
+// the sequence runes those categories do not cover (Hangul jamo in the BMP;
+// emoji modifiers and regional indicators beyond it). A membership test is a
+// single bitmap word load in the BMP and one binary search above it — the
+// same rule for every code point of every script, with no per-language
+// special cases.
+const bmpClusterWords = 1 << (16 - 6)
+
+var (
+	clusterFormingOnce sync.Once
+	clusterFormingBMP  [bmpClusterWords]uint64
+	clusterFormingSup  []clusterFormingRange
+)
+
+func buildClusterFormingTables() {
+	setBMPRange := func(lo, hi rune) {
+		for cp := lo; cp <= hi; cp++ {
+			clusterFormingBMP[cp>>6] |= 1 << (cp & 63)
+		}
+	}
+	addTable := func(rt *unicode.RangeTable) {
+		for _, r := range rt.R16 {
+			setBMPRange(rune(r.Lo), rune(r.Hi))
+		}
+		for _, r := range rt.R32 {
+			clusterFormingSup = append(clusterFormingSup, clusterFormingRange{lo: rune(r.Lo), hi: rune(r.Hi)})
+		}
+	}
+	addTable(unicode.Mn)
+	addTable(unicode.Me)
+	addTable(unicode.Mc)
+	addTable(unicode.Cf)
+	// Sequence runes outside those categories.
+	setBMPRange(0x1100, 0x11FF) // Hangul jamo L/V/T
+	setBMPRange(0xA960, 0xA97F) // Hangul jamo extended-A
+	setBMPRange(0xD7B0, 0xD7FF) // Hangul jamo extended-B
+	clusterFormingSup = append(clusterFormingSup,
+		clusterFormingRange{lo: runeModifierFirst, hi: runeModifierLast}, // emoji modifiers (skin tones)
+		clusterFormingRange{lo: runeRegionalFirst, hi: runeRegionalLast}, // regional indicators (flags)
+	)
+	sort.Slice(clusterFormingSup, func(i, j int) bool { return clusterFormingSup[i].lo < clusterFormingSup[j].lo })
+	// Coalesce overlapping and adjacent intervals into a compact table.
+	out := clusterFormingSup[:0]
+	for _, r := range clusterFormingSup {
+		if n := len(out); n > 0 && r.lo <= out[n-1].hi+1 {
+			if r.hi > out[n-1].hi {
+				out[n-1].hi = r.hi
+			}
+		} else {
+			out = append(out, r)
+		}
+	}
+	clusterFormingSup = out
+}
+
+// isClusterFormingRune reports whether r can join its neighbours into a
+// multi-rune grapheme cluster. Strings containing any such rune must go
+// through the full uniseg segmentation; everything else is one rune per
+// cluster and can be processed rune-by-rune.
+func isClusterFormingRune(r rune) bool {
+	if r < 0x80 {
+		return false
+	}
+	clusterFormingOnce.Do(buildClusterFormingTables)
+	if r < 0x10000 {
+		return clusterFormingBMP[r>>6]&(1<<(r&63)) != 0
+	}
+	tbl := clusterFormingSup
+	i := sort.Search(len(tbl), func(i int) bool { return tbl[i].hi >= r })
+	return i < len(tbl) && tbl[i].lo <= r
+}
+
+// scanNeedsFullSegmentation reports whether s contains a rune that can join a
+// multi-rune grapheme cluster. ASCII bytes are skipped without decoding, so
+// plain names scan at byte speed; the full uniseg walk is reserved for the
+// strings that actually need it.
+func scanNeedsFullSegmentation(s string) bool {
+	for offset := 0; offset < len(s); {
+		c := s[offset]
+		if c < 0x80 {
+			offset++
+			continue
+		}
+		r, size := utf8.DecodeRuneInString(s[offset:])
+		if isClusterFormingRune(r) {
+			return true
+		}
+		offset += size
+	}
+	return false
+}
+
+// simpleRuneWidth is the display width of a single rune that needs no
+// grapheme segmentation, applying the same sanitize rules as
+// SanitizeCluster: line breaks are dropped (width 0), other control
+// characters and the replacement character get a visible width, everything
+// else takes its rune width (at least 1).
+func simpleRuneWidth(r rune) int {
+	switch {
+	case r == '\n' || r == '\r':
+		return 0
+	case r == runeReplacement:
+		return 1
+	case r < 0x20 || r == 0x7F:
+		return 1
+	default:
+		if w := runewidth.RuneWidth(r); w > 0 {
+			return w
+		}
+		return 1
+	}
+}
+
+// forEachClusterSimple is ForEachClusterAt for strings that need no grapheme
+// segmentation: every rune is its own cluster. Only call it when
+// scanNeedsFullSegmentation(s) is false; its output matches the uniseg walk
+// exactly for such strings.
+func forEachClusterSimple(s string, fn func(cluster string, width, offset, runeIndex int)) {
+	runeIndex := 0
+	for offset := 0; offset < len(s); {
+		r, size := utf8.DecodeRuneInString(s[offset:])
+		switch {
+		case r == '\n' || r == '\r':
+			// dropped, like SanitizeCluster
+		case r == runeReplacement:
+			fn("?", 1, offset, runeIndex)
+		case r < 0x20 || r == 0x7F:
+			fn(string(runeControlVisible), 1, offset, runeIndex)
+		default:
+			w := runewidth.RuneWidth(r)
+			if w < 1 {
+				w = 1
+			}
+			fn(s[offset:offset+size], w, offset, runeIndex)
+		}
+		runeIndex++
+		offset += size
+	}
+}
+
+// forEachClusterUniseg is the reference UAX #29 walk, kept separate from the
+// simple path so tests can compare the two on the same input.
+func forEachClusterUniseg(s string, fn func(cluster string, width, offset, runeIndex int)) {
+	runeIndex := 0
+	g := uniseg.NewGraphemes(s)
+	for g.Next() {
+		from, to := g.Positions()
+		raw := s[from:to]
+		text, w := SanitizeCluster(raw)
+		if w > 0 {
+			fn(text, w, from, runeIndex)
+		}
+		runeIndex += utf8.RuneCountInString(raw)
+	}
 }
 
 // ForEachCluster walks s cluster by cluster, handing the callback the
@@ -254,18 +439,17 @@ func ForEachCluster(s string, fn func(cluster string, width int, offset int)) {
 // ForEachClusterAt is ForEachCluster with the index of the cluster's first
 // rune in s as well. Positions coming from code that counts runes, such as
 // the hotkey position of an ampersand string, need it.
+//
+// Strings that cannot form multi-rune clusters (no combining marks, ZWJ,
+// emoji sequences, Hangul jamo) take a rune-by-rune path that skips the
+// uniseg state machine entirely; the full segmentation is reserved for the
+// strings that need it.
 func ForEachClusterAt(s string, fn func(cluster string, width, offset, runeIndex int)) {
-	runeIndex := 0
-	g := uniseg.NewGraphemes(s)
-	for g.Next() {
-		from, to := g.Positions()
-		raw := s[from:to]
-		text, w := SanitizeCluster(raw)
-		if w > 0 {
-			fn(text, w, from, runeIndex)
-		}
-		runeIndex += utf8.RuneCountInString(raw)
+	if !scanNeedsFullSegmentation(s) {
+		forEachClusterSimple(s, fn)
+		return
 	}
+	forEachClusterUniseg(s, fn)
 }
 
 // AppendCluster puts a cluster into a cell slice, following it with as many
@@ -284,11 +468,86 @@ func AppendCluster(target []CharInfo, cluster string, width int, attr uint64) []
 // StringWidth returns the width of a string in terminal columns, counting
 // grapheme clusters rather than runes.
 func StringWidth(s string) int {
+	if !scanNeedsFullSegmentation(s) {
+		total := 0
+		forEachClusterSimple(s, func(_ string, w, _, _ int) {
+			total += w
+		})
+		return total
+	}
 	total := 0
-	ForEachCluster(s, func(_ string, w int, _ int) {
+	forEachClusterUniseg(s, func(_ string, w, _, _ int) {
 		total += w
 	})
 	return total
+}
+
+// measureWidthSimple returns the sanitized display width of s for strings
+// that need no grapheme segmentation. Only call it when
+// scanNeedsFullSegmentation(s) is false.
+func measureWidthSimple(s string) int {
+	total := 0
+	for offset := 0; offset < len(s); {
+		r, size := utf8.DecodeRuneInString(s[offset:])
+		total += simpleRuneWidth(r)
+		offset += size
+	}
+	return total
+}
+
+// truncateSimple truncates s without grapheme segmentation (call only when
+// scanNeedsFullSegmentation(s) is false). It returns the truncated string
+// and its width; the width equals measureWidthSimple of the result.
+func truncateSimple(s string, w int, tail string) (string, int) {
+	// Measure first: the common case (the name fits its column) returns s
+	// unchanged and allocates nothing.
+	total := 0
+	fits := true
+	for offset := 0; offset < len(s); {
+		r, size := utf8.DecodeRuneInString(s[offset:])
+		if cw := simpleRuneWidth(r); cw > 0 {
+			total += cw
+			if total > w {
+				fits = false
+				break
+			}
+		}
+		offset += size
+	}
+	if fits {
+		return s, total
+	}
+
+	tailW := measureWidthSimple(tail)
+	budget := w - tailW
+	if budget < 0 {
+		return tail, tailW
+	}
+
+	var sb strings.Builder
+	used := 0
+	for offset := 0; offset < len(s); {
+		r, size := utf8.DecodeRuneInString(s[offset:])
+		cw := simpleRuneWidth(r)
+		if cw == 0 {
+			offset += size
+			continue
+		}
+		if used+cw > budget {
+			break
+		}
+		switch {
+		case r == runeReplacement:
+			sb.WriteByte('?')
+		case r < 0x20 || r == 0x7F:
+			sb.WriteRune(runeControlVisible)
+		default:
+			sb.WriteRune(r)
+		}
+		used += cw
+		offset += size
+	}
+	return sb.String() + tail, used + tailW
 }
 
 // TruncateString shortens s so that it plus tail fits into w columns. It never
@@ -297,6 +556,10 @@ func StringWidth(s string) int {
 func TruncateString(s string, w int, tail string) string {
 	if w <= 0 {
 		return ""
+	}
+	if !scanNeedsFullSegmentation(s) {
+		text, _ := truncateSimple(s, w, tail)
+		return text
 	}
 	if StringWidth(s) <= w {
 		return s
@@ -323,4 +586,41 @@ func TruncateString(s string, w int, tail string) string {
 		used += cw
 	}
 	return sb.String() + tail
+}
+
+// truncateStringWidth is TruncateString plus the display width of the result.
+// Returning the width saves callers a second measurement; the common path
+// (the string fits) costs a single rune walk.
+func truncateStringWidth(s string, w int, tail string) (string, int) {
+	if w <= 0 {
+		return "", 0
+	}
+	if !scanNeedsFullSegmentation(s) {
+		return truncateSimple(s, w, tail)
+	}
+	if sw := StringWidth(s); sw <= w {
+		return s, sw
+	}
+	tailW := StringWidth(tail)
+	budget := w - tailW
+	if budget < 0 {
+		return tail, tailW
+	}
+
+	var sb strings.Builder
+	used := 0
+	g := uniseg.NewGraphemes(s)
+	for g.Next() {
+		from, to := g.Positions()
+		text, cw := SanitizeCluster(s[from:to])
+		if cw == 0 {
+			continue
+		}
+		if used+cw > budget {
+			break
+		}
+		sb.WriteString(text)
+		used += cw
+	}
+	return sb.String() + tail, used + tailW
 }

@@ -7,6 +7,7 @@ import (
 	"math"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gogpu/gg"
 	_ "github.com/gogpu/gg/gpu" // Включаем аппаратное ускорение рендеринга
@@ -62,6 +63,9 @@ type GogpuRenderer struct {
 	gfxKnown bool
 
 	glyphMemo map[rune]glyphMemoEntry // font-glyph run cache, see glyphRectsCached
+
+	// textRunBuf is the reusable scratch buffer for batched DrawString runs.
+	textRunBuf []byte
 }
 
 func NewGogpuRenderer(host *GogpuHost, face text.Face, cw, ch int) *GogpuRenderer {
@@ -96,6 +100,110 @@ func (r *GogpuRenderer) SetFallbackFontChain(chain *fontFallbackChain) {
 //
 // The caller must hold r.mu. DrawToScreen, the only caller, holds it for the
 // whole frame.
+// gogpuBatchRune reports whether a cell may join a batched DrawString run.
+// Only plain single-rune cells qualify: no cluster registry entries (their
+// per-cell shaping must stay intact), no wide fillers, no spaces (they draw
+// nothing), no box-drawing runes (they go through drawCustomChar) and never
+// regional indicators — two lone RIs concatenated into one string would shape
+// into a flag, which the per-cell draws keep apart.
+func gogpuBatchRune(ch uint64) bool {
+	if ch == 0 || ch == WideCharFiller || IsCompChar(ch) {
+		return false
+	}
+	if ch == ' ' {
+		return false
+	}
+	r := rune(ch)
+	if r >= runeRegionalFirst && r <= runeRegionalLast {
+		return false
+	}
+	return !isBoxDrawRune(r)
+}
+
+// gogpuAdvFits reports whether a glyph advance in pixels occupies exactly
+// `cells` grid columns of cellW pixels. A batched DrawString run is drawn
+// once with the font's natural advances, which is pixel-identical to per-cell
+// placement only then; anything else lets the run drift off the cell grid.
+func gogpuAdvFits(adv float64, cellW, cells int) bool {
+	return adv == float64(cellW*cells)
+}
+
+// gogpuAdvMatches reports whether ch can be batched in a DrawString run on
+// face f. Emoji and CJK fallback faces are not scaled to the cell grid
+// (measured advances of 1.8-2.5 cells are the norm) and proportional primary
+// fonts advance every glyph differently, so without this gate a batched run
+// would drift off the cell grid. A face without the glyph also declines.
+func (r *GogpuRenderer) gogpuAdvMatches(f text.Face, ch rune, cells int) bool {
+	if f == nil {
+		// No font installed (tests construct nil-face renderers): nothing can
+		// be measured, keep the caller's per-cell behaviour.
+		return true
+	}
+	if !f.HasGlyph(ch) {
+		return false
+	}
+	return gogpuAdvFits(f.Advance(string(rune(ch))), r.cellW, cells)
+}
+
+// gogpuTextRun extends a batched DrawString run across the cells of one
+// colour span. buf is the whole render buffer, rowOff+x the first cell of the
+// span and spanW its width; start is the run's first cell (which must pass
+// gogpuBatchRune). It appends the run's runes to run and returns the new
+// buffer, the cell count consumed (each glyph takes its width in cells,
+// fillers included) and the face the whole run resolved to. The run stops at
+// the first cell that cannot join (see gogpuBatchRune), needs another face or
+// has an advance that would drift it off the cell grid. The final bool
+// reports whether the first cell joined the run at all; when false the caller
+// must draw that cell per-cell (the previous behaviour).
+func (r *GogpuRenderer) gogpuTextRun(buf []CharInfo, rowOff, x, start, spanW, drawCols int, curFace text.Face, run []byte) ([]byte, int, text.Face, bool) {
+	pos := x + start
+	first := buf[rowOff+pos]
+	f := r.faceFor(CellBaseRune(first.Char))
+	if f == nil {
+		f = curFace
+	}
+	if f != curFace {
+		curFace = f
+	}
+
+	consumed := 1
+	if pos+1 < drawCols && buf[rowOff+pos+1].Char == WideCharFiller {
+		consumed = 2
+	}
+	if !r.gogpuAdvMatches(f, rune(first.Char), consumed) {
+		return run, 0, curFace, false
+	}
+	run = utf8.AppendRune(run, rune(first.Char))
+	pos += consumed
+
+	for pos < x+spanW {
+		c := buf[rowOff+pos]
+		if c.Char == WideCharFiller {
+			pos++
+			consumed++
+			continue
+		}
+		if !gogpuBatchRune(c.Char) {
+			break
+		}
+		cw := 1
+		if pos+1 < drawCols && buf[rowOff+pos+1].Char == WideCharFiller {
+			cw = 2
+		}
+		nf := r.faceFor(CellBaseRune(c.Char))
+		if nf != curFace {
+			break
+		}
+		if !r.gogpuAdvMatches(nf, rune(c.Char), cw) {
+			break
+		}
+		run = utf8.AppendRune(run, rune(c.Char))
+		consumed += cw
+		pos += cw
+	}
+	return run, consumed, curFace, true
+}
+
 func (r *GogpuRenderer) faceFor(ch rune) text.Face {
 	if r.face == nil || r.chain == nil {
 		return r.face
@@ -691,8 +799,39 @@ func (r *GogpuRenderer) DrawToScreen(ctx *gogpu.Context) {
 							}
 						}
 
+						if r.face == nil {
+							sx += rw
+							continue
+						}
+
+						if gogpuBatchRune(currCell.Char) {
+							// Consecutive plain single-rune cells on the same face go
+							// out in one DrawString. The natural advance equals
+							// per-cell placement only for glyphs the face advances
+							// exactly one cell (two for wide ones), which
+							// gogpuTextRun verifies; emoji, CJK fallbacks and
+							// proportional fonts stay per-cell.
+							tTxt := gogpuProfNow()
+							run, consumed, f, batched := r.gogpuTextRun(r.renderBuf, rowOff, x, sx, spanW, drawCols, curFace, r.textRunBuf[:0])
+							r.textRunBuf = run
+							if batched {
+								if f != curFace {
+									curFace = f
+									dc.SetFont(f)
+								}
+								dc.DrawString(string(run), lx+float64(sx*r.cellW), ly+ascent)
+								prof.textTime += gogpuProfSince(tTxt)
+								prof.strings++
+								prof.glyphs += utf8.RuneCount(run)
+								sx += consumed
+								continue
+							}
+							// The first cell cannot join a run: fall through and
+							// draw it per-cell, exactly as before batching.
+						}
+
 						str := CellString(currCell.Char)
-						if str != "" && str != " " && r.face != nil {
+						if str != "" && str != " " {
 							tTxt := gogpuProfNow()
 							if f := r.faceFor(char); f != nil && f != curFace {
 								curFace = f
