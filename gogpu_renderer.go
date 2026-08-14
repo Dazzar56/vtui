@@ -461,9 +461,17 @@ func (r *GogpuRenderer) DrawToScreen(ctx *gogpu.Context) {
 	}
 
 	var prof gogpuFrameStats
-	drew := false
 
-	if r.dirty {
+	// drawCanvas re-rasterizes the whole screen buffer into the canvas. OnDraw
+	// fires on content changes AND on surface-repaint events (WM_PAINT/Expose
+	// on restore from tray/minimize, alt-tab, uncover, focus change). The
+	// canvas must be repainted in both cases: ggcanvas.Render is a no-op on a
+	// clean canvas, so skipping the draw on a clean OnDraw would leave the
+	// window black after a restore until the next content change. The
+	// textured-quad path (canvas.RenderTo) is intentionally not used here —
+	// mixing it with the primary GPU-direct present path makes the screen
+	// flicker while dragging the mouse.
+	drawCanvas := func() {
 		tDraw := gogpuProfNow()
 		r.canvas.Draw(func(dc *gg.Context) {
 			dc.SetRGB(0, 0, 0)
@@ -600,15 +608,16 @@ func (r *GogpuRenderer) DrawToScreen(ctx *gogpu.Context) {
 			}
 		})
 		prof.drawTime = gogpuProfSince(tDraw)
-		r.dirty = false
-		drew = true
 	}
+
+	drawCanvas()
+	r.dirty = false
 
 	tRender := gogpuProfNow()
 	r.canvas.Render(ctx.RenderTarget())
 	prof.renderTime = gogpuProfSince(tRender)
 
-	if gogpuProfileEnabled && drew {
+	if gogpuProfileEnabled {
 		prof.report(r.cols, r.rows)
 	}
 }
