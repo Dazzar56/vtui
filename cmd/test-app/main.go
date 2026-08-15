@@ -287,7 +287,7 @@ func buildAutoLayoutDialog() *vtui.Window {
 	x, y := dlg.X1, dlg.Y1
 
 	// Left group: Form with vertical stack and filled inputs
-	groupForm := vtui.NewGroupBox(x+2, y+1, x+33, y+13, "Constraint Form")
+	groupForm := vtui.NewGroupBox(x+2, y+2, x+33, y+12, "Constraint Form")
 	lbl1 := vtui.NewLabel(0, 0, "Username:", nil)
 	edit1 := vtui.NewEdit(0, 0, 10, "alex_dev")
 	lbl2 := vtui.NewLabel(0, 0, "Role:", nil)
@@ -299,7 +299,7 @@ func buildAutoLayoutDialog() *vtui.Window {
 	groupForm.AddItem(lbl2)
 	groupForm.AddItem(combo2)
 
-	formLayout := vtui.NewAutoLayout(groupForm.X1+2, groupForm.Y1+1, 27, 10)
+	formLayout := vtui.NewAutoLayout(groupForm.X1+2, groupForm.Y1+1, 27, 9)
 	formLayout.
 		PinTop(lbl1, 0).PinLeft(lbl1, 0).
 		StackVertical(1, lbl1, edit1).FillWidth(edit1, 0, 0).
@@ -308,7 +308,7 @@ func buildAutoLayoutDialog() *vtui.Window {
 	formLayout.Apply()
 
 	// Right group: Apportioned & Equalized Columns
-	groupCols := vtui.NewGroupBox(x+35, y+1, x+65, y+13, "FreeType Autohinting")
+	groupCols := vtui.NewGroupBox(x+35, y+2, x+65, y+12, "FreeType Autohinting")
 	col1 := vtui.NewEdit(0, 0, 5, "25%")
 	col2 := vtui.NewEdit(0, 0, 5, "50%")
 	col3 := vtui.NewEdit(0, 0, 5, "25%")
@@ -320,7 +320,7 @@ func buildAutoLayoutDialog() *vtui.Window {
 	groupCols.AddItem(col2)
 	groupCols.AddItem(col3)
 
-	colsLayout := vtui.NewAutoLayout(groupCols.X1+2, groupCols.Y1+1, 26, 10)
+	colsLayout := vtui.NewAutoLayout(groupCols.X1+2, groupCols.Y1+1, 26, 9)
 	colsLayout.
 		PinTop(lblHint, 0).PinLeft(lblHint, 0).
 		StackVertical(1, lblHint, col1).AlignTop(col1, col2, col3).
