@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/basicfont"
@@ -76,6 +77,25 @@ var fallbackFontPaths = []string{
 	"/Library/Fonts/Arial Unicode.ttf",
 }
 
+// runeCoverage is a bitmap of the runes a font has glyphs for, over planes 0
+// and 1 — everything a terminal plausibly draws, emoji included. Runes above
+// plane 1 are so rare that "maybe" (and a re-parse to find out) is the right
+// answer for them. It is shared by the gogpu backend's fallbackFontChain and
+// the guiFallbackChain below.
+type runeCoverage struct {
+	bits [0x20000 / 64]uint64
+}
+
+func (c *runeCoverage) maybeHas(r rune) bool {
+	if r < 0 {
+		return false
+	}
+	if r >= 0x20000 {
+		return true
+	}
+	return c.bits[r>>6]&(1<<(uint(r)&63)) != 0
+}
+
 func parseFontBytes(data []byte) (*opentype.Font, error) {
 	f, err := opentype.Parse(data)
 	if err == nil {
@@ -91,14 +111,129 @@ func parseFontBytes(data []byte) (*opentype.Font, error) {
 	return nil, err
 }
 
+// guiFallbackChain is the x/image twin of the gogpu backend's
+// fallbackFontChain: it opens a fallback font file the first time a rune
+// actually needs it, and keeps in memory only the fonts that have supplied a
+// glyph. The eager version parsed every fallback font on the machine at
+// startup — on a Linux install with Noto CJK that is hundreds of megabytes
+// held for glyphs that almost never render (the same bug measured at ~800 MB
+// on macOS in the gogpu backend).
+//
+// A parsed font that lacks the requested rune is condensed into a 16 KB
+// runeCoverage bitmap and dropped, so a rune nobody covers cannot make the
+// chain retain everything, and each file is parsed at most twice over the
+// process lifetime: once to learn its coverage, once more only if a covered
+// rune ever shows up.
+type guiFallbackChain struct {
+	mu      sync.Mutex
+	size    float64
+	dpi     float64
+	entries []guiFallbackEntry
+}
+
+type guiFallbackEntry struct {
+	path   string
+	failed bool          // unreadable or unparseable; never try again
+	cov    *runeCoverage // built on first parse, nil until then
+	face   font.Face     // retained only once the font has supplied a glyph
+}
+
+// faceFor returns the first fallback face that owns a glyph for r, walking
+// the fonts in priority order, or nil when none of them covers it.
+func (c *guiFallbackChain) faceFor(r rune) font.Face {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for i := range c.entries {
+		e := &c.entries[i]
+		if e.failed {
+			continue
+		}
+		if e.face != nil {
+			if _, ok := e.face.GlyphAdvance(r); ok {
+				return e.face
+			}
+			continue
+		}
+		if e.cov != nil && !e.cov.maybeHas(r) {
+			continue
+		}
+
+		face, err := openFallbackFace(e.path, c.size, c.dpi)
+		if err != nil {
+			e.failed = true
+			DebugLog("GUI_FONT: fallback present but unusable: %s: %v", e.path, err)
+			continue
+		}
+		if e.cov == nil {
+			cov := &runeCoverage{}
+			for probe := rune(0); probe < 0x20000; probe++ {
+				if probe >= 0xD800 && probe <= 0xDFFF {
+					continue // surrogates are not runes a cmap can hold
+				}
+				if _, ok := face.GlyphAdvance(probe); ok {
+					cov.bits[probe>>6] |= 1 << (uint(probe) & 63)
+				}
+			}
+			e.cov = cov
+		}
+		if _, ok := face.GlyphAdvance(r); ok {
+			e.face = face
+			DebugLog("GUI_FONT: fallback loaded for U+%04X: %s", r, e.path)
+			return face
+		}
+		// Parsed, mapped into the bitmap, not needed: dropped here, and the
+		// bitmap answers for this font from now on.
+		_ = face.Close()
+		DebugLog("GUI_FONT: fallback probed for U+%04X and dropped: %s", r, e.path)
+	}
+	return nil
+}
+
+func (c *guiFallbackChain) close() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	var err error
+	for i := range c.entries {
+		if f := c.entries[i].face; f != nil {
+			if e := f.Close(); e != nil {
+				err = e
+			}
+			c.entries[i].face = nil
+		}
+	}
+	return err
+}
+
+func openFallbackFace(path string, size, dpi float64) (font.Face, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	f, err := parseFontBytes(data)
+	if err != nil {
+		return nil, err
+	}
+	return opentype.NewFace(f, &opentype.FaceOptions{
+		Size:    size,
+		DPI:     dpi,
+		Hinting: font.HintingFull,
+	})
+}
+
 type fallbackFace struct {
 	faces []font.Face
+	chain *guiFallbackChain
 }
 
 func (f *fallbackFace) Close() error {
 	var err error
 	for _, face := range f.faces {
 		if e := face.Close(); e != nil {
+			err = e
+		}
+	}
+	if f.chain != nil {
+		if e := f.chain.close(); e != nil {
 			err = e
 		}
 	}
@@ -119,12 +254,25 @@ func (f *fallbackFace) Kern(r0, r1 rune) fixed.Int26_6 {
 	return 0
 }
 
+// chainFace resolves r through the lazy chain, or nil when the chain is
+// absent or exhausted. Each glyph method consults it only after every
+// already-open face has answered "no glyph".
+func (f *fallbackFace) chainFace(r rune) font.Face {
+	if f.chain == nil {
+		return nil
+	}
+	return f.chain.faceFor(r)
+}
+
 func (f *fallbackFace) GlyphBounds(r rune) (bounds fixed.Rectangle26_6, advance fixed.Int26_6, ok bool) {
 	for _, face := range f.faces {
 		bounds, advance, ok = face.GlyphBounds(r)
 		if ok {
 			return bounds, advance, ok
 		}
+	}
+	if face := f.chainFace(r); face != nil {
+		return face.GlyphBounds(r)
 	}
 	if len(f.faces) > 0 {
 		return f.faces[0].GlyphBounds(r)
@@ -139,6 +287,9 @@ func (f *fallbackFace) GlyphAdvance(r rune) (advance fixed.Int26_6, ok bool) {
 			return advance, ok
 		}
 	}
+	if face := f.chainFace(r); face != nil {
+		return face.GlyphAdvance(r)
+	}
 	if len(f.faces) > 0 {
 		return f.faces[0].GlyphAdvance(r)
 	}
@@ -151,6 +302,9 @@ func (f *fallbackFace) Glyph(dot fixed.Point26_6, r rune) (dr image.Rectangle, m
 		if ok {
 			return dr, mask, maskp, advance, ok
 		}
+	}
+	if face := f.chainFace(r); face != nil {
+		return face.Glyph(dot, r)
 	}
 	if len(f.faces) > 0 {
 		return f.faces[0].Glyph(dot, r)
@@ -258,27 +412,21 @@ func loadBestFont(fontName string, size float64, dpi float64) (font.Face, int, i
 		return basicfont.Face7x13, 7, 13
 	}
 
-	faces := []font.Face{primaryFace}
-
+	// Existence is all the startup probe checks; the files themselves are
+	// opened by the chain on first use. The old loop read and parsed every
+	// fallback font here, which held hundreds of megabytes for glyphs most
+	// sessions never draw.
+	var chain *guiFallbackChain
 	for _, path := range fallbackFontPaths {
-		data, err := os.ReadFile(path)
-		if err != nil {
+		if _, err := os.Stat(path); err != nil {
 			continue
 		}
-		f, err := parseFontBytes(data)
-		if err != nil {
-			continue
+		DebugLog("GUI_FONT: fallback present, deferred until first use: %s", path)
+		if chain == nil {
+			chain = &guiFallbackChain{size: size, dpi: dpi}
 		}
-		face, err := opentype.NewFace(f, &opentype.FaceOptions{
-			Size:    size,
-			DPI:     dpi,
-			Hinting: font.HintingFull,
-		})
-		if err != nil {
-			continue
-		}
-		faces = append(faces, face)
+		chain.entries = append(chain.entries, guiFallbackEntry{path: path})
 	}
 
-	return &fallbackFace{faces: faces}, cellW, cellH
+	return &fallbackFace{faces: []font.Face{primaryFace}, chain: chain}, cellW, cellH
 }

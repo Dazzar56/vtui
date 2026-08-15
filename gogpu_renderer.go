@@ -48,24 +48,8 @@ type fallbackFontEntry struct {
 	face   text.Face     // retained only once the font has supplied a glyph
 }
 
-// runeCoverage is a bitmap of the runes a font has glyphs for, over planes 0
-// and 1 — everything a terminal plausibly draws, emoji included. Runes above
-// plane 1 are so rare that "maybe" (and a re-parse to find out) is the right
-// answer for them.
-type runeCoverage struct {
-	bits [0x20000 / 64]uint64
-}
-
-func (c *runeCoverage) maybeHas(r rune) bool {
-	if r < 0 {
-		return false
-	}
-	if r >= 0x20000 {
-		return true
-	}
-	return c.bits[r>>6]&(1<<(uint(r)&63)) != 0
-}
-
+// buildRuneCoverage condenses a gg face's cmap into a runeCoverage bitmap
+// (the type lives in gui_font.go, which compiles on every GUI platform).
 func buildRuneCoverage(f text.Face) *runeCoverage {
 	cov := &runeCoverage{}
 	for r := rune(0); r < 0x20000; r++ {
