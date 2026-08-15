@@ -31,11 +31,17 @@ type Animator[T any] interface {
 	Tick(dt float64) (val T, done bool)
 }
 
+// Watcher provides a value-agnostic notification subscription.
+type Watcher interface {
+	Watch(handler func()) func()
+}
+
 type Property[T any] interface {
 	Get() T
 	Set(val T)
 	OnChange(handler func(newVal T)) func()
 	SetBehavior(b BehaviorDef[T])
+	Watch(handler func()) func()
 }
 
 type property[T any] struct {
@@ -122,6 +128,12 @@ func (p *property[T]) OnChange(handler func(T)) func() {
 		defer p.mu.Unlock()
 		delete(p.handlers, id)
 	}
+}
+
+func (p *property[T]) Watch(handler func()) func() {
+	return p.OnChange(func(T) {
+		handler()
+	})
 }
 
 // SafeSet updates the property value on the global update queue if configured.

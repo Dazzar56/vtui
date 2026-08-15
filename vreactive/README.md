@@ -10,6 +10,9 @@
 - **`StateMachine`**: Declarative state transitions and property setters.
 - **`Behavior[T]` & `Animator[T]`**: Smooth and discrete property transition animations (`SmoothBehavior`, `DiscreteBehavior`) supporting easing curves (`EaseOutBack`, `EaseInOutQuad`, `EaseOutBounce`, etc.).
 - **`RGBInterpolator`**: Seamless 24-bit TrueColor animation and channel blending.
+- **`Effect(fn, deps...)`**: Signal-based side-effects running initially and tracking multi-property changes.
+- **`TwoWayBind`**: Cycle-safe bidirectional binding between state properties and external UI components.
+- **`BindEnabled` / `BindVisible`**: One-line declarative adapters linking widget flags directly to boolean properties.
 - **Cycle Detection**: Prevents infinite notification loops by enforcing a maximum call depth limit.
 - **Thread Safety**: Mutex-protected reads/writes and `SafeSet` for asynchronous background goroutine updates via UI event queues.
 
