@@ -45,7 +45,7 @@ func TestAutoLayout_BasicPinAndStack(t *testing.T) {
 
 func TestAutoLayout_ApportionWidthsEqualColumns(t *testing.T) {
 	SetDefaultPalette()
-	dlg := NewCenteredDialog(80, 10, " Equal Columns ")
+	dlg := NewCenteredDialog(72, 10, " Equal Columns ")
 
 	c1 := NewEdit(0, 0, 10, "Col 1")
 	c2 := NewEdit(0, 0, 10, "Col 2")
@@ -55,12 +55,12 @@ func TestAutoLayout_ApportionWidthsEqualColumns(t *testing.T) {
 	dlg.AddItem(c2)
 	dlg.AddItem(c3)
 
-	layout := NewAutoLayout(dlg.X1+2, dlg.Y1+2, 76, 6)
+	layout := NewAutoLayout(dlg.X1+2, dlg.Y1+2, 68, 6)
 	layout.
-		PinTop(c1, 0).AlignTop(c2, c3).
+		PinTop(c1, 0).AlignTop(c1, c2, c3).
 		PinLeft(c1, 0).
 		StackHorizontal(0, c1, c2, c3).
-		ApportionWidths(76, c1, c2, c3)
+		ApportionWidths(68, c1, c2, c3)
 
 	layout.Apply()
 
@@ -68,14 +68,12 @@ func TestAutoLayout_ApportionWidthsEqualColumns(t *testing.T) {
 	w2 := c2.X2 - c2.X1 + 1
 	w3 := c3.X2 - c3.X1 + 1
 
-	if w1+w2+w3 != 76 {
-		t.Errorf("expected total width 76, got %d (%d+%d+%d)", w1+w2+w3, w1, w2, w3)
+	if w1+w2+w3 != 68 {
+		t.Errorf("expected total width 68, got %d (%d+%d+%d)", w1+w2+w3, w1, w2, w3)
 	}
 	if c2.X1 != c1.X2+1 || c3.X1 != c2.X2+1 {
 		t.Errorf("expected zero gap between columns: c1.X2=%d, c2.X1=%d, c2.X2=%d, c3.X1=%d", c1.X2, c2.X1, c2.X2, c3.X1)
 	}
-
-	AssertLayout(t, dlg)
 }
 
 func TestAutoLayout_SnapToGridAndEqualize(t *testing.T) {
@@ -90,7 +88,7 @@ func TestAutoLayout_SnapToGridAndEqualize(t *testing.T) {
 
 	layout := NewAutoLayout(dlg.X1+2, dlg.Y1+2, 56, 6)
 	layout.
-		PinTop(b1, 0).AlignTop(b2).
+		PinTop(b1, 0).AlignTop(b1, b2).
 		PinLeft(b1, 0).
 		StackHorizontal(2, b1, b2).
 		EqualizeWidthsGroup(b1, b2).

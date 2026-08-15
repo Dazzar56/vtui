@@ -334,21 +334,85 @@ func (al *AutoLayout) SetMinHeight(el UIElement, minH int) *AutoLayout {
 // across elements so that sum(Widths) == targetWidth with zero gaps or overflows (FreeType autohinting).
 func (al *AutoLayout) ApportionWidths(targetWidthVarOrConst any, elements ...UIElement) *AutoLayout {
 	vars := make([]*kiwi.Variable, len(elements))
+	var sumExpr *kiwi.Expression
 	for i, el := range elements {
-		vars[i] = al.Var(el).Width
+		wVar := al.Var(el).Width
+		vars[i] = wVar
+		if sumExpr == nil {
+			sumExpr = kiwi.NewExpression(wVar)
+		} else {
+			sumExpr = sumExpr.Plus(wVar)
+		}
 	}
 	group := kiwi.ApportionGroup{Vars: vars}
 	switch t := targetWidthVarOrConst.(type) {
 	case *kiwi.Variable:
 		group.TargetVar = t
+		if sumExpr != nil {
+			_ = al.solver.AddConstraint(kiwi.NewConstraint(sumExpr, kiwi.OpEq, t))
+		}
 	case int:
 		group.TargetConst = t
+		if sumExpr != nil {
+			_ = al.solver.AddConstraint(kiwi.NewConstraint(sumExpr, kiwi.OpEq, float64(t)))
+		}
 	case float64:
 		group.TargetConst = int(t)
+		if sumExpr != nil {
+			_ = al.solver.AddConstraint(kiwi.NewConstraint(sumExpr, kiwi.OpEq, t))
+		}
 	case UIElement:
-		group.TargetVar = al.Var(t).Width
+		targetVar := al.Var(t).Width
+		group.TargetVar = targetVar
+		if sumExpr != nil {
+			_ = al.solver.AddConstraint(kiwi.NewConstraint(sumExpr, kiwi.OpEq, targetVar))
+		}
 	default:
 		panic(fmt.Errorf("invalid target for ApportionWidths: %v", targetWidthVarOrConst))
+	}
+	al.ds.AddApportionGroup(group)
+	return al
+}
+
+// ApportionHeights registers an ApportionGroup in DiscreteSolver to distribute rounding remainders
+// across elements so that sum(Heights) == targetHeight with zero gaps or overflows (FreeType autohinting).
+func (al *AutoLayout) ApportionHeights(targetHeightVarOrConst any, elements ...UIElement) *AutoLayout {
+	vars := make([]*kiwi.Variable, len(elements))
+	var sumExpr *kiwi.Expression
+	for i, el := range elements {
+		hVar := al.Var(el).Height
+		vars[i] = hVar
+		if sumExpr == nil {
+			sumExpr = kiwi.NewExpression(hVar)
+		} else {
+			sumExpr = sumExpr.Plus(hVar)
+		}
+	}
+	group := kiwi.ApportionGroup{Vars: vars}
+	switch t := targetHeightVarOrConst.(type) {
+	case *kiwi.Variable:
+		group.TargetVar = t
+		if sumExpr != nil {
+			_ = al.solver.AddConstraint(kiwi.NewConstraint(sumExpr, kiwi.OpEq, t))
+		}
+	case int:
+		group.TargetConst = t
+		if sumExpr != nil {
+			_ = al.solver.AddConstraint(kiwi.NewConstraint(sumExpr, kiwi.OpEq, float64(t)))
+		}
+	case float64:
+		group.TargetConst = int(t)
+		if sumExpr != nil {
+			_ = al.solver.AddConstraint(kiwi.NewConstraint(sumExpr, kiwi.OpEq, t))
+		}
+	case UIElement:
+		targetVar := al.Var(t).Height
+		group.TargetVar = targetVar
+		if sumExpr != nil {
+			_ = al.solver.AddConstraint(kiwi.NewConstraint(sumExpr, kiwi.OpEq, targetVar))
+		}
+	default:
+		panic(fmt.Errorf("invalid target for ApportionHeights: %v", targetHeightVarOrConst))
 	}
 	al.ds.AddApportionGroup(group)
 	return al

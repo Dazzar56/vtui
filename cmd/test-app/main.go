@@ -69,6 +69,9 @@ func (d *DemoWindow) HandleCommand(cmd int, args any) bool {
 	case 1004: // Add a workspace-tab demo screen
 		addDemoWorkspace()
 		return true
+	case 1005: // AutoLayout demo dialog
+		showAutoLayoutDialog()
+		return true
 	}
 	// Fallback to default window behavior (e.g. CmClose, CmZoom)
 	return d.Window.HandleCommand(cmd, args)
@@ -273,6 +276,77 @@ func buildTableDialog() *vtui.Window {
 	return dlg
 }
 
+func showAutoLayoutDialog() {
+	vtui.FrameManager.Push(buildAutoLayoutDialog())
+}
+
+func buildAutoLayoutDialog() *vtui.Window {
+	dlg := vtui.NewCenteredDialog(68, 18, " AutoLayout (Discrete Cassowary) Demo ")
+	dlg.ShowClose = true
+
+	x, y := dlg.X1, dlg.Y1
+
+	// Left group: Form with vertical stack and filled inputs
+	groupForm := vtui.NewGroupBox(x+2, y+1, x+33, y+13, "Constraint Form")
+	lbl1 := vtui.NewLabel(0, 0, "Username:", nil)
+	edit1 := vtui.NewEdit(0, 0, 10, "alex_dev")
+	lbl2 := vtui.NewLabel(0, 0, "Role:", nil)
+	combo2 := vtui.NewComboBox(0, 0, 10, []string{"Developer", "Admin", "Auditor"})
+
+	dlg.AddItem(groupForm)
+	groupForm.AddItem(lbl1)
+	groupForm.AddItem(edit1)
+	groupForm.AddItem(lbl2)
+	groupForm.AddItem(combo2)
+
+	formLayout := vtui.NewAutoLayout(groupForm.X1+2, groupForm.Y1+1, 27, 10)
+	formLayout.
+		PinTop(lbl1, 0).PinLeft(lbl1, 0).
+		StackVertical(1, lbl1, edit1).FillWidth(edit1, 0, 0).
+		StackVertical(1, edit1, lbl2).PinLeft(lbl2, 0).
+		StackVertical(1, lbl2, combo2).FillWidth(combo2, 0, 0)
+	formLayout.Apply()
+
+	// Right group: Apportioned & Equalized Columns
+	groupCols := vtui.NewGroupBox(x+35, y+1, x+65, y+13, "FreeType Autohinting")
+	col1 := vtui.NewEdit(0, 0, 5, "25%")
+	col2 := vtui.NewEdit(0, 0, 5, "50%")
+	col3 := vtui.NewEdit(0, 0, 5, "25%")
+	lblHint := vtui.NewLabel(0, 0, "Apportioned w/ 1-cell air:", nil)
+
+	dlg.AddItem(groupCols)
+	groupCols.AddItem(lblHint)
+	groupCols.AddItem(col1)
+	groupCols.AddItem(col2)
+	groupCols.AddItem(col3)
+
+	colsLayout := vtui.NewAutoLayout(groupCols.X1+2, groupCols.Y1+1, 26, 10)
+	colsLayout.
+		PinTop(lblHint, 0).PinLeft(lblHint, 0).
+		StackVertical(1, lblHint, col1).AlignTop(col1, col2, col3).
+		PinLeft(col1, 0).
+		StackHorizontal(1, col1, col2, col3).
+		ApportionWidths(24, col1, col2, col3)
+	colsLayout.Apply()
+
+	// Bottom Buttons
+	btnOk := vtui.NewButton(0, 0, "&Ok")
+	btnOk.OnClick = func() { dlg.Close() }
+	btnCancel := vtui.NewButton(0, 0, "&Cancel")
+	btnCancel.OnClick = func() { dlg.Close() }
+
+	dlg.AddItem(btnOk)
+	dlg.AddItem(btnCancel)
+
+	bottomLayout := vtui.NewAutoLayout(x+2, y+14, 64, 2)
+	bottomLayout.
+		PinBottom(btnOk, 0).PinBottom(btnCancel, 0).
+		StackHorizontal(2, btnOk, btnCancel).
+		CenterHorizontalGroup(btnOk, btnCancel)
+	bottomLayout.Apply()
+
+	return dlg
+}
 func main() {
 	guiMode := false
 	guiBackend := ""
@@ -353,6 +427,7 @@ func main() {
 				{Separator: true},
 				{Text: "UI S&howcase", Command: 1002},
 				{Text: "&Table Demo", Command: 1003},
+				{Text: "&AutoLayout Demo", Command: 1005},
 				{Text: "New Workspace &Tab", Command: 1004},
 			}},
 			{Label: "&Right", SubItems: []vtui.MenuItem{{Text: "Command &2"}}},
