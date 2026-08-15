@@ -310,7 +310,7 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 			os.Setenv("GOGPU_DX12_DXIL", "1")
 		}
 	}
-	face, fallbackFaces, cellW, cellH := loadGogpuFont(fontName, fontSize)
+	face, fallbackChain, cellW, cellH := loadGogpuFont(fontName, fontSize)
 
 	fmt.Fprintf(os.Stdout, "GOGPU_HOST: Starting RunGogpuHost %dx%d (Cell: %dx%d)\n", cols, rows, cellW, cellH)
 	DebugLog("GOGPU_HOST: Starting RunGogpuHost %dx%d (Cell: %dx%d)", cols, rows, cellW, cellH)
@@ -338,7 +338,7 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 	host.scr = scr
 	scr.AllocBuf(cols, rows)
 	renderer := NewGogpuRenderer(host, face, cellW, cellH)
-	renderer.SetFallbackFaces(fallbackFaces)
+	renderer.SetFallbackFontChain(fallbackChain)
 	scr.Renderer = renderer
 	scr.Graphics().SetProtocol(GraphicsNative)
 	scr.Graphics().SetCellSize(cellW, cellH)
@@ -714,14 +714,14 @@ func isGogpuFaceSafe(f text.Face) (ok bool) {
 	return
 }
 
-// loadGogpuFont returns the primary face plus the fallback faces that cover
-// the runes the primary lacks. The fallbacks are returned as separate faces
-// rather than folded into a gg text.MultiFace on purpose: a MultiFace has no
-// single FontSource, and the GPU glyph-mask engine refuses such a face and
-// sends every DrawString down the CPU path. Selecting the face per rune keeps
-// each face a plain single-source one, so both the primary and the fallbacks
-// stay on the GPU path.
-func loadGogpuFont(fontName string, size float64) (text.Face, []text.Face, int, int) {
+// loadGogpuFont returns the primary face plus a lazily loaded chain of the
+// fallback fonts that cover the runes the primary lacks. The fallbacks are
+// kept as separate faces rather than folded into a gg text.MultiFace on
+// purpose: a MultiFace has no single FontSource, and the GPU glyph-mask
+// engine refuses such a face and sends every DrawString down the CPU path.
+// Selecting the face per rune keeps each face a plain single-source one, so
+// both the primary and the fallbacks stay on the GPU path.
+func loadGogpuFont(fontName string, size float64) (text.Face, *fontFallbackChain, int, int) {
 	if size <= 0 {
 		size = 18.0
 	}
@@ -762,29 +762,34 @@ func loadGogpuFont(fontName string, size float64) (text.Face, []text.Face, int, 
 	// something worse than a .notdef box, the old behaviour is one variable
 	// away.
 	noFallback := os.Getenv("VTUI_GOGPU_NO_FALLBACK") != ""
-	var fallbacks []text.Face
 
 	// The fallbacks cannot be attached to the face yet — see the note below on
 	// MultiFace — but which of them exist on this machine is worth recording.
 	// "No CJK font installed" and "CJK font installed and never consulted" are
 	// different bugs with identical symptoms, and the log is the only place
-	// they can be told apart. Parsing is part of the probe on purpose: a .ttc
-	// collection that gg refuses to open explains a missing glyph just as well
-	// as a missing file does.
-	for _, p := range fallbackFontPaths {
-		if _, err := os.Stat(p); err != nil {
-			continue
+	// they can be told apart.
+	//
+	// Existence is all the startup probe checks now. The old probe also parsed
+	// every file, which cost ~800 MB of heap on a stock macOS (the fallback
+	// list is ~400 MB of font files and gg holds each twice) in sessions that
+	// never drew a single glyph from them. Whether gg can actually open a file
+	// is still logged — by the chain's warm() sweep, shortly after startup.
+	var chain *fontFallbackChain
+	if noFallback {
+		DebugLog("GOGPU_DIAG_FONT: fallback chain disabled by VTUI_GOGPU_NO_FALLBACK")
+	} else {
+		for _, p := range fallbackFontPaths {
+			if _, err := os.Stat(p); err != nil {
+				continue
+			}
+			DebugLog("GOGPU_DIAG_FONT: fallback present, deferred until first use: %s", p)
+			if chain == nil {
+				chain = newGogpuFallbackChain(size)
+			}
+			chain.entries = append(chain.entries, fontFallbackEntry{path: p})
 		}
-		src, err := text.NewFontSourceFromFile(p)
-		if err != nil {
-			DebugLog("GOGPU_DIAG_FONT: fallback present but gg cannot open it: %s: %v", p, err)
-			continue
-		}
-		probe := src.Face(size)
-		DebugLog("GOGPU_DIAG_FONT: fallback ok: %s (has 字=%v, has emoji=%v)",
-			p, probe.HasGlyph('字'), probe.HasGlyph('😀'))
-		if !noFallback {
-			fallbacks = append(fallbacks, probe)
+		if chain != nil {
+			chain.warm()
 		}
 	}
 
@@ -797,7 +802,7 @@ func loadGogpuFont(fontName string, size float64) (text.Face, []text.Face, int, 
 	//
 	// This can be revisited when gg lands per-font-run GPU support (ADR-065),
 	// and only if it measures better than the chain below.
-	return primaryFace, fallbacks, cellW, cellH
+	return primaryFace, chain, cellW, cellH
 }
 
 func isNumLockEffectiveGogpu(mods vtinput.ControlKeyState) bool {
