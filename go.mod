@@ -1,6 +1,6 @@
 module github.com/unxed/vtui
 
-go 1.25.5
+go 1.26.0
 
 require (
 	github.com/gogpu/gg v0.52.2
@@ -12,6 +12,7 @@ require (
 	github.com/neurlang/wayland v0.4.2
 	github.com/rivo/uniseg v0.2.0
 	github.com/unxed/keytrans v0.1.31
+	github.com/unxed/kiwi-go v0.1.0
 	github.com/unxed/vtinput v0.1.2
 	golang.org/x/image v0.44.0
 	golang.org/x/sys v0.47.0
@@ -45,4 +46,4 @@ require (
 
 replace github.com/ebitengine/purego => github.com/unxed/pureffi v0.1.14
 
-replace github.com/ebitengine/hideconsole => ./internal/hideconsole
+// replace github.com/ebitengine/hideconsole => ./internal/hideconsole
