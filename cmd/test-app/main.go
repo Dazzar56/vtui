@@ -288,6 +288,7 @@ func buildAutoLayoutDialog() *vtui.Window {
 
 	// Left group: Form with vertical stack and filled inputs
 	groupForm := vtui.NewGroupBox(x+2, y+2, x+33, y+12, "Constraint Form")
+	groupForm.SetGrowMode(vtui.GrowHiY)
 	lbl1 := vtui.NewLabel(0, 0, "Username:", nil)
 	edit1 := vtui.NewEdit(0, 0, 10, "alex_dev")
 	lbl2 := vtui.NewLabel(0, 0, "Role:", nil)
@@ -306,9 +307,12 @@ func buildAutoLayoutDialog() *vtui.Window {
 		StackVertical(1, edit1, lbl2).PinLeft(lbl2, 0).
 		StackVertical(1, lbl2, combo2).FillWidth(combo2, 0, 0)
 	formLayout.Apply()
+	formLayout.SetGrowMode(vtui.GrowHiY)
+	dlg.AddItem(formLayout)
 
 	// Right group: Apportioned & Equalized Columns
 	groupCols := vtui.NewGroupBox(x+35, y+2, x+65, y+12, "FreeType Autohinting")
+	groupCols.SetGrowMode(vtui.GrowHiX | vtui.GrowHiY)
 	col1 := vtui.NewEdit(0, 0, 5, "25%")
 	col2 := vtui.NewEdit(0, 0, 5, "50%")
 	col3 := vtui.NewEdit(0, 0, 5, "25%")
@@ -328,6 +332,8 @@ func buildAutoLayoutDialog() *vtui.Window {
 		StackHorizontal(1, col1, col2, col3).
 		ApportionWidths(24, col1, col2, col3)
 	colsLayout.Apply()
+	colsLayout.SetGrowMode(vtui.GrowHiX | vtui.GrowHiY)
+	dlg.AddItem(colsLayout)
 
 	// Bottom Buttons
 	btnOk := vtui.NewButton(0, 0, "&Ok")
@@ -344,6 +350,8 @@ func buildAutoLayoutDialog() *vtui.Window {
 		StackHorizontal(2, btnOk, btnCancel).
 		CenterHorizontalGroup(btnOk, btnCancel)
 	bottomLayout.Apply()
+	bottomLayout.SetGrowMode(vtui.GrowLoY | vtui.GrowHiY | vtui.GrowHiX)
+	dlg.AddItem(bottomLayout)
 
 	return dlg
 }
