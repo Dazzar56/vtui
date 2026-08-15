@@ -683,38 +683,84 @@ func main() {
 }
 
 func showReactiveDemoDialog() {
-	dlg := vtui.NewCenteredDialog(42, 15, " Reactive Demo ")
+	dlg := buildReactiveDemoDialog()
+	vtui.FrameManager.Push(dlg)
+}
+
+func buildReactiveDemoDialog() *vtui.Window {
+	dlg := vtui.NewCenteredDialog(56, 20, " Reactive Demo ")
 	dlg.ShowClose = true
 
+	// 1. Reactive Model
 	nameProp := vreactive.NewProperty("Alice")
+	vipProp := vreactive.NewProperty(false)
+	statusProp := vreactive.NewProperty("Ready to start.")
+
+	// 2. Computed & ComputedIf
 	greetingProp := vreactive.Computed(nameProp, func(name string) string {
 		if name == "" {
 			return "Please enter your name!"
 		}
 		return "Hello, " + name + "!"
 	})
+	vipBadgeProp := vreactive.ComputedIf(vipProp, "⭐ VIP Status: Priority Level 1", "Standard Member")
+	hasNameProp := vreactive.Computed(nameProp, func(n string) bool { return len(n) > 0 })
 
-	edit := vtui.NewEdit(dlg.X1+2, dlg.Y1+2, 20, nameProp.Get())
-	edit.OnTextChange = func(text string) {
-		nameProp.Set(text)
-	}
-
-	lbl := vtui.NewDynamicText(dlg.X1+2, dlg.Y1+4, 38, vtui.Palette[vtui.ColDialogText], func() string {
-		return greetingProp.Get()
-	})
-
-	statusProp := vreactive.NewProperty("Idle")
+	// 3. StateMachine
 	sm := vreactive.NewStateMachine("idle")
 	sm.AddState("idle", vreactive.SetProp(statusProp, "Ready to start."))
 	sm.AddState("running", vreactive.SetProp(statusProp, "Running... Please wait."))
 	sm.AddState("done", vreactive.SetProp(statusProp, "Task completed successfully."))
 	sm.State.Set("idle")
 
-	statusLbl := vtui.NewDynamicText(dlg.X1+2, dlg.Y1+6, 38, vtui.Palette[vtui.ColDialogHighlightText], func() string {
-		return statusProp.Get()
+	// 4. Signals Effect (Side-effect reacting to multi-property dependencies)
+	effectSummary := vreactive.NewProperty("")
+	vreactive.Effect(func() {
+		mode := "Standard"
+		if vipProp.Get() {
+			mode = "VIP"
+		}
+		effectSummary.Set(fmt.Sprintf("Effect summary: User=%q, Mode=%s", nameProp.Get(), mode))
+	}, nameProp, vipProp)
+
+	// --- UI Elements ---
+	x := dlg.X1
+
+	// Row 1: Label + Edit (TwoWayBind) + Clear Button (BindEnabled)
+	edit := vtui.NewEdit(x+8, dlg.Y1+2, 24, "")
+	vreactive.TwoWayBind(
+		nameProp,
+		edit.GetText,
+		edit.SetText,
+		func(onChange func(string)) func() {
+			edit.OnTextChange = onChange
+			return func() { edit.OnTextChange = nil }
+		},
+	)
+	lblTitle := vtui.NewLabel(x+2, dlg.Y1+2, "&Name:", edit)
+
+	btnClear := vtui.NewButton(x+33, dlg.Y1+2, "&Clear")
+	vreactive.BindEnabled(hasNameProp, btnClear)
+	btnClear.OnClick = func() {
+		nameProp.Set("")
+	}
+
+	// Row 2: Greeting (Computed)
+	lblGreeting := vtui.NewDynamicText(x+2, dlg.Y1+4, 51, vtui.Palette[vtui.ColDialogText], func() string {
+		return greetingProp.Get()
 	})
 
-	btnStart := vtui.NewButton(dlg.X1+2, dlg.Y1+8, "&Start Task")
+	// Row 3: Status (StateMachine)
+	lblStatus := vtui.NewDynamicText(x+2, dlg.Y1+6, 51, vtui.Palette[vtui.ColDialogHighlightText], func() string {
+		return "Status: " + statusProp.Get()
+	})
+
+	// Row 4: Buttons (Start with BindEnabled, Animate with Easing.EaseOutBounce)
+	btnStart := vtui.NewButton(x+2, dlg.Y1+8, "&Start Task")
+	isIdleOrDone := vreactive.Computed(sm.State, func(s string) bool {
+		return s == "idle" || s == "done"
+	})
+	vreactive.BindEnabled(isIdleOrDone, btnStart)
 	btnStart.OnClick = func() {
 		if sm.State.Get() != "idle" && sm.State.Get() != "done" {
 			return
@@ -728,19 +774,15 @@ func showReactiveDemoDialog() {
 		})
 	}
 
-	btnAnimate := vtui.NewButton(dlg.X1+18, dlg.Y1+8, "&Animate")
+	// Behavior animation using EaseOutBounce
 	progressProp := vreactive.NewProperty(0.0)
 	progressProp.SetBehavior(&vreactive.SmoothBehavior[float64]{
-		Duration: 2.0,
+		Duration: 1.5,
+		Easing:   vreactive.EaseOutBounce,
 		Interp:   vreactive.Float64Interpolator,
 	})
 
-	pb := vtui.NewProgressBar(dlg.X1+2, dlg.Y1+10, 38)
-	// We bind to changes and snap immediately, but the behavior animates the property itself.
-	progressProp.OnChange(func(val float64) {
-		pb.SetPercent(int(val))
-	})
-
+	btnAnimate := vtui.NewButton(x+20, dlg.Y1+8, "&Animate (Bounce)")
 	btnAnimate.OnClick = func() {
 		if progressProp.Get() < 100 {
 			progressProp.Set(100.0)
@@ -749,17 +791,43 @@ func showReactiveDemoDialog() {
 		}
 	}
 
-	btnClose := vtui.NewButton(dlg.X1+31, dlg.Y1+8, "&Close")
+	// Row 5: ProgressBar
+	pb := vtui.NewProgressBar(x+2, dlg.Y1+10, 51)
+	progressProp.OnChange(func(val float64) {
+		pb.SetPercent(int(val))
+	})
+
+	// Row 6: Checkbox + ComputedIf Badge
+	chkVIP := vtui.NewCheckbox(x+2, dlg.Y1+12, "&VIP Mode", false)
+	chkVIP.OnChange = func(state int) {
+		vipProp.Set(state == 1)
+	}
+
+	lblVIP := vtui.NewDynamicText(x+15, dlg.Y1+12, 38, vtui.Palette[vtui.ColDialogHighlightText], func() string {
+		return vipBadgeProp.Get()
+	})
+
+	// Row 7: Effect Summary display
+	lblAudit := vtui.NewDynamicText(x+2, dlg.Y1+14, 51, vtui.Palette[vtui.ColDialogText], func() string {
+		return effectSummary.Get()
+	})
+
+	// Row 8: Close Button
+	btnClose := vtui.NewButton(x+22, dlg.Y1+16, "&Close")
 	btnClose.OnClick = func() { dlg.Close() }
 
-	dlg.AddItem(vtui.NewLabel(dlg.X1+2, dlg.Y1+1, "Name:", edit))
+	dlg.AddItem(lblTitle)
 	dlg.AddItem(edit)
-	dlg.AddItem(lbl)
-	dlg.AddItem(statusLbl)
+	dlg.AddItem(btnClear)
+	dlg.AddItem(lblGreeting)
+	dlg.AddItem(lblStatus)
 	dlg.AddItem(btnStart)
 	dlg.AddItem(btnAnimate)
-	dlg.AddItem(btnClose)
 	dlg.AddItem(pb)
+	dlg.AddItem(chkVIP)
+	dlg.AddItem(lblVIP)
+	dlg.AddItem(lblAudit)
+	dlg.AddItem(btnClose)
 
-	vtui.FrameManager.Push(dlg)
+	return dlg
 }

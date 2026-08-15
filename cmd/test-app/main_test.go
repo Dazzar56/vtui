@@ -28,6 +28,16 @@ func TestAutoLayoutDemoDialog_Layout(t *testing.T) {
 	dlg := buildAutoLayoutDialog()
 	vtui.AssertLayout(t, dlg)
 }
+func TestReactiveDemoDialog_Layout(t *testing.T) {
+	vtui.SetDefaultPalette()
+
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+
+	dlg := buildReactiveDemoDialog()
+	vtui.AssertLayout(t, dlg)
+}
 
 func TestWorkspaceTabControlDemo(t *testing.T) {
 	vtui.SetDefaultPalette()
