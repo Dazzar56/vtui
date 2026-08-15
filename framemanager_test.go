@@ -2743,17 +2743,17 @@ func TestFrameManager_TransparentBaseClearsVacatedCells(t *testing.T) {
 	fm.Push(frame)
 	fm.renderPhase()
 	if cell := scr.GetCell(2, 1); cell.Char != 'X' {
-		t.Fatalf("expected frame painted at (2,1), got %q", cell.Char)
+		t.Fatalf("expected frame painted at (2,1), got %q", rune(cell.Char))
 	}
 
 	// Move the frame: the vacated cell must be cleared, not keep the copy.
 	frame.x, frame.y = 5, 2
 	fm.renderPhase()
 	if cell := scr.GetCell(2, 1); cell.Char != 0 {
-		t.Errorf("vacated cell (2,1) still holds %q: moved frames leave a trail", cell.Char)
+		t.Errorf("vacated cell (2,1) still holds %q: moved frames leave a trail", rune(cell.Char))
 	}
 	if cell := scr.GetCell(5, 2); cell.Char != 'X' {
-		t.Errorf("expected frame painted at (5,2), got %q", cell.Char)
+		t.Errorf("expected frame painted at (5,2), got %q", rune(cell.Char))
 	}
 }
 
