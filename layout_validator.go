@@ -88,7 +88,7 @@ func ValidateLayoutWithRules(c Container, rules LayoutRules) []error {
 	filtered := make([]UIElement, 0, len(items))
 	for _, it := range items {
 		switch it.(type) {
-		case *VBoxLayout, *HBoxLayout:
+		case *VBoxLayout, *HBoxLayout, *AutoLayout:
 			continue
 		}
 		filtered = append(filtered, it)
