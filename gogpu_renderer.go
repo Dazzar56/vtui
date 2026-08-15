@@ -15,105 +15,31 @@ import (
 	"github.com/gogpu/gogpu"
 )
 
-// fallbackFontChain hands out fallback faces for runes the primary font
-// lacks, keeping in memory only the fonts that have actually supplied a
-// glyph. The eager version of this cost real memory for text that was never
-// drawn: the macOS fallback list alone is ~400 MB of font files, held twice
-// over by gg (the parsed original and its internal copy) — ~800 MB of heap
-// in every GUI session, almost all of which never rendered a single CJK
-// glyph or emoji.
-//
-// Each entry is parsed at most twice over its lifetime. The first time it is
-// consulted at all, the font is parsed, its rune coverage is condensed into
-// a 16 KB bitmap, and the parse is thrown away unless the font owns the very
-// rune that was asked for. From then on the bitmap answers "does this font
-// cover ch" without the font in memory, so a rune nobody covers — the reason
-// a naive lazy chain still ended up loading everything — costs nothing to
-// ask about again, and a covered rune parses (and this time retains) exactly
-// the one font that will draw it.
-//
-// The chain is consulted in list order, so the priority of fallbackFontPaths
-// is preserved exactly; the only difference from the eager version is *when*
-// a file is read. A file that fails to parse is logged and skipped for good,
-// same as it was at startup before.
-type fallbackFontChain struct {
-	size    float64
-	entries []fallbackFontEntry
-}
-
-type fallbackFontEntry struct {
-	path   string
-	failed bool          // gg could not open it; never try again
-	cov    *runeCoverage // built on first parse, nil until then
-	face   text.Face     // retained only once the font has supplied a glyph
-}
-
-// buildRuneCoverage condenses a gg face's cmap into a runeCoverage bitmap
-// (the type lives in gui_font.go, which compiles on every GUI platform).
-func buildRuneCoverage(f text.Face) *runeCoverage {
-	cov := &runeCoverage{}
-	for r := rune(0); r < 0x20000; r++ {
-		if r >= 0xD800 && r <= 0xDFFF {
-			continue // surrogates are not runes a cmap can hold
-		}
-		if f.HasGlyph(r) {
-			cov.bits[r>>6] |= 1 << (uint(r) & 63)
-		}
-	}
-	return cov
-}
-
-// faceFor returns the first fallback face that owns a glyph for ch, walking
-// the fonts in priority order, or nil when none of them covers it. The
-// caller must serialize calls (GogpuRenderer holds r.mu) and is expected to
-// memoise the answer per rune, so each rune walks this at most once.
-func (c *fallbackFontChain) faceFor(ch rune) text.Face {
-	for i := range c.entries {
-		e := &c.entries[i]
-		if e.failed {
-			continue
-		}
-		if e.face != nil {
-			if e.face.HasGlyph(ch) {
-				return e.face
+// newGogpuFallbackChain binds the shared fallback chain (gui_font.go) to gg
+// faces. gg's HasGlyph reflects what DrawString can actually draw, so covers
+// and renders coincide here, unlike on the x/image side.
+func newGogpuFallbackChain(size float64) *fontFallbackChain {
+	hasGlyph := func(face any, r rune) bool { return face.(text.Face).HasGlyph(r) }
+	return &fontFallbackChain{
+		logTag: "GOGPU_DIAG_FONT",
+		open: func(path string) (any, error) {
+			src, err := text.NewFontSourceFromFile(path)
+			if err != nil {
+				return nil, err
 			}
-			continue
-		}
-		if e.cov != nil && !e.cov.maybeHas(ch) {
-			continue
-		}
-
-		t0 := time.Now()
-		src, err := text.NewFontSourceFromFile(e.path)
-		if err != nil {
-			e.failed = true
-			DebugLog("GOGPU_DIAG_FONT: fallback present but gg cannot open it: %s: %v", e.path, err)
-			continue
-		}
-		f := src.Face(c.size)
-		if e.cov == nil {
-			e.cov = buildRuneCoverage(f)
-		}
-		if f.HasGlyph(ch) {
-			e.face = f
-			DebugLog("GOGPU_DIAG_FONT: fallback loaded for U+%04X: %s in %v (has 字=%v, has emoji=%v)",
-				ch, e.path, time.Since(t0), f.HasGlyph('字'), f.HasGlyph('😀'))
-			return f
-		}
-		// Parsed, mapped, not needed: the source is dropped here and the
-		// bitmap answers for this font from now on.
-		DebugLog("GOGPU_DIAG_FONT: fallback probed for U+%04X and dropped: %s in %v",
-			ch, e.path, time.Since(t0))
+			return src.Face(size), nil
+		},
+		covers:  hasGlyph,
+		renders: hasGlyph,
+		drop:    func(any) {},
 	}
-	return nil
 }
 
 type GogpuRenderer struct {
 	mu           sync.Mutex
 	host         *GogpuHost
 	face         text.Face
-	fallbacks    []text.Face
-	chain        *fallbackFontChain
+	chain        *fontFallbackChain
 	faceCache    map[rune]text.Face
 	cellW, cellH int // logical cell sizes from font measurement
 	cols, rows   int // dimensions of the current renderBuf
@@ -149,18 +75,10 @@ func NewGogpuRenderer(host *GogpuHost, face text.Face, cw, ch int) *GogpuRendere
 	}
 }
 
-// SetFallbackFaces installs the faces consulted for runes the primary font
-// has no glyph for. Passing nil restores primary-only rendering.
-func (r *GogpuRenderer) SetFallbackFaces(faces []text.Face) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.fallbacks = faces
-	r.faceCache = nil
-}
-
 // SetFallbackFontChain installs a lazily loaded fallback chain, consulted
-// after any faces installed by SetFallbackFaces. Passing nil removes it.
-func (r *GogpuRenderer) SetFallbackFontChain(chain *fallbackFontChain) {
+// for runes the primary font has no glyph for. Passing nil restores
+// primary-only rendering.
+func (r *GogpuRenderer) SetFallbackFontChain(chain *fontFallbackChain) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.chain = chain
@@ -176,7 +94,7 @@ func (r *GogpuRenderer) SetFallbackFontChain(chain *fallbackFontChain) {
 // The caller must hold r.mu. DrawToScreen, the only caller, holds it for the
 // whole frame.
 func (r *GogpuRenderer) faceFor(ch rune) text.Face {
-	if r.face == nil || (len(r.fallbacks) == 0 && r.chain == nil) {
+	if r.face == nil || r.chain == nil {
 		return r.face
 	}
 	if f, ok := r.faceCache[ch]; ok {
@@ -185,22 +103,13 @@ func (r *GogpuRenderer) faceFor(ch rune) text.Face {
 
 	f := r.face
 	if !r.face.HasGlyph(ch) {
-		found := false
-		for _, fb := range r.fallbacks {
-			if fb != nil && fb.HasGlyph(ch) {
-				f = fb
-				found = true
-				break
-			}
-		}
-		if !found && r.chain != nil {
-			// The chain opens further font files as needed, so this misses
-			// at most once per rune: the answer — including "nobody has it"
-			// — goes into faceCache below, and a negative answer is final
-			// because the chain has been walked to its end by then.
-			if fb := r.chain.faceFor(ch); fb != nil {
-				f = fb
-			}
+		// The chain opens further font files as needed and memoises its own
+		// answer per rune, so this misses at most once per rune: the answer —
+		// including "nobody has it" — goes into faceCache below, and a
+		// negative answer is final because the chain has been walked to its
+		// end by then.
+		if fb, ok := r.chain.faceFor(ch).(text.Face); ok {
+			f = fb
 		}
 	}
 
