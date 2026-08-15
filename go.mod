@@ -11,7 +11,7 @@ require (
 	github.com/mattn/go-runewidth v0.0.15
 	github.com/neurlang/wayland v0.4.2
 	github.com/rivo/uniseg v0.2.0
-	github.com/unxed/keytrans v0.1.30
+	github.com/unxed/keytrans v0.1.31
 	github.com/unxed/vtinput v0.1.2
 	golang.org/x/image v0.44.0
 	golang.org/x/sys v0.47.0
