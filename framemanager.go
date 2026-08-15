@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/mattn/go-runewidth"
 	"github.com/unxed/vtinput"
+	"github.com/unxed/vtui/vreactive"
 	"golang.org/x/term"
 	"os"
 	"path/filepath"
@@ -259,6 +260,9 @@ type frameManager struct {
 	mousePositionKnown     bool
 	Reader                 *vtinput.Reader
 	currentToast           *Toast
+	animations             []func(dt float64) bool
+	animMu                 sync.Mutex
+	lastAnim               time.Time
 }
 
 type Toast struct {
@@ -293,6 +297,39 @@ func (fm *frameManager) GetActiveToast() string {
 
 // FrameManager is the global instance of the frame manager.
 var FrameManager = &frameManager{}
+
+func (fm *frameManager) AddAnimation(anim func(dt float64) bool) {
+	fm.animMu.Lock()
+	defer fm.animMu.Unlock()
+	fm.animations = append(fm.animations, anim)
+}
+
+func (fm *frameManager) tickAnimations() {
+	fm.animMu.Lock()
+	if len(fm.animations) == 0 {
+		fm.animMu.Unlock()
+		return
+	}
+
+	now := time.Now()
+	if fm.lastAnim.IsZero() {
+		fm.lastAnim = now
+	}
+	dt := now.Sub(fm.lastAnim).Seconds()
+	fm.lastAnim = now
+
+	var active []func(float64) bool
+	for _, anim := range fm.animations {
+		done := anim(dt)
+		if !done {
+			active = append(active, anim)
+		}
+	}
+	fm.animations = active
+	fm.animMu.Unlock()
+
+	fm.Redraw()
+}
 
 // WorkspaceTopInset is the number of rows reserved above application frames
 // for the persistent workspace tab bar.
@@ -644,6 +681,8 @@ func (fm *frameManager) Init(scr *ScreenBuf) {
 	// Hide cursor globally at start
 	fm.scr.SetCursorVisible(false)
 
+	vreactive.GlobalUpdateQueue = fm
+	vreactive.GlobalAnimationManager = fm
 	// Ensure terminal is in a known state before sending escape sequences
 	if _, ok := fm.scr.Renderer.(*AnsiRenderer); ok {
 		initTerminalOS()
@@ -1669,8 +1708,20 @@ func (fm *frameManager) Run(reader *vtinput.Reader) {
 	// Heartbeat for animations and cursor blinking
 	go func() {
 		for fm.running {
-			time.Sleep(250 * time.Millisecond)
-			fm.Redraw()
+			fm.animMu.Lock()
+			hasAnims := len(fm.animations) > 0
+			fm.animMu.Unlock()
+
+			if hasAnims {
+				fm.PostTask(func() { fm.tickAnimations() })
+				time.Sleep(33 * time.Millisecond) // ~30fps
+			} else {
+				fm.animMu.Lock()
+				fm.lastAnim = time.Time{}
+				fm.animMu.Unlock()
+				time.Sleep(250 * time.Millisecond)
+				fm.Redraw()
+			}
 		}
 	}()
 

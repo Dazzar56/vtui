@@ -11,6 +11,7 @@ import (
 
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
+	"github.com/unxed/vtui/vreactive"
 	"golang.org/x/term"
 )
 
@@ -71,6 +72,9 @@ func (d *DemoWindow) HandleCommand(cmd int, args any) bool {
 		return true
 	case 1005: // AutoLayout demo dialog
 		showAutoLayoutDialog()
+		return true
+	case 1006: // Reactive Demo dialog
+		showReactiveDemoDialog()
 		return true
 	}
 	// Fallback to default window behavior (e.g. CmClose, CmZoom)
@@ -437,6 +441,7 @@ func main() {
 				{Text: "&Table Demo", Command: 1003},
 				{Text: "&AutoLayout Demo", Command: 1005},
 				{Text: "New Workspace &Tab", Command: 1004},
+				{Text: "&Reactive Demo", Command: 1006},
 			}},
 			{Label: "&Right", SubItems: []vtui.MenuItem{{Text: "Command &2"}}},
 		}
@@ -675,4 +680,86 @@ func main() {
 	if err := tryRunDefaultGui(); err != nil {
 		runConsole()
 	}
+}
+
+func showReactiveDemoDialog() {
+	dlg := vtui.NewCenteredDialog(42, 15, " Reactive Demo ")
+	dlg.ShowClose = true
+
+	nameProp := vreactive.NewProperty("Alice")
+	greetingProp := vreactive.Computed(nameProp, func(name string) string {
+		if name == "" {
+			return "Please enter your name!"
+		}
+		return "Hello, " + name + "!"
+	})
+
+	edit := vtui.NewEdit(dlg.X1+2, dlg.Y1+2, 20, nameProp.Get())
+	edit.OnTextChange = func(text string) {
+		nameProp.Set(text)
+	}
+
+	lbl := vtui.NewDynamicText(dlg.X1+2, dlg.Y1+4, 38, vtui.Palette[vtui.ColDialogText], func() string {
+		return greetingProp.Get()
+	})
+
+	statusProp := vreactive.NewProperty("Idle")
+	sm := vreactive.NewStateMachine("idle")
+	sm.AddState("idle", vreactive.SetProp(statusProp, "Ready to start."))
+	sm.AddState("running", vreactive.SetProp(statusProp, "Running... Please wait."))
+	sm.AddState("done", vreactive.SetProp(statusProp, "Task completed successfully."))
+	sm.State.Set("idle")
+
+	statusLbl := vtui.NewDynamicText(dlg.X1+2, dlg.Y1+6, 38, vtui.Palette[vtui.ColDialogHighlightText], func() string {
+		return statusProp.Get()
+	})
+
+	btnStart := vtui.NewButton(dlg.X1+2, dlg.Y1+8, "&Start Task")
+	btnStart.OnClick = func() {
+		if sm.State.Get() != "idle" && sm.State.Get() != "done" {
+			return
+		}
+		sm.State.Set("running")
+		vtui.RunAsync(func(ctx *vtui.TaskContext) {
+			time.Sleep(2 * time.Second)
+			ctx.RunOnUI(func() {
+				sm.State.Set("done")
+			})
+		})
+	}
+
+	btnAnimate := vtui.NewButton(dlg.X1+18, dlg.Y1+8, "&Animate")
+	progressProp := vreactive.NewProperty(0.0)
+	progressProp.SetBehavior(&vreactive.SmoothBehavior[float64]{
+		Duration: 2.0,
+		Interp:   vreactive.Float64Interpolator,
+	})
+
+	pb := vtui.NewProgressBar(dlg.X1+2, dlg.Y1+10, 38)
+	// We bind to changes and snap immediately, but the behavior animates the property itself.
+	progressProp.OnChange(func(val float64) {
+		pb.SetPercent(int(val))
+	})
+
+	btnAnimate.OnClick = func() {
+		if progressProp.Get() < 100 {
+			progressProp.Set(100.0)
+		} else {
+			progressProp.Set(0.0)
+		}
+	}
+
+	btnClose := vtui.NewButton(dlg.X1+31, dlg.Y1+8, "&Close")
+	btnClose.OnClick = func() { dlg.Close() }
+
+	dlg.AddItem(vtui.NewLabel(dlg.X1+2, dlg.Y1+1, "Name:", edit))
+	dlg.AddItem(edit)
+	dlg.AddItem(lbl)
+	dlg.AddItem(statusLbl)
+	dlg.AddItem(btnStart)
+	dlg.AddItem(btnAnimate)
+	dlg.AddItem(btnClose)
+	dlg.AddItem(pb)
+
+	vtui.FrameManager.Push(dlg)
 }
