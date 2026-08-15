@@ -27,3 +27,13 @@ func Computed2[T any, A, B any](dep1 Property[A], dep2 Property[B], compute func
 	dep2.OnChange(func(B) { update() })
 	return p
 }
+
+// ComputedIf creates a reactive property that evaluates to whenTrue when cond is true, or whenFalse otherwise.
+func ComputedIf[T any](cond Property[bool], whenTrue, whenFalse T) Property[T] {
+	return Computed(cond, func(c bool) T {
+		if c {
+			return whenTrue
+		}
+		return whenFalse
+	})
+}

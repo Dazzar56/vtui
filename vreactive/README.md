@@ -5,10 +5,11 @@
 ## Features
 
 - **`Property[T]`**: Reactive state container with subscription handlers.
-- **`Computed[T]` / `Computed2[T]`**: Automatically recomputed properties derived from one or two reactive dependencies.
+- **`Computed[T]` / `Computed2[T]` / `ComputedIf[T]`**: Automatically recomputed properties derived from reactive dependencies, including declarative ternary expressions (`ComputedIf`).
 - **`Bind[T]`**: One-way property synchronization.
 - **`StateMachine`**: Declarative state transitions and property setters.
-- **`Behavior[T]` & `Animator[T]`**: Smooth and discrete property transition animations (`SmoothBehavior`, `DiscreteBehavior`).
+- **`Behavior[T]` & `Animator[T]`**: Smooth and discrete property transition animations (`SmoothBehavior`, `DiscreteBehavior`) supporting easing curves (`EaseOutBack`, `EaseInOutQuad`, `EaseOutBounce`, etc.).
+- **`RGBInterpolator`**: Seamless 24-bit TrueColor animation and channel blending.
 - **Cycle Detection**: Prevents infinite notification loops by enforcing a maximum call depth limit.
 - **Thread Safety**: Mutex-protected reads/writes and `SafeSet` for asynchronous background goroutine updates via UI event queues.
 
