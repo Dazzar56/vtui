@@ -29,6 +29,22 @@ var (
 // key belongs to the OS and must stay out of the application's way.
 var gogpuCmdIsCtrl = runtime.GOOS == "darwin"
 
+// gogpuAltComposesText says the platform makes a chord type a character of its
+// own instead of leaving the key its own.
+//
+// macOS is the one that does. Option is a compose modifier there, so
+// [NSEvent characters] for Option+T is "†" and for Option+S is "ß", and the
+// backend hands that over as ordinary text input. An accelerator reading it as
+// the chord's character searches for "†" instead of for "t" — the terminal
+// never has this problem, because Alt+T reaches an application as ESC t.
+//
+// Windows and Linux compose nothing for a plain Alt chord: WM_SYSCHAR and
+// xkbcommon both report the key's own character for it. Alt with Ctrl is
+// AltGr there, and composing is its entire purpose (AltGr+E is €). Their text
+// is right, so it stays as it is, and the character stays out of the key
+// event — filling both would type the chord twice.
+var gogpuAltComposesText = runtime.GOOS == "darwin"
+
 type GogpuHost struct {
 	mu              sync.Mutex
 	app             *gogpu.App
@@ -44,8 +60,10 @@ type GogpuHost struct {
 	lastRuneForVK   map[uint16]rune
 	lastVK          uint16
 	// suppressTextInput drops the text belonging to the keystroke just
-	// handled. A keypad key in navigation mode has already been delivered as
-	// a virtual key, and some platforms hand us its digit anyway.
+	// handled, because the keystroke has already been delivered as a virtual
+	// key: a keypad key in navigation mode whose digit some platforms hand
+	// over anyway, or a chord whose composed symbol macOS reports as text.
+	// One-shot; see gogpuKeystrokeSwallowsText.
 	suppressTextInput bool
 	// The side flags pick which side syncMods reports for a chord. The Ctrl
 	// pair only matters where the Cmd fold is off; with it on, each Ctrl bit
@@ -84,6 +102,116 @@ func (h *GogpuHost) sendEvent(ev *vtinput.InputEvent) {
 		default:
 			DebugLog("GOGPU_HOST: dropped event due to full buffer: %s", ev.String())
 		}
+	}
+}
+
+// charForVK returns the character a modified key should carry: the one this
+// key was last seen to type on the current layout, or else the character its
+// virtual key is named after.
+//
+// The layout memory is what keeps Alt+ф searching for "ф" instead of for the
+// "a" engraved on the same key; the fallback covers the accelerator pressed
+// before its key has ever been typed unmodified, which is the usual case for
+// one.
+func (h *GogpuHost) charForVK(vk uint16) rune {
+	if r := h.lastRuneForVK[vk]; r != 0 {
+		return r
+	}
+	return defaultRuneForVK(vk)
+}
+
+// gogpuKeystrokeSwallowsText reports whether the text following this key press
+// is a leftover to drop rather than typing: the digit of a keypad key already
+// delivered as navigation, or — where the platform composes for chords — the
+// composition of a chord already delivered by virtual key code ("†" for
+// Option+T).
+//
+// The decision is made here, on the key press itself, and carried by the
+// one-shot suppressTextInput flag. Text that arrives without a key press of
+// its own — the character viewer, an IME commit — never had a chord press
+// before it, so nothing marks it for dropping no matter what modifier state
+// was left behind.
+func gogpuKeystrokeSwallowsText(key gpucontext.Key, vk uint16, mods vtinput.ControlKeyState) bool {
+	if isGogpuKeypadKey(key) && gogpuNumpadRune(vk) == 0 {
+		return true
+	}
+	return gogpuAltComposesText && mods&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed|
+		vtinput.LeftAltPressed|vtinput.RightAltPressed) != 0
+}
+
+// handleTextInput takes the text the platform made of a keystroke and decides
+// whether it is typing — in which case it becomes the character of the key
+// press waiting for it, or an event of its own — or the leftovers of a chord
+// that has already been delivered.
+func (h *GogpuHost) handleTextInput(text string) {
+	DebugLog("GOGPU_HOST_EVENT: OnTextInput text=%q", text)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	runes := []rune(text)
+	if len(runes) == 0 {
+		return
+	}
+
+	// This text belongs to a keystroke already delivered whole — a keypad
+	// key resolved to navigation, or a chord whose composition this is (see
+	// gogpuKeystrokeSwallowsText). The key press flushed any pending event
+	// before setting the flag, so there is nothing here to pair the text
+	// with either. Dropping it also keeps a composed character out of
+	// lastRuneForVK below: a key labelled "†" would go on standing for it
+	// in every later chord and key repeat.
+	if h.suppressTextInput {
+		h.suppressTextInput = false
+		DebugLog("GOGPU_HOST_EVENT: dropped text %q, keystroke already delivered as a key", text)
+		return
+	}
+
+	// A Cmd chord is a shortcut, not typing. It already went out as a
+	// Ctrl-modified key event, but macOS reports the plain character for
+	// it anyway; the other platforms deliver no printable text for their
+	// Ctrl chords, so none may be delivered here either.
+	if gogpuCmdIsCtrl && h.superDown {
+		DebugLog("GOGPU_HOST_EVENT: dropped text %q, Super held (Cmd shortcut)", text)
+		return
+	}
+
+	if h.lastRuneForVK == nil {
+		h.lastRuneForVK = make(map[uint16]rune)
+	}
+
+	if h.pendingKeyEvent != nil {
+		if h.pendingKeyTimer != nil {
+			h.pendingKeyTimer.Stop()
+		}
+		h.pendingKeyEvent.Char = runes[0]
+		h.lastRuneForVK[h.pendingKeyEvent.VirtualKeyCode] = runes[0]
+		h.sendEvent(h.pendingKeyEvent)
+		h.pendingKeyEvent = nil
+
+		for i := 1; i < len(runes); i++ {
+			h.sendEvent(&vtinput.InputEvent{
+				Type:            vtinput.KeyEventType,
+				KeyDown:         true,
+				Char:            runes[i],
+				ControlKeyState: h.currentMods,
+			})
+		}
+		return
+	}
+
+	// Control characters stay out of the layout memory: macOS reports "\r"
+	// for Return, and a key learned as one would carry it into every later
+	// chord through charForVK.
+	if h.lastVK != 0 && runes[0] >= ' ' && runes[0] != 0x7f {
+		h.lastRuneForVK[h.lastVK] = runes[0]
+	}
+	for _, r := range runes {
+		h.sendEvent(&vtinput.InputEvent{
+			Type:            vtinput.KeyEventType,
+			KeyDown:         true,
+			Char:            r,
+			ControlKeyState: h.currentMods,
+		})
 	}
 }
 
@@ -260,12 +388,12 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 			DebugLog("GOGPU_HOST_EVENT: OnKeyPress UNMAPPED key=%v", key)
 		}
 
-		// A keypad key that resolved to navigation must not also type its
-		// digit. Whether the platform still emits text for it depends on how
-		// faithfully its keymap tracks NumLock, so rather than trust that,
-		// drop the text this keystroke would carry. Every other key clears
-		// the flag again, and text only ever follows its own key press.
-		host.suppressTextInput = isGogpuKeypadKey(key) && gogpuNumpadRune(vk) == 0
+		// A keystroke already delivered whole must not also type: a keypad
+		// key that resolved to navigation would type its digit, a chord that
+		// the platform composes would type its symbol ("†" for Option+T).
+		// Every other key press reassigns the flag, and text only ever
+		// follows its own key press.
+		host.suppressTextInput = gogpuKeystrokeSwallowsText(key, vk, currMods)
 
 		if host.pendingKeyEvent != nil {
 			if host.pendingKeyTimer != nil {
@@ -288,22 +416,24 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 			}
 
 			if isSpecialOrModifiedKey(vk, currMods) {
-				// Buggy
-				/*
-					// A modified key carries its character too. The X11 and
-					// Wayland backends put the virtual key and the character in
-					// one event unconditionally, and accelerators such as
-					// Alt+letter need the character to know what to search for.
-					// This branch used to send Char zero while the three other
-					// send sites in this function all filled it in, so the same
-					// keystroke meant different things depending on the backend.
-					if ev.Char == 0 && host.lastRuneForVK != nil {
-						ev.Char = host.lastRuneForVK[vk]
-					}
-					if ev.Char == 0 {
-						ev.Char = defaultRuneForVK(vk)
-					}
-				*/
+				// An Alt chord carries its character too, so that an
+				// accelerator such as Alt+letter knows what it stands for.
+				// The X11 and Wayland hosts put the virtual key and the
+				// character in one event, and the ebiten host fills this in
+				// exactly as here.
+				//
+				// Only Alt chords, and only where the platform composes
+				// their text. Everywhere else that text arrives as an event
+				// of its own carrying the right character, and filling this
+				// event too would deliver the same keystroke twice. Ctrl and
+				// Cmd chords stay Char-less on every platform: Group matches
+				// hotkeys on Char without requiring Alt, so a Char here
+				// would make Cmd+D press a &Delete button that Windows and
+				// Linux never see it press.
+				if gogpuAltComposesText && ev.Char == 0 &&
+					currMods&(vtinput.LeftAltPressed|vtinput.RightAltPressed) != 0 {
+					ev.Char = host.charForVK(vk)
+				}
 				host.sendEvent(ev)
 			} else {
 				if host.lastRuneForVK != nil {
@@ -334,69 +464,7 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 		host.mu.Unlock()
 	})
 
-	app.EventSource().OnTextInput(func(text string) {
-		DebugLog("GOGPU_HOST_EVENT: OnTextInput text=%q", text)
-		host.mu.Lock()
-		defer host.mu.Unlock()
-
-		runes := []rune(text)
-		if len(runes) == 0 {
-			return
-		}
-
-		// This text belongs to a keypad key already delivered as navigation.
-		// The key press flushed any pending event before setting the flag, so
-		// there is nothing here to pair the text with either.
-		if host.suppressTextInput {
-			host.suppressTextInput = false
-			DebugLog("GOGPU_HOST_EVENT: dropped keypad text %q, key was navigation", text)
-			return
-		}
-
-		// A Cmd chord is a shortcut, not typing. It already went out as a
-		// Ctrl-modified key event, but macOS reports the plain character for
-		// it anyway; the other platforms deliver no printable text for their
-		// Ctrl chords, so none may be delivered here either.
-		if gogpuCmdIsCtrl && host.superDown {
-			DebugLog("GOGPU_HOST_EVENT: dropped text %q, Super held (Cmd shortcut)", text)
-			return
-		}
-
-		if host.lastRuneForVK == nil {
-			host.lastRuneForVK = make(map[uint16]rune)
-		}
-
-		if host.pendingKeyEvent != nil {
-			if host.pendingKeyTimer != nil {
-				host.pendingKeyTimer.Stop()
-			}
-			host.pendingKeyEvent.Char = runes[0]
-			host.lastRuneForVK[host.pendingKeyEvent.VirtualKeyCode] = runes[0]
-			host.sendEvent(host.pendingKeyEvent)
-			host.pendingKeyEvent = nil
-
-			for i := 1; i < len(runes); i++ {
-				host.sendEvent(&vtinput.InputEvent{
-					Type:            vtinput.KeyEventType,
-					KeyDown:         true,
-					Char:            runes[i],
-					ControlKeyState: host.currentMods,
-				})
-			}
-		} else {
-			if host.lastVK != 0 {
-				host.lastRuneForVK[host.lastVK] = runes[0]
-			}
-			for _, r := range runes {
-				host.sendEvent(&vtinput.InputEvent{
-					Type:            vtinput.KeyEventType,
-					KeyDown:         true,
-					Char:            r,
-					ControlKeyState: host.currentMods,
-				})
-			}
-		}
-	})
+	app.EventSource().OnTextInput(host.handleTextInput)
 
 	app.EventSource().OnKeyRelease(func(key gpucontext.Key, mods gpucontext.Modifiers) {
 		host.mu.Lock()
