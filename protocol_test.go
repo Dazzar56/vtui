@@ -87,14 +87,17 @@ func TestProtocol_Lifecycle(t *testing.T) {
 		VirtualKeyCode: vtinput.VK_RETURN,
 	})
 
-	n, err = clientReader.Read(buf)
-	if err != nil {
-		t.Fatalf("Failed to read command event: %v", err)
-	}
-
 	var cmdEvent UpMessage
-	if err := json.Unmarshal(buf[:n], &cmdEvent); err != nil {
-		t.Fatalf("Failed to parse command event: %v (raw: %s)", err, string(buf[:n]))
+	decoder := json.NewDecoder(clientReader)
+	for {
+		var ev UpMessage
+		if err := decoder.Decode(&ev); err != nil {
+			t.Fatalf("Failed to decode event: %v", err)
+		}
+		if ev.Op == "command" {
+			cmdEvent = ev
+			break
+		}
 	}
 
 	if cmdEvent.Op != "command" || cmdEvent.Cmd != 1000 || cmdEvent.SrcID != "submitBtn" {
