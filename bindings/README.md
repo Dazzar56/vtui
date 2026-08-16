@@ -10,6 +10,7 @@
 |---|---|---|
 | **Python** | Immediate-mode facade (`asyncio` ready) | [bindings/python/README.md](python/README.md) |
 | **Node.js / TypeScript** | Immediate-mode & Typed definitions (`esbuild` style) | [bindings/node/README.md](node/README.md) |
+| **PHP** | Immediate-mode facade via standard streams | [bindings/php/README.md](php/README.md) |
 | **C** | Lightweight 6-function C ABI & immediate facade | [bindings/c/README.md](c/README.md) |
 | **C++** | Modern C++17 RAII wrapper (`vtui.hpp`) | [bindings/cpp/README.md](cpp/README.md) |
 | **WebAssembly (WASM)** | Universal `wasip1` module | [cmd/vtui-wasm](../cmd/vtui-wasm) |
@@ -44,6 +45,21 @@ run((u: Ui) => {
       u.message(" Result ", `You typed:\n${name}`);
     }
   });
+});
+```
+### PHP
+```php
+<?php
+use function Vtui\run;
+use Vtui\Ui;
+
+run(function(Ui $u) {
+    $u->dialog(" Hello vtui ", 40, function() use ($u) {
+        $name = $u->edit("&Name:", "Type here...");
+        if ($u->button("&Ok")) {
+            $u->message(" Result ", "You typed:\n" . $name);
+        }
+    });
 });
 ```
 

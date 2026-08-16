@@ -47,6 +47,23 @@ func TestIntegration_NodeBindings(t *testing.T) {
 		t.Fatalf("Node.js bindings test failed: %v\nOutput:\n%s", err, string(out))
 	}
 }
+func TestIntegration_PHPBindings(t *testing.T) {
+	php, err := exec.LookPath("php")
+	if err != nil {
+		t.Skip("PHP not found on this system. To test PHP bindings, install PHP: 'sudo apt install php-cli' (Debian/Ubuntu) or 'brew install php' (macOS)")
+	}
+
+	testFile := filepath.Join("bindings", "php", "tests", "test_vtui.php")
+	if _, err := os.Stat(testFile); err != nil {
+		t.Skipf("PHP test file %s not found", testFile)
+	}
+
+	cmd := exec.Command(php, testFile)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("PHP bindings test failed: %v\nOutput:\n%s", err, string(out))
+	}
+}
 func TestIntegration_CBindingsCompilation(t *testing.T) {
 	cc, err := exec.LookPath("gcc")
 	if err != nil {
