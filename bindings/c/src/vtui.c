@@ -66,8 +66,10 @@ vtui_session *vtui_open(const char *config_json) {
         execl("./vtui-host", "./vtui-host", "--protocol-fd=3", backend_arg, (char *)NULL);
         execl("../vtui-host", "../vtui-host", "--protocol-fd=3", backend_arg, (char *)NULL);
         execl("../../vtui-host", "../../vtui-host", "--protocol-fd=3", backend_arg, (char *)NULL);
+        execl("../../../vtui-host", "../../../vtui-host", "--protocol-fd=3", backend_arg, (char *)NULL);
+        execl("../../../cmd/vtui-host/vtui-host", "vtui-host", "--protocol-fd=3", backend_arg, (char *)NULL);
         execlp(host_bin, host_bin, "--protocol-fd=3", backend_arg, (char *)NULL);
-        fprintf(stderr, "vtui: failed to execute vtui-host (binary not found)\n");
+        fprintf(stderr, "vtui: failed to execute vtui-host (binary not found in PATH or build directory)\n");
         _exit(127);
     }
 
@@ -126,7 +128,9 @@ void vtui_close(vtui_session *s) {
     if (s->fd >= 0) close(s->fd);
     if (s->pid > 0) {
         int status;
-        waitpid(s->pid, &status, WNOHANG);
+        // Wait synchronously to ensure vtui-host restores the terminal cleanly
+        // before we return control to the shell, avoiding race conditions.
+        waitpid(s->pid, &status, 0);
     }
     free(s);
 }

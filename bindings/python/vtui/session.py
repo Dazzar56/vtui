@@ -14,12 +14,52 @@ class VtuiError(Exception):
         self.message = message
         self.reply_to = reply_to
 
+def _find_host_binary(explicit_path: Optional[str] = None) -> str:
+    if explicit_path:
+        return explicit_path
+    if "VTUI_HOST_BIN" in os.environ:
+        return os.environ["VTUI_HOST_BIN"]
+
+    # 1. Look in PATH
+    path_bin = shutil_which("vtui-host")
+    if path_bin:
+        return path_bin
+
+    # 2. Check local repository build locations relative to this package
+    base = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+    candidates = [
+        os.path.join(base, "cmd", "vtui-host", "vtui-host"),
+        os.path.join(base, "build", "vtui-host"),
+        os.path.join(base, "vtui-host"),
+        os.path.join(os.path.expanduser("~"), "go", "bin", "vtui-host"),
+    ]
+    for cand in candidates:
+        if os.path.isfile(cand) and os.access(cand, os.X_OK):
+            return cand
+
+    # 3. If go compiler is installed, try auto-building into the repo directory
+    go_bin = shutil_which("go")
+    if go_bin and os.path.isdir(os.path.join(base, "cmd", "vtui-host")):
+        target = os.path.join(base, "vtui-host")
+        try:
+            subprocess.run([go_bin, "build", "-o", target, "./cmd/vtui-host"], cwd=base, check=True, capture_output=True)
+            if os.path.isfile(target):
+                return target
+        except Exception:
+            pass
+
+    return "vtui-host"
+
+def shutil_which(cmd: str) -> Optional[str]:
+    import shutil
+    return shutil.which(cmd)
+
 class Session:
     """Thin client session managing JSON Lines wire protocol to a vtui-host process."""
 
     def __init__(self, host_bin: Optional[str] = None, backend: Optional[str] = None):
         self._seq = 0
-        self._host_bin = host_bin or os.environ.get("VTUI_HOST_BIN", "vtui-host")
+        self._host_bin = _find_host_binary(host_bin)
         self._backend = backend or os.environ.get("VTUI_BACKEND", "ansi")
         self._proc: Optional[subprocess.Popen] = None
         self._sock: Optional[socket.socket] = None

@@ -108,3 +108,31 @@ func (b *Button) SetDisabled(d bool) {
 		b.mousePressed = false
 	}
 }
+
+func (b *Button) SizeSpecH() SizeSpec {
+	if b.sizeSpecH != nil {
+		return *b.sizeSpecH
+	}
+	w := runewidth.StringWidth(b.cleanText)
+	if w < 8 {
+		w = 8
+	}
+	return SizeSpec{
+		Hint:    w,
+		Min:     6,
+		Policy:  PolicyFixed,
+		Stretch: 1,
+	}
+}
+
+func (b *Button) SizeSpecV() SizeSpec {
+	if b.sizeSpecV != nil {
+		return *b.sizeSpecV
+	}
+	return SizeSpec{
+		Hint:    1,
+		Min:     1,
+		Policy:  PolicyFixed,
+		Stretch: 1,
+	}
+}

@@ -247,8 +247,16 @@ func LoadVuiDocument(doc *VuiDocument) (*Window, error) {
 
 	if autoSize {
 		hSpec, vSpec := ComputeContainerSizeHint(win.GetChildren(), layoutType, spacing, margins)
-		winW = hSpec.Hint + 2 // +2 border
-		winH = vSpec.Hint + 2 // +2 border
+		calcW := hSpec.Hint + 2
+		calcH := vSpec.Hint + 2
+		if winW > 0 && calcW < winW {
+			calcW = winW
+		}
+		if winH > 0 && calcH < winH {
+			calcH = winH
+		}
+		winW = calcW
+		winH = calcH
 		win.MinW = hSpec.Min + 2
 		win.MinH = vSpec.Min + 2
 	}

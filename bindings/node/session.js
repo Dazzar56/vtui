@@ -11,10 +11,46 @@ class VtuiError extends Error {
   }
 }
 
+const fs = require("fs");
+const path = require("path");
+const os = require("os");
+const { execSync } = require("child_process");
+
+function findHostBinary(explicit) {
+  if (explicit) return explicit;
+  if (process.env.VTUI_HOST_BIN) return process.env.VTUI_HOST_BIN;
+
+  // __dirname is bindings/node, so ../.. is the repository root
+  const base = path.resolve(__dirname, "../..");
+  const candidates = [
+    path.join(base, "cmd/vtui-host/vtui-host"),
+    path.join(base, "build/vtui-host"),
+    path.join(base, "vtui-host"),
+    path.join(os.homedir(), "go/bin/vtui-host"),
+  ];
+
+  for (const cand of candidates) {
+    if (fs.existsSync(cand)) {
+      return cand;
+    }
+  }
+
+  // Auto-build if go is present
+  try {
+    const target = path.join(base, "vtui-host");
+    execSync(`go build -o "${target}" ./cmd/vtui-host`, { cwd: base, stdio: "ignore" });
+    if (fs.existsSync(target)) {
+      return target;
+    }
+  } catch (_) {}
+
+  return "vtui-host";
+}
+
 class Session extends EventEmitter {
   constructor(options = {}) {
     super();
-    this.hostBin = options.hostBin || process.env.VTUI_HOST_BIN || "vtui-host";
+    this.hostBin = findHostBinary(options.hostBin);
     this.backend = options.backend || process.env.VTUI_BACKEND || "ansi";
     this.seq = 0;
     this.proc = null;

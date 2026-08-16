@@ -366,6 +366,34 @@ func (e *Edit) SetData(val any) {
 func (e *Edit) WantsChars() bool {
 	return true
 }
+func (e *Edit) SizeSpecH() SizeSpec {
+	if e.sizeSpecH != nil {
+		return *e.sizeSpecH
+	}
+	hint := 20
+	textW := StringWidth(e.cleanText)
+	if textW > hint {
+		hint = textW
+	}
+	return SizeSpec{
+		Hint:    hint,
+		Min:     3,
+		Policy:  PolicyExpanding,
+		Stretch: 1,
+	}
+}
+
+func (e *Edit) SizeSpecV() SizeSpec {
+	if e.sizeSpecV != nil {
+		return *e.sizeSpecV
+	}
+	return SizeSpec{
+		Hint:    1,
+		Min:     1,
+		Policy:  PolicyFixed,
+		Stretch: 1,
+	}
+}
 func (e *Edit) Valid(cmd int) bool {
 	if e.Validator != nil && (cmd == CmOK || cmd == CmDefault) {
 		if !e.Validator.Validate(e.GetText()) {

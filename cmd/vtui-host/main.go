@@ -77,6 +77,10 @@ func runSession(in io.Reader, out io.Writer, backend string) {
 	if backend != "ansi" && backend != "" {
 		_ = vtui.RunInGUIWindow(w, h, backend, "", 18.0, func() {})
 	} else {
+		restore, err := vtinput.Enable()
+		if err == nil && restore != nil {
+			defer restore()
+		}
 		reader := vtinput.NewReader(os.Stdin, false)
 		vtui.FrameManager.Run(reader)
 	}

@@ -304,6 +304,7 @@ func (ps *ProtocolSession) handleMessage(msg *DownMessage) error {
 		if msg.FrameID != "" {
 			dlg.SetID(msg.FrameID)
 		}
+		ps.fm.Redraw()
 		return nil
 
 	case "close":
