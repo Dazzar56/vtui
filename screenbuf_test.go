@@ -118,7 +118,7 @@ func TestAnsiRenderer_SetWindowTitle(t *testing.T) {
 
 	expected := "\x1b]0;New Title\x07"
 	if !strings.Contains(buf.String(), expected) {
-	t.Errorf("Expected window title sequence %q in output, got %q", expected, buf.String())
+		t.Errorf("Expected window title sequence %q in output, got %q", expected, buf.String())
 	}
 }
 
@@ -563,5 +563,3 @@ func TestAnsiRenderer_UnicodeOverwriteClearsTrailingGarbage(t *testing.T) {
 		t.Errorf("Expected trailing spaces to overwrite previous content, got %q", got)
 	}
 }
-
-
