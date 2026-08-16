@@ -1046,7 +1046,7 @@ int main(void) { return vtui_run(ui); }
 | **M2** | Движок раскладки (раздел 7), `LoadDialog`, `vuic`, `vtui-lint`, golden-тест | **Готово** |
 | **M3** | Протокол JSON Lines и бинарник `vtui-host` | **Готово** |
 | **M4** | Биндинги для Python (раздел 10) | **Готово** |
-| **M5** | Биндинги для Node и TypeScript | *К выполнению* |
+| **M5** | Биндинги для Node и TypeScript | **Готово** |
 | **M6** | Биндинги C / C++ и WASM | *К выполнению* |
 | **M7** | Инструменты записи и воспроизведения (`VTUI_RECORD`, `vtui-replay`) | *К выполнению* |
 
@@ -1111,9 +1111,15 @@ int main(void) { return vtui_run(ui); }
 
 **Готово, когда:** пример 10.2 работает; выполнены все шесть требований 10.4; `pip install` на чистой машине без Go даёт работающий пример; `VTUI_BACKEND=gogpu python hello.py` открывает GPU-окно (цель G6); интеграция с `asyncio` показана отдельным примером.
 
-## M5 — Node и TypeScript
+## M5 — Node и TypeScript [ГОТОВО]
 
 **Результат:** пакет по модели esbuild, типы из словаря.
+- [x] Генерация определений `bindings/node/vtui.d.ts` из `vocabulary.json` через `cmd/vtui-gen`.
+- [x] Тонкий клиент `Session` (`bindings/node/session.js`) через stdio fd 3 и child_process.
+- [x] Immediate-mode фасад `Ui` (`bindings/node/ui.js`).
+- [x] Главный модуль `bindings/node/index.js` (`run`, `log`, `VtuiError`).
+- [x] Пример из раздела 10.2 на JS (`bindings/node/examples/hello.js`) и TS (`bindings/node/examples/hello.ts`).
+- [x] Пакет без cgo/node-gyp с тестом `bindings/node/test/test.js`.
 
 **Готово, когда:** пример 10.2 работает; в пакете нет нативных аддонов и `node-gyp`; типы `.d.ts` сгенерированы, а не написаны руками.
 
