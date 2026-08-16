@@ -19,6 +19,13 @@ func (bf *BaseFrame) SetExitCode(code int) {
 	if bf.OnResult != nil {
 		bf.OnResult(code)
 	}
+	if FrameManager != nil {
+		FrameManager.emitEventSink(UIEvent{
+			Kind:  "closed",
+			SrcID: bf.ID(),
+			Index: code,
+		})
+	}
 }
 
 func (bf *BaseFrame) IsDone() bool                { return bf.Done }

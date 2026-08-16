@@ -103,6 +103,21 @@ type ScreenBuf struct {
 	graphics GraphicsLayer
 }
 
+// SessionConfig configures I/O streams and initial dimensions for a UI session.
+type SessionConfig struct {
+	Out    io.Writer
+	In     io.Reader
+	Width  int
+	Height int
+}
+
+// SetOutput changes the writer destination for flushed frame output.
+func (s *ScreenBuf) SetOutput(w io.Writer) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.Writer = w
+}
+
 // NewScreenBuf creates a new ScreenBuf instance.
 func NewScreenBuf() *ScreenBuf {
 	s := &ScreenBuf{

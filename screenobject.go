@@ -310,6 +310,9 @@ func (so *ScreenObject) FireAction(callback func(), args any) bool {
 		return true
 	}
 	if so.Command != 0 {
+		if args == nil && so.ID() != "" {
+			args = so.ID()
+		}
 		return so.HandleCommand(so.Command, args)
 	}
 	return false
@@ -323,5 +326,19 @@ func (so *ScreenObject) HandleCommand(cmd int, args any) bool {
 		return so.owner.HandleCommand(cmd, args)
 	}
 	DebugLog("CMD: [%p] ID %d dropped (no owner)", so, cmd)
+	if FrameManager != nil {
+		srcID := ""
+		if s, ok := args.(string); ok {
+			srcID = s
+		}
+		if srcID == "" {
+			srcID = so.ID()
+		}
+		FrameManager.emitEventSink(UIEvent{
+			Kind:  "command",
+			Cmd:   cmd,
+			SrcID: srcID,
+		})
+	}
 	return false
 }

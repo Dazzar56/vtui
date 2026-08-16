@@ -264,6 +264,8 @@ type frameManager struct {
 	animations             []func(dt float64) bool
 	animMu                 sync.Mutex
 	lastAnim               time.Time
+	eventSink              func(UIEvent)
+	eventSinkMu            sync.RWMutex
 }
 
 type Toast struct {
@@ -923,6 +925,15 @@ func (fm *frameManager) EmitCommand(cmd int, args any) bool {
 		}
 	}
 	DebugLog("COMMAND: No one handled %d", cmd)
+	srcID := ""
+	if s, ok := args.(string); ok {
+		srcID = s
+	}
+	fm.emitEventSink(UIEvent{
+		Kind:  "command",
+		Cmd:   cmd,
+		SrcID: srcID,
+	})
 	return false
 }
 
@@ -1053,26 +1064,7 @@ func (fm *frameManager) handleResize() {
 	if err != nil {
 		return
 	}
-
-	if width > 0 && height > 0 && fm.scr != nil && (width != fm.scr.width || height != fm.scr.height) {
-		fm.scr.AllocBuf(width, height)
-		for _, s := range fm.Screens {
-			for _, f := range s.Frames {
-				f.ResizeConsole(width, height)
-			}
-		}
-		if fm.MenuBar != nil {
-			top := fm.WorkspaceTopInset()
-			fm.MenuBar.SetPosition(0, top, width-1, top)
-		}
-		if fm.KeyBar != nil {
-			fm.KeyBar.SetPosition(0, height-1, width-1, height-1)
-		}
-		if fm.StatusLine != nil {
-			fm.StatusLine.SetPosition(0, height-1, width-1, height-1)
-		}
-		fm.Redraw()
-	}
+	fm.Resize(width, height)
 }
 
 // Shutdown clears all frames, effectively stopping the application loop.
@@ -1729,6 +1721,54 @@ func SetWindowTitle(title string) {
 	if FrameManager != nil {
 		FrameManager.SetWindowTitle(title)
 	}
+}
+
+// SetEventSink registers a unified callback receiving all semantic UI events.
+func (fm *frameManager) SetEventSink(fn func(UIEvent)) {
+	fm.eventSinkMu.Lock()
+	defer fm.eventSinkMu.Unlock()
+	fm.eventSink = fn
+}
+
+func (fm *frameManager) emitEventSink(ev UIEvent) {
+	fm.eventSinkMu.RLock()
+	sink := fm.eventSink
+	fm.eventSinkMu.RUnlock()
+	if sink != nil {
+		sink(ev)
+	}
+}
+
+// Resize updates the terminal/screen buffer dimensions and adjusts all frames.
+func (fm *frameManager) Resize(width, height int) {
+	if width <= 0 || height <= 0 || fm.scr == nil {
+		return
+	}
+	if width == fm.scr.width && height == fm.scr.height {
+		return
+	}
+	fm.scr.AllocBuf(width, height)
+	for _, s := range fm.Screens {
+		for _, f := range s.Frames {
+			f.ResizeConsole(width, height)
+		}
+	}
+	if fm.MenuBar != nil {
+		top := fm.WorkspaceTopInset()
+		fm.MenuBar.SetPosition(0, top, width-1, top)
+	}
+	if fm.KeyBar != nil {
+		fm.KeyBar.SetPosition(0, height-1, width-1, height-1)
+	}
+	if fm.StatusLine != nil {
+		fm.StatusLine.SetPosition(0, height-1, width-1, height-1)
+	}
+	fm.emitEventSink(UIEvent{
+		Kind:  "resize",
+		Index: width,
+		Value: PropValInt(height),
+	})
+	fm.Redraw()
 }
 
 // GetTopFrameType returns the type of the topmost frame or -1 if empty.
