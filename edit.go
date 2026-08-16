@@ -57,7 +57,7 @@ func NewEdit(x, y, width int, defaultText string) *Edit {
 		HistoryPos:         -1,
 		selStart:           -1,
 		selAnchor:          -1,
-		clearFlag:          false,
+		clearFlag:          len(defaultText) > 0,
 		ColorTextIdx:       ColDialogEdit,
 		ColorUnchangedIdx:  ColDialogEditUnchanged,
 		ColorSelectedIdx:   ColDialogEditSelected,
@@ -340,6 +340,18 @@ func (e *Edit) SetText(text string) {
 	e.leftPos = 0
 	e.selStart = -1
 	e.selAnchor = -1
+	e.NotifyChange()
+}
+
+func (e *Edit) NotifyChange() {
+	e.ScreenObject.NotifyChange()
+	if FrameManager != nil && e.ID() != "" {
+		FrameManager.emitEventSink(UIEvent{
+			Kind:  "changed",
+			SrcID: e.ID(),
+			Value: PropValString(e.GetText()),
+		})
+	}
 }
 
 // SelectAll selects the entire text and sets the clear flag,
@@ -365,6 +377,34 @@ func (e *Edit) SetData(val any) {
 }
 func (e *Edit) WantsChars() bool {
 	return true
+}
+func (e *Edit) SizeSpecH() SizeSpec {
+	if e.sizeSpecH != nil {
+		return *e.sizeSpecH
+	}
+	hint := 20
+	textW := StringWidth(e.cleanText)
+	if textW > hint {
+		hint = textW
+	}
+	return SizeSpec{
+		Hint:    hint,
+		Min:     3,
+		Policy:  PolicyExpanding,
+		Stretch: 1,
+	}
+}
+
+func (e *Edit) SizeSpecV() SizeSpec {
+	if e.sizeSpecV != nil {
+		return *e.sizeSpecV
+	}
+	return SizeSpec{
+		Hint:    1,
+		Min:     1,
+		Policy:  PolicyFixed,
+		Stretch: 1,
+	}
 }
 func (e *Edit) Valid(cmd int) bool {
 	if e.Validator != nil && (cmd == CmOK || cmd == CmDefault) {
@@ -399,6 +439,7 @@ func (e *Edit) InsertString(text string) {
 	if e.OnTextChange != nil {
 		e.OnTextChange(string(e.text))
 	}
+	e.NotifyChange()
 }
 
 func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
@@ -454,6 +495,7 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 				if e.OnTextChange != nil {
 					e.OnTextChange(string(e.text))
 				}
+				e.NotifyChange()
 			}
 		}
 		return true
@@ -732,6 +774,7 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 		if e.OnTextChange != nil {
 			e.OnTextChange(string(e.text))
 		}
+		e.NotifyChange()
 		return true
 
 	case vtinput.VK_DELETE:
@@ -762,6 +805,7 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 		if e.OnTextChange != nil {
 			e.OnTextChange(string(e.text))
 		}
+		e.NotifyChange()
 		return true
 
 	case vtinput.VK_INSERT:
@@ -840,6 +884,7 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 		if e.OnTextChange != nil {
 			e.OnTextChange(string(e.text))
 		}
+		e.NotifyChange()
 		// Path hints: typing a path separator in an enabled edit opens the
 		// autocomplete menu when the host provider has anything to suggest.
 		if (testChar == '/' || testChar == '\\') && e.PathHintsEnabled && PathHintProvider != nil && FrameManager != nil {

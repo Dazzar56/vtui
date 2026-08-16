@@ -264,6 +264,14 @@ type frameManager struct {
 	animations             []func(dt float64) bool
 	animMu                 sync.Mutex
 	lastAnim               time.Time
+	eventSink              func(UIEvent)
+	eventSinkMu            sync.RWMutex
+	hostMode               bool
+}
+
+// SetHostMode configures whether FrameManager keeps running when frames slice is initially empty (used by vtui-host).
+func (fm *frameManager) SetHostMode(enabled bool) {
+	fm.hostMode = enabled
 }
 
 type Toast struct {
@@ -298,6 +306,14 @@ func (fm *frameManager) GetActiveToast() string {
 
 // FrameManager is the global instance of the frame manager.
 var FrameManager = &frameManager{}
+
+// FrameManagerType is the exported type for the frame manager.
+type FrameManagerType = frameManager
+
+// NewFrameManager creates a new, independent FrameManager instance.
+func NewFrameManager() *FrameManagerType {
+	return &frameManager{}
+}
 
 func (fm *frameManager) AddAnimation(anim func(dt float64) bool) {
 	fm.animMu.Lock()
@@ -923,6 +939,15 @@ func (fm *frameManager) EmitCommand(cmd int, args any) bool {
 		}
 	}
 	DebugLog("COMMAND: No one handled %d", cmd)
+	srcID := ""
+	if s, ok := args.(string); ok {
+		srcID = s
+	}
+	fm.emitEventSink(UIEvent{
+		Kind:  "command",
+		Cmd:   cmd,
+		SrcID: srcID,
+	})
 	return false
 }
 
@@ -933,13 +958,144 @@ func (fm *frameManager) InjectEvents(events []*vtinput.InputEvent) {
 	fm.injectedMu.Unlock()
 }
 
-// Shutdown clears all frames, effectively stopping the application loop.
+// PostEvent queues a synthetic event into the input queue. Thread-safe.
+func (fm *frameManager) PostEvent(ev vtinput.InputEvent) {
+	evCopy := ev
+	fm.InjectEvents([]*vtinput.InputEvent{&evCopy})
+}
+
+// Step processes at most one event or task from the queue.
+// timeout < 0 blocks until an event/task is processed or shutdown.
+// timeout == 0 processes an available event/task or returns immediately.
+// timeout > 0 waits up to the given duration.
+// Returns false when the application should terminate (no frames left or shutdown).
+func (fm *frameManager) Step(timeout time.Duration) bool {
+	if fm.IsShutdown() {
+		return false
+	}
+	if !fm.hostMode && len(fm.frames) == 0 {
+		return false
+	}
+
+	fm.renderPhase()
+
+	var e *vtinput.InputEvent
+	injected := false
+
+	fm.injectedMu.Lock()
+	if len(fm.injectedEvents) > 0 {
+		e = fm.injectedEvents[0]
+		fm.injectedEvents = fm.injectedEvents[1:]
+		injected = true
+	}
+	fm.injectedMu.Unlock()
+
+	if injected {
+		if e != nil {
+			if e.Type == vtinput.ResizeEventType {
+				fm.handleResize()
+			} else {
+				fm.dispatchEvent(e, true)
+			}
+		}
+		fm.cleanupDoneFrames()
+		return !fm.IsShutdown() && len(fm.frames) > 0
+	}
+
+	if timeout == 0 {
+		select {
+		case <-fm.RedrawChan:
+		case task := <-fm.TaskChan:
+			task()
+			fm.cleanupDoneFrames()
+			fm.Redraw()
+		case ev, ok := <-fm.EventChan:
+			if !ok {
+				return false
+			}
+			if ev != nil {
+				if ev.Type == vtinput.ResizeEventType {
+					fm.handleResize()
+				} else {
+					fm.dispatchEvent(ev, false)
+				}
+			}
+		default:
+		}
+		fm.cleanupDoneFrames()
+		return !fm.IsShutdown() && len(fm.frames) > 0
+	}
+
+	if timeout < 0 {
+		select {
+		case <-fm.RedrawChan:
+		case task := <-fm.TaskChan:
+			task()
+			fm.cleanupDoneFrames()
+			fm.Redraw()
+		case ev, ok := <-fm.EventChan:
+			if !ok {
+				return false
+			}
+			if ev != nil {
+				if ev.Type == vtinput.ResizeEventType {
+					fm.handleResize()
+				} else {
+					fm.dispatchEvent(ev, false)
+				}
+			}
+		}
+		fm.cleanupDoneFrames()
+		return !fm.IsShutdown() && len(fm.frames) > 0
+	}
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
+	select {
+	case <-timer.C:
+	case <-fm.RedrawChan:
+	case task := <-fm.TaskChan:
+		task()
+		fm.cleanupDoneFrames()
+		fm.Redraw()
+	case ev, ok := <-fm.EventChan:
+		if !ok {
+			return false
+		}
+		if ev != nil {
+			if ev.Type == vtinput.ResizeEventType {
+				fm.handleResize()
+			} else {
+				fm.dispatchEvent(ev, false)
+			}
+		}
+	}
+	fm.cleanupDoneFrames()
+	return !fm.IsShutdown() && len(fm.frames) > 0
+}
+
+func (fm *frameManager) handleResize() {
+	width, height, err := GetTerminalSize()
+	DebugLog("FM_RESIZE: handleResize triggered. GetTerminalSize returned: %dx%d (err: %v). Current scr: %dx%d", width, height, err, fm.scr.width, fm.scr.height)
+	if err != nil {
+		return
+	}
+	fm.Resize(width, height)
+}
+
+// Shutdown clears all frames, stops the event loop, and cleanly restores the terminal state. Safe and idempotent.
 func (fm *frameManager) Shutdown() {
+	fm.running = false
 	fm.Screens = nil
 	fm.frames = nil
 	fm.capturedFrame = nil
-	// In tests we don't actually want to close the channel because
-	// other tests might still have pending background goroutines.
+	if fm.scr != nil {
+		fm.scr.SetCursorVisible(true)
+		fm.scr.Flush()
+	}
+	Suspend()
+	CleanupStderrLog()
 }
 
 // IsShutdown returns true if the FrameManager has been shut down explicitly.
@@ -1589,6 +1745,54 @@ func SetWindowTitle(title string) {
 	}
 }
 
+// SetEventSink registers a unified callback receiving all semantic UI events.
+func (fm *frameManager) SetEventSink(fn func(UIEvent)) {
+	fm.eventSinkMu.Lock()
+	defer fm.eventSinkMu.Unlock()
+	fm.eventSink = fn
+}
+
+func (fm *frameManager) emitEventSink(ev UIEvent) {
+	fm.eventSinkMu.RLock()
+	sink := fm.eventSink
+	fm.eventSinkMu.RUnlock()
+	if sink != nil {
+		sink(ev)
+	}
+}
+
+// Resize updates the terminal/screen buffer dimensions and adjusts all frames.
+func (fm *frameManager) Resize(width, height int) {
+	if width <= 0 || height <= 0 || fm.scr == nil {
+		return
+	}
+	if width == fm.scr.width && height == fm.scr.height {
+		return
+	}
+	fm.scr.AllocBuf(width, height)
+	for _, s := range fm.Screens {
+		for _, f := range s.Frames {
+			f.ResizeConsole(width, height)
+		}
+	}
+	if fm.MenuBar != nil {
+		top := fm.WorkspaceTopInset()
+		fm.MenuBar.SetPosition(0, top, width-1, top)
+	}
+	if fm.KeyBar != nil {
+		fm.KeyBar.SetPosition(0, height-1, width-1, height-1)
+	}
+	if fm.StatusLine != nil {
+		fm.StatusLine.SetPosition(0, height-1, width-1, height-1)
+	}
+	fm.emitEventSink(UIEvent{
+		Kind:  "resize",
+		Index: width,
+		Value: PropValInt(height),
+	})
+	fm.Redraw()
+}
+
 // GetTopFrameType returns the type of the topmost frame or -1 if empty.
 func (fm *frameManager) GetTopFrameType() FrameType {
 	if len(fm.frames) == 0 {
@@ -1602,6 +1806,65 @@ func (fm *frameManager) GetTopFrame() Frame {
 		return nil
 	}
 	return fm.frames[len(fm.frames)-1]
+}
+
+func frameMatchesID(f Frame, id string) bool {
+	if so, ok := f.(interface{ ID() string }); ok && so.ID() == id {
+		return true
+	}
+	if so, ok := f.(interface{ GetId() string }); ok && so.GetId() == id {
+		return true
+	}
+	return false
+}
+
+// Lookup finds an element by its ID within the specified frame (or active frame if frameID is empty).
+func (fm *frameManager) Lookup(frameID, objID string) (UIElement, bool) {
+	fm.SyncCurrentScreen()
+	var targetFrame Frame
+
+	if frameID == "" {
+		targetFrame = fm.GetTopFrame()
+	} else {
+		for _, s := range fm.Screens {
+			for _, f := range s.Frames {
+				if frameMatchesID(f, frameID) {
+					targetFrame = f
+					break
+				}
+			}
+			if targetFrame != nil {
+				break
+			}
+		}
+	}
+
+	if targetFrame == nil {
+		return nil, false
+	}
+
+	el, ok := targetFrame.(UIElement)
+	if !ok {
+		return nil, false
+	}
+
+	if objID == "" || frameMatchesID(targetFrame, objID) {
+		return el, true
+	}
+
+	var found UIElement
+	walk(el, func(child UIElement) bool {
+		if child.GetId() == objID || child.ID() == objID {
+			found = child
+			return false
+		}
+		return true
+	})
+
+	if found != nil {
+		return found, true
+	}
+	return nil, false
 }
 
 func (fm *frameManager) GetScreenSize() int {
@@ -1682,9 +1945,12 @@ func (fm *frameManager) Stop() {
 }
 
 // Run starts the main application event loop.
-func (fm *frameManager) Run(reader *vtinput.Reader) {
-	DebugLog("FM: Run() ENTERED with Reader[%p]", reader)
-	fm.Reader = reader
+func (fm *frameManager) Run(readers ...*vtinput.Reader) {
+	if len(readers) > 0 && readers[0] != nil {
+		fm.Reader = readers[0]
+		fm.EventChan = readers[0].GetEventChan()
+		defer readers[0].Close()
+	}
 	fm.running = true
 	// Restore cursor visibility on exit
 	defer func() {
@@ -1701,13 +1967,12 @@ func (fm *frameManager) Run(reader *vtinput.Reader) {
 			os.Exit(2)
 		}
 		fm.running = false
-		fm.scr.SetCursorVisible(true)
-		fm.scr.Flush()
+		if fm.scr != nil {
+			fm.scr.SetCursorVisible(true)
+			fm.scr.Flush()
+		}
 		CleanupStderrLog()
 	}()
-
-	fm.EventChan = reader.GetEventChan()
-	defer reader.Close()
 
 	// Configure channel for tracking window resizing
 	sigChan := make(chan os.Signal, 1)
@@ -1750,165 +2015,23 @@ func (fm *frameManager) Run(reader *vtinput.Reader) {
 		}
 	}()
 
-	handleResize := func() {
-		width, height, err := GetTerminalSize()
-		DebugLog("FM_RESIZE: handleResize triggered. GetTerminalSize returned: %dx%d (err: %v). Current scr: %dx%d", width, height, err, fm.scr.width, fm.scr.height)
-		if err != nil {
-			return // Keep existing size if we can't determine the new one
+	for fm.running && !fm.IsShutdown() {
+		if !fm.hostMode && len(fm.frames) == 0 {
+			break
 		}
-
-		if width > 0 && height > 0 && (width != fm.scr.width || height != fm.scr.height) {
-
-			fm.scr.AllocBuf(width, height)
-
-			for _, s := range fm.Screens {
-				for _, f := range s.Frames {
-					f.ResizeConsole(width, height)
-				}
-			}
-
-			// Re-dock global UI elements to the new screen edges.
-			// This ensures they stay at the top/bottom regardless of whether
-			// the active frame also tries to resize them.
-			if fm.MenuBar != nil {
-				top := fm.WorkspaceTopInset()
-				fm.MenuBar.SetPosition(0, top, width-1, top)
-			}
-			if fm.KeyBar != nil {
-				fm.KeyBar.SetPosition(0, height-1, width-1, height-1)
-			}
-			if fm.StatusLine != nil {
-				fm.StatusLine.SetPosition(0, height-1, width-1, height-1)
-			}
-
-			fm.Redraw()
-		}
-	}
-
-	// --- Main application loop ---
-	// Persistent timer to avoid allocations in the drain loop
-	idleTimer := time.NewTimer(time.Hour)
-	if !idleTimer.Stop() {
 		select {
-		case <-idleTimer.C:
+		case <-sigChan:
+			fm.handleResize()
+			continue
+		case <-sizeChan:
+			fm.handleResize()
+			continue
 		default:
 		}
-	}
-	DebugLog("FM: Entering Run loop. MenuBar set: %v, KeyBar set: %v", fm.MenuBar != nil, fm.KeyBar != nil)
-	for fm.running {
-		if len(fm.frames) == 0 {
-			DebugLog("FM: No frames left, exiting Run loop.")
-			return
-		}
-
-		fm.renderPhase()
-
-		// 3. Event waiting (Blocking)
-		var e *vtinput.InputEvent
-		injected := false
-		loopAgain := false
-
-		fm.injectedMu.Lock()
-		if len(fm.injectedEvents) > 0 {
-			e = fm.injectedEvents[0]
-			fm.injectedEvents = fm.injectedEvents[1:]
-			injected = true
-		}
-		fm.injectedMu.Unlock()
-
-		if !injected {
-			select {
-			case <-fm.RedrawChan:
-				loopAgain = true
-			case task := <-fm.TaskChan:
-				task()
-				fm.cleanupDoneFrames()
-				fm.Redraw()
-				loopAgain = true
-			case <-sigChan:
-				handleResize()
-				loopAgain = true
-			case <-sizeChan:
-				handleResize()
-				loopAgain = true
-			case ev, ok := <-fm.EventChan:
-				if !ok {
-					DebugLog("FM: eventChan closed, exiting Run() // in Event waiting (Blocking)")
-					return
-				}
-				e = ev
-			}
-		}
-
-		if loopAgain {
-			continue
-		}
-		if e == nil {
-			continue
-		}
-		if e.Type == vtinput.Far2lEventType {
-			// Protocol level events handled inside dispatchEvent to cover both main loop and drain loop
-			fm.dispatchEvent(e, injected)
-			continue
-		}
-		if e.Type == vtinput.ResizeEventType {
-			handleResize()
-			continue
-		}
-
-		if e.Type == vtinput.KeyEventType && e.KeyDown {
-			DebugLog("KEY: VK=%s Char=%d Src=%s ActiveFrames=%d", vtinput.VKString(e.VirtualKeyCode), e.Char, e.InputSource, len(fm.frames))
-		}
-
-		fm.dispatchEvent(e, injected)
-
-		// 4. Queue "Drain"
-		// Burst process pending events and tasks to avoid redundant renders.
-		// This naturally throttles the UI when a background thread spams updates.
-		drainStart := time.Now()
-		drainCount := 0
-		for fm.running && !fm.IsShutdown() {
-			// Prevent event flood from starving the renderer (e.g. held down key)
-			if time.Since(drainStart) > 20*time.Millisecond {
-				DebugLog("FM_PERF: Drain loop break due to 20ms timeout. Processed %d events/tasks.", drainCount)
+		if !fm.Step(10 * time.Millisecond) {
+			if !fm.hostMode {
 				break
 			}
-
-			idleTimer.Reset(2 * time.Millisecond)
-			select {
-			case ev, ok := <-fm.EventChan:
-				if !idleTimer.Stop() {
-					select {
-					case <-idleTimer.C:
-					default:
-					}
-				}
-				if !ok {
-					return
-				}
-				if ev == nil {
-					continue
-				}
-				if len(fm.frames) > 0 {
-					fm.dispatchEvent(ev, false)
-				}
-				drainCount++
-				continue
-			case task := <-fm.TaskChan:
-				if !idleTimer.Stop() {
-					select {
-					case <-idleTimer.C:
-					default:
-					}
-				}
-				task()
-				fm.cleanupDoneFrames()
-				fm.Redraw()
-				drainCount++
-				continue
-			case <-idleTimer.C:
-			}
-			break
 		}
 	}
 }

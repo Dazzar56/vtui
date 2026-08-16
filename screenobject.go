@@ -31,6 +31,24 @@ type ScreenObject struct {
 	text           string
 	cleanText      string
 	hotkeyPos      int
+	align          string
+	stretch        int
+	minW           int
+	minH           int
+	maxW           int
+	maxH           int
+	sizeSpecH      *SizeSpec
+	sizeSpecV      *SizeSpec
+}
+
+// SetID sets the stable identifier for the element.
+func (so *ScreenObject) SetID(id string) {
+	so.Id = id
+}
+
+// ID returns the stable identifier for the element.
+func (so *ScreenObject) ID() string {
+	return so.Id
 }
 
 // GetHotkey returns the assigned hotkey rune for the object.
@@ -294,7 +312,15 @@ func (so *ScreenObject) FireAction(callback func(), args any) bool {
 		return true
 	}
 	if so.Command != 0 {
-		return so.HandleCommand(so.Command, args)
+		if args == nil && so.ID() != "" {
+			args = so.ID()
+		}
+		if so.HandleCommand(so.Command, args) {
+			return true
+		}
+		if FrameManager != nil {
+			return FrameManager.EmitCommand(so.Command, args)
+		}
 	}
 	return false
 }

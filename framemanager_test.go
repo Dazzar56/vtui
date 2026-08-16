@@ -4,7 +4,6 @@ import (
 	"github.com/mattn/go-runewidth"
 	"github.com/unxed/vtinput"
 	"io"
-	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -962,10 +961,9 @@ func TestFrameManager_MenuBarNavigabilityWithSubMenu(t *testing.T) {
 	// The MenuBar should intercept it, close "File" and open "Edit".
 	fm.InjectEvents([]*vtinput.InputEvent{
 		{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT},
-		{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F10},
 	})
 
-	fm.Run(vtinput.NewReader(os.Stdin, false))
+	fm.Step(0)
 
 	// Check if we are now on the "Edit" menu
 	if fm.GetTopFrameType() != TypeMenu {
@@ -2354,10 +2352,9 @@ func TestFrameManager_ModalDialogBlocksF9(t *testing.T) {
 
 	fm.InjectEvents([]*vtinput.InputEvent{
 		{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F9},
-		{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F10}, // Quit loop
 	})
 
-	fm.Run(vtinput.NewReader(os.Stdin, false))
+	fm.Step(0)
 
 	if mb.Active {
 		t.Error("MenuBar should NOT be activated via F9 when a modal dialog is open")

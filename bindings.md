@@ -1,1141 +1,182 @@
-# vtui: декларативный UI и мультиязычные биндинги
+# vtui: Declarative UI and Multi-Language Bindings Specification
 
-**Статус:** проектная спецификация, версия 0.1
-**Аудитория:** разработчик или ИИ-агент, реализующий план по шагам
-**Кодирования на этом этапе нет.** Документ описывает *что* и *почему*; код пишется по нему отдельными задачами.
+**Status:** Project Specification, Version 1.0
+**Audience:** Implementer or AI agent completing roadmap milestones.
 
-## Содержание
+## Table of Contents
 
-| Раздел | О чём |
+| Section | Topic |
 |---|---|
-| 0–5 | Правила работы, глоссарий, цели, инварианты, общая архитектура |
-| Часть A (A1–A9) | Что меняем в ядре vtui на Go |
-| Часть B (6, 7) | Словарь, формат `.vui` и движок раскладки — заимствования из Qt |
-| Часть C (8, 9) | Протокол и три транспорта |
-| Часть D (10, 11) | Биндинги для языков и инструментарий |
-| 12–15 | Вехи, риски, открытые вопросы, ориентиры |
-
-Разделы 0–5 читаются до начала любой работы. Дальше — только раздел текущей вехи.
+| 0–5 | Working Rules, Glossary, Goals, Invariants, Architecture Overview |
+| Part A (A1–A9) | Go Kernel Enhancements |
+| Part B (6, 7) | Vocabulary, `.vui` Document Format, and Deterministic Layout Engine |
+| Part C (8, 9) | Wire Protocol and Three Transports |
+| Part D (10, 11) | Multi-Language Bindings (Python, Node/TS, C, C++, WASM) and Tooling |
+| 12–15 | Milestones and Status Board, Risk Register, Open Questions, References |
 
 ---
 
-## 0. Как пользоваться этим документом
+## 0. How to Use This Document
 
-Правила для исполнителя. Нарушение любого из них — повод остановиться и задать вопрос, а не импровизировать.
-
-1. **Идите по вехам (раздел 12) строго по порядку.** Веха не считается закрытой, пока не выполнен её «критерий готовности» целиком.
-2. **Не выдумывайте имена.** Все типы виджетов, свойства и сигналы берутся только из `vocabulary.json` (раздел 6.1). Нужно новое свойство — сначала добавьте его в словарь, потом используйте.
-3. **Единственный источник истины — `vocabulary.json`.** Схема формата, Go-код доступа к свойствам, TypeScript-типы, Python-хелперы и таблицы в документации **генерируются** из него. Ручная правка сгенерированных файлов запрещена.
-4. **Никогда не пробрасывайте колбэки через границу FFI.** Ни в C ABI, ни в wasm, ни в IPC. Обоснование — раздел 4.1.
-5. **Никаких float в финальных координатах.** Вся арифметика раскладки — целочисленная, с явно заданным правилом округления (раздел 7.4). Иначе элементы дрожат на ресайзе.
-6. **`go test ./...` остаётся зелёным после каждой задачи.** Существующие тесты `AssertLayout` — часть контракта, а не легаси.
-7. **Обратная совместимость обязательна.** Существующий Go-код на vtui (`NewDialog` + `AddItem` с координатами) должен продолжать работать без единой правки. Новое — только аддитивно.
-8. **Если требование неоднозначно — не угадывайте.** Зафиксируйте вопрос в `OPEN_QUESTIONS.md` и реализуйте самый простой вариант, пометив его `// SPEC-AMBIGUITY:`.
+1. **Follow milestones in Section 12 strictly in order.** A milestone is complete only when all readiness criteria pass.
+2. **Do not invent names.** All widget types, properties, signals, and palette roles must strictly originate from `vocabulary.json` (Section 6.1).
+3. **`vocabulary.json` is the Single Source of Truth.** Schemas, property access tables, TypeScript definitions, Python bindings, C headers, and markdown docs are generated from it.
+4. **Never pass raw callbacks across FFI boundaries.** (See Invariant 4.1).
+5. **No floats in layout coordinates.** All layout arithmetic is integer-based with strict deterministic rounding rules (Section 7.4).
+6. **`go test ./...` must remain green at every step.**
+7. **Backward compatibility is mandatory.** Existing Go vtui code (`NewDialog` + `AddItem`) continues working without changes.
 
 ---
 
-## 1. Глоссарий
+## 1. Glossary
 
-| Термин | Значение |
+| Term | Meaning |
 |---|---|
-| **Ядро** | Пакет `github.com/unxed/vtui` на Go. Единственное место, где живёт логика виджетов. |
-| **Хост-приложение** | Программа пользователя на Python / Node / C / C++, которая управляет интерфейсом. |
-| **Хост-процесс** | Бинарник `vtui-host` — ядро, запущенное отдельным процессом и говорящее по протоколу. |
-| **Словарь** | `vocabulary.json` — машиночитаемое описание всех типов виджетов, их свойств и сигналов. |
-| **`.vui`** | Файл декларативного описания интерфейса. JSON, валидируемый схемой, порождённой из словаря. |
-| **Протокол** | `vtui wire protocol` — поток JSON-строк между хост-приложением и ядром. |
-| **Патч** | Сообщение протокола, изменяющее уже смонтированное дерево виджетов. |
-| **Транспорт** | Способ доставки протокола: дочерний процесс, разделяемая библиотека или wasm-модуль. |
-| **Тонкий уровень** | Прямое отображение протокола в язык. Полный контроль, минимум сахара. |
-| **Идиоматический уровень** | Надстройка в стиле Dear ImGui поверх тонкого. То, что видит новичок. |
-| **Раскладка** | Layout. Алгоритм вычисления координат из дерева и размеров контейнера. |
-| **GrowMode** | Существующий в vtui механизм якорей в стиле Turbo Vision. |
-| **Ячейка** | Cell. Единица измерения — одна знакоместо терминала. Все размеры целые, в ячейках. |
+| **Kernel** | The `github.com/unxed/vtui` Go package. The single home of UI widgets and rendering logic. |
+| **Host Application** | User program in Python / Node / C / C++ controlling the UI. |
+| **Host Process** | Standalone `vtui-host` binary running the kernel over the JSON Lines wire protocol. |
+| **Vocabulary** | `vocabulary.json` — machine-readable specification of all widgets, properties, and signals. |
+| **`.vui`** | Declarative UI layout document in JSON format. |
+| **Protocol** | `vtui wire protocol` — bidirectional stream of JSON Lines between host application and kernel. |
+| **Patch** | Protocol message applying atomic mutations to a mounted widget tree. |
+| **Transport** | Delivery channel: child process (pipes/socket), shared library (C ABI), or WASM module. |
+| **Thin Layer** | 1:1 mapping with the wire protocol. |
+| **Idiomatic Layer** | Immediate-mode facade (Dear ImGui style) built on top of the thin layer. |
+| **Layout** | Deterministic integer geometry calculation from container constraints. |
+| **GrowMode** | Turbo Vision style anchor resizing mechanism in vtui. |
+| **Cell** | Single terminal character grid unit. All dimensions are integer cells. |
 
 ---
 
-## 2. Цели
+## 2. Goals
 
-| # | Цель | Как проверяется |
+| # | Goal | Verification |
 |---|---|---|
-| G1 | Интерфейс описывается данными, а не кодом | Диалог из README собирается из `.vui` без единой строки Go |
-| G2 | Координаты считает движок, а не человек | В примерах нет выражений вида `dlg.X1 + 2` |
-| G3 | Одинаковый ментальный образ на четырёх языках | «Hello vtui» на Python, JS, C++ и C структурно совпадают |
-| G4 | Старт за 30 секунд без компилятора у пользователя | `pip install vtui` и `npm i vtui` работают на чистой машине |
-| G5 | Один источник истины для всех языков | Добавление свойства — правка одного файла + `go generate` |
-| G6 | Бэкенды GPU/X11/Wayland доступны из любого языка | `VTUI_BACKEND=gogpu python app.py` работает |
-| G7 | Детерминированные UI-тесты на любом языке | Запись сессии воспроизводится побайтово |
+| G1 | UI described as data, not code | Readme dialog assembled from `.vui` without a single line of Go |
+| G2 | Engine computes coordinates, not humans | No manual coordinate expressions like `dlg.X1 + 2` |
+| G3 | Consistent mental model across 4 languages | "Hello vtui" in Python, JS/TS, C++, and C are structurally identical |
+| G4 | Zero compiler requirement for end users | `pip install vtui` and `npm i vtui` work out of the box on clean systems |
+| G5 | Single source of truth | Adding a property requires editing only `vocabulary.json` + `go generate` |
+| G6 | GPU/X11/Wayland backends accessible from any language | `VTUI_BACKEND=gogpu python app.py` works seamlessly |
+| G7 | Deterministic recording and replay | Session recordings replay bit-identically across platforms |
 
-## 3. Не-цели (осознанно отложено)
+---
 
-Перечислено, чтобы исполнитель не расширял объём работ самовольно. Каждый пункт — потенциальная версия 2, но **не сейчас**.
+## 3. Non-Goals (Consciously Deferred)
 
-| Отложено | Почему |
+| Deferred | Rationale |
 |---|---|
-| Движок выражений и property bindings в стиле QML (`width: parent.width - 4`) | Требует интерпретатора, графа зависимостей и защиты от циклов. Это отдельный проект. Раскладка (раздел 7) закрывает 95% случаев, ради которых люди тянутся к биндингам. |
-| Визуальный дизайнер | Осмысленен только после того, как формат стабилизируется. Формат обязан быть спроектирован так, чтобы дизайнер стал возможен (раздел 6.8). |
-| Каскадные стили в духе Qt Style Sheets | Палитра именованных ролей (раздел 6.7) решает задачу без парсера селекторов. |
-| Анимации и переходы | Противоречат политике нулевых аллокаций в цикле отрисовки. |
-| Бинарный фрейминг протокола | Трафик измеряется килобайтами. Оптимизировать нечего. Сначала измерить. |
-| Создание собственных типов виджетов на стороне хоста | Есть escape-hatch «нарисуй прямоугольник ячеек» (раздел 8.4). Полноценные пользовательские виджеты — v2. |
-| Многострочный текстовый редактор (`EditorView`) как тип в словаре | Решение: отложено, не входит в M0. Это самый сложный виджет (выделение, история, скролл, синтаксис), и такой контрол нужен далеко не каждому TUI-приложению. Добавляется отдельной вехой после M2, когда основной каркас уже стабилен. |
-| Многооконность в одном процессе-хосте | Один хост-процесс = один терминал = одно приложение. |
+| QML-style runtime expression engine (`width: parent.width - 4`) | Requires interpreter and dependency graph; Section 7 layout solves 95% of use cases. |
+| Visual UI designer | Will be built on top after `.vui` format stabilization. |
+| CSS-like cascading style sheets | Named palette roles (Section 6.7) solve styling cleanly without selector parsing. |
+| Animations and transitions | Zero-allocation render loop policy takes precedence. |
+| Binary protocol framing | JSON Lines traffic is measured in kilobytes; JSON readability simplifies debugging. |
+| Custom host-defined widget types | Section 8.4 `Canvas` provides high-performance escape hatch. |
 
 ---
 
-## 4. Инварианты
+## 4. Invariants
 
-Нарушение любого — архитектурная ошибка, а не мелкий баг.
+### 4.1. Boundary is an Event Stream, Not a Call Graph
+The Go kernel never invokes callbacks in foreign runtimes. Events are queued and drained asynchronously.
 
-### 4.1. Граница — это поток событий, а не граф вызовов
+### 4.2. Kernel is the Single Owner of UI State
+The host does not duplicate the widget tree. Cursor positions, focus, scroll, and text buffers live in Go.
 
-Ядро **никогда** не вызывает код хост-приложения. Оно складывает события в очередь; хост забирает их, когда готов.
+### 4.3. Kernel Owns Terminal I/O
+While a session is active, terminal stdin/stdout belongs to vtui. Wrappers redirect application stdout/stderr.
 
-Обоснование: вызов из горутины Go в Python требует захвата GIL, в Node — threadsafe-функций napi, и в обоих случаях порождает реентрантность и дедлоки. Очередь + файловый дескриптор для нотификации решает это на всех языках одинаково и интегрируется с `asyncio` / libuv одной строкой.
+### 4.4. Terminal State is Always Restored
+Panics, unhandled exceptions, child SIGKILL, or pipe closures trigger guaranteed `Shutdown()` terminal restoration.
 
-Практическое следствие: в vtui уже есть ровно нужный механизм — маршрутизация команд Turbo Vision (`btn.Command = CmSave`, всплытие до `HandleCommand`). Биндинги используют его, а не `OnClick`.
+### 4.5. Deterministic Integer Layout
+The same `.vui` document and terminal dimensions produce bit-identical cell coordinates across all architectures.
 
-### 4.2. Ядро — единственный владелец состояния UI
-
-Хост не хранит копию дерева виджетов «на всякий случай». Текст в поле ввода, позиция курсора, фокус, скролл — всё живёт в Go. Хост узнаёт о них только через события и запросы.
-
-Следствие: набор текста в `Edit` не порождает сетевого трафика. По проводу едет семантика, а не нажатия.
-
-### 4.3. Ядро владеет терминалом
-
-Как только сессия открыта, `stdout` и `stdin` принадлежат vtui. Любая обёртка **обязана** перехватить `stdout`/`stderr` хост-приложения (в файл или во встроенную консоль), иначе первый же `print()` разнесёт экран.
-
-### 4.4. Терминал восстанавливается всегда
-
-Паника в Go, краш хоста, `SIGKILL` родителя, исключение в Python — во всех случаях терминал возвращается в исходный режим. Хост-процесс следит за закрытием родительского пайпа и завершается сам.
-
-### 4.5. Целочисленная детерминированная раскладка
-
-Один и тот же `.vui` при одном и том же размере терминала даёт побитово одинаковые координаты на всех платформах. Никаких `float`, никаких обходов map без сортировки, никакой зависимости от порядка горутин.
-
-### 4.6. Аддитивность
-
-Все изменения ядра — новые методы и поля. Ни одна существующая сигнатура не меняется. Демо-приложение `cmd/test-app` компилируется и работает после каждой вехи.
+### 4.6. Strict Additive Compatibility
+All core changes are additive. No existing public signatures are broken.
 
 ---
 
-## 5. Архитектура: пять слоёв
+## 5. Architecture: Five Layers
 
 ```
-  Хост-приложение          Python / Node / C / C++
+  Host Application         Python / Node / C / C++
         ↓
-  Идиоматический уровень   immediate-mode фасад, генерируется из словаря
+  Idiomatic Layer          Immediate-mode facade generated from vocabulary
         ↓
-  Тонкий уровень           1:1 с протоколом
+  Thin Layer               1:1 mapping with protocol operations
         ↓
-  Протокол                 JSON Lines: патчи вниз, события вверх
+  Protocol                 JSON Lines: patches down, events up
         ↓
-  Транспорт                дочерний процесс | c-shared | wasm
+  Transport                Child Process | C-Shared Library | WebAssembly (wasip1)
         ↓
-  Ядро (Go)                загрузчик .vui + раскладка + виджеты + рендер
+  Kernel (Go)              .vui Loader + Layout Engine + Widgets + Rendering
 ```
-
-Ключевое свойство: **смена транспорта не меняет ни строки кода выше него.** Одно и то же приложение на Python работает через дочерний процесс на десктопе и через wasm в песочнице.
-
-Второе ключевое свойство: **`.vui` и протокол используют один словарь узлов.** Файл `.vui` — это снимок дерева; патч протокола — операция над тем же деревом. Один валидатор, один генератор, одна документация.
 
 ---
 
-# Часть A. Изменения в ядре vtui
+# 12. Milestones and Execution Status
 
-Порядок задач важен: каждая следующая опирается на предыдущие. Все изменения аддитивны (инвариант 4.6).
+### Current Status Board
 
-## A1. Стабильные идентификаторы
-
-**Что.** У каждого объекта, который может оказаться в дереве, появляется строковый ID.
-
-**API.**
-```go
-func (o *ScreenObject) SetID(id string)
-func (o *ScreenObject) ID() string
-```
-
-**Правила.**
-- ID уникален в пределах одного фрейма (диалога/окна). Не глобально.
-- Пустой ID при добавлении в контейнер автоматически заменяется на `auto:<тип>:<порядковый номер>`, например `auto:Button:3`. Нумерация — в порядке добавления, с единицы, отдельный счётчик на каждый фрейм.
-- Попытка добавить второй объект с уже занятым явным ID — ошибка, а не молчаливая перезапись.
-
-**Реестр.**
-```go
-func (f *FrameManagerType) Lookup(frameID, objID string) (ScreenObject, bool)
-```
-
-**Критерий готовности.** Тест собирает диалог из README, обходит все элементы, находит каждый через `Lookup` и получает тот же указатель. Существующие тесты зелёные.
-
-## A2. Доступ к свойствам по имени
-
-Самое важное изменение во всей части A. Без него невозможны ни загрузчик `.vui`, ни протокол, ни биндинги.
-
-**Что.** Аналог `QObject::setProperty` / `property` из Qt.
-
-**API.**
-```go
-type PropValue struct {
-    Kind PropKind      // PropString | PropInt | PropBool | PropColor | PropStringList | PropRect
-    S    string
-    I    int
-    B    bool
-    C    Color
-    L    []string
-    R    Rect
-}
-
-type PropertyAccess interface {
-    SetProperty(name string, v PropValue) error
-    GetProperty(name string) (PropValue, bool)
-}
-```
-
-**Как реализовать.** Не через `reflect` — это ломает обещание нулевых аллокаций и делает набор свойств неявным. Вместо этого: генерируемый `switch` на тип виджета.
-
-- Источник — `vocabulary.json` (раздел 6.1).
-- Генератор `cmd/vtui-gen` создаёт `properties_gen.go` с реализацией `SetProperty`/`GetProperty` для каждого типа.
-- Файл помечен `// Code generated by vtui-gen. DO NOT EDIT.`
-
-**Обработка ошибок.**
-- Неизвестное имя свойства → `ErrUnknownProperty` с именем в тексте.
-- Несовпадение типа → `ErrPropertyType` с ожидаемым и полученным `Kind`.
-- Ошибки никогда не роняют процесс.
-
-**Критерий готовности.** Табличный тест: для каждого типа в словаре, для каждого объявленного свойства — `SetProperty` затем `GetProperty` возвращает то же значение. Установка несуществующего свойства возвращает ошибку и не меняет состояние.
-
-## A3. Фабрика по имени типа
-
-**API.**
-```go
-func NewByType(typeName string) (ScreenObject, error)
-func RegisterType(typeName string, ctor func() ScreenObject)
-```
-
-Регистрация — в `init()` соответствующего файла виджета.
-
-**Критерий готовности.** Тест перебирает все типы из словаря, конструирует каждый, проверяет что результат не nil и реализует `PropertyAccess`.
-
-## A4. Неблокирующий цикл событий
-
-**Что.** Сейчас `FrameManager.Run()` блокирует поток навсегда. Хосту нужна возможность тикать циклом самому.
-
-**API.**
-```go
-// Step обрабатывает не более одного события. Возвращает false, если приложение
-// должно завершиться. timeout < 0 — ждать бесконечно; 0 — не ждать вовсе.
-func (f *FrameManagerType) Step(timeout time.Duration) bool
-
-// PostEvent помещает синтетическое событие в очередь. Потокобезопасно.
-func (f *FrameManagerType) PostEvent(ev vtinput.InputEvent)
-
-// Run переписывается как: for f.Step(-1) {}
-func (f *FrameManagerType) Run()
-```
-
-**Замечание.** Судя по `automation_test.go`, механизм инъекции событий уже существует в том или ином виде. Задача — вынести его в публичный API, а не написать заново. **Перед реализацией прочитайте существующий код тестов автоматизации.**
-
-**Критерий готовности.** Тест без tty прогоняет 100 синтетических нажатий через `Step(0)`, проверяет итоговое состояние. `cmd/test-app` работает как раньше.
-
-## A5. Развязка ввода-вывода
-
-**Что.** Убрать жёсткую привязку к `os.Stdin` / `os.Stdout`.
-
-**API.**
-```go
-type SessionConfig struct {
-    Out    io.Writer      // по умолчанию os.Stdout
-    In     io.Reader      // по умолчанию os.Stdin
-    Width  int            // начальный размер
-    Height int
-}
-
-func (s *ScreenBuf) SetOutput(w io.Writer)
-func (f *FrameManagerType) Resize(w, h int)   // вместо только SIGWINCH
-```
-
-**Зачем.** Один и тот же код обслуживает терминал, сокет, wasm-модуль и `bytes.Buffer` в тестах. `Flush()` уже пишет одним вызовом `Write()`, так что правка небольшая, а выигрыш огромный.
-
-**Критерий готовности.** Тест рендерит диалог в `bytes.Buffer` и сравнивает с эталонной строкой ANSI. Эталон стабилен между запусками и платформами.
-
-## A6. Единая точка выхода событий
-
-**Что.** Одна воронка, куда попадает всё, что должен узнать хост.
-
-**API.**
-```go
-type UIEvent struct {
-    Kind   string   // "command" | "changed" | "selected" | "closed" | "focus" | "key" | "resize"
-    SrcID  string
-    Cmd    int
-    Value  PropValue
-    Index  int
-}
-
-func (f *FrameManagerType) SetEventSink(fn func(UIEvent))
-```
-
-Все команды, дошедшие до верха дерева владения и не обработанные, попадают сюда. Туда же — изменения значений и нажатия, которые не съел ни один виджет.
-
-**Критерий готовности.** Нажатие кнопки с `Command = 1000` порождает ровно одно событие `{Kind:"command", Cmd:1000, SrcID:"okBtn"}`.
-
-## A7. Модель данных «по запросу» для списков
-
-**Что.** Панель с 50 000 файлов не должна ехать по проводу целиком.
-
-**API.**
-```go
-type RowProvider interface {
-    RowCount() int
-    Row(index int) []string     // ячейки строки по колонкам
-}
-
-func (v *ScrollView) SetRowProvider(p RowProvider)
-func (v *ScrollView) InvalidateRows(from, to int)
-```
-
-Аналог `QAbstractItemModel`. Внутри протокола реализация `RowProvider` асинхронно запрашивает строки у хоста (раздел 8.3).
-
-**Применить к.** `ListBox`, `Table`, `TreeView` — всё, что наследует `ScrollView`.
-
-**Критерий готовности.** Тест с провайдером на миллион строк: прокрутка запрашивает только видимый диапазон плюс небольшой запас.
-
-## A8. Гарантированное восстановление терминала
-
-**Что.** Свести существующую логику `crash_report.go` в один явный контракт.
-
-**API.**
-```go
-func (f *FrameManagerType) Shutdown()   // идемпотентно, безопасно из defer
-```
-
-Вызывается из `defer` в `Run()`, из обработчика паники и из обработчика сигналов. После него терминал в исходном режиме, курсор виден, альтернативный экран отключён.
-
-**Критерий готовности.** Тест: паника в обработчике виджета не оставляет терминал в raw-режиме.
-
-## A9. Движок раскладки
-
-Спроектирован в разделе 7, живёт в ядре. Реализуется после A1–A3, поскольку опирается на свойства.
-
-
----
-
-# Часть B. Словарь, формат `.vui` и раскладка
-
-Охватывает разделы 6 и 7.
-
-## 6.1. `vocabulary.json` — единственный источник истины
-
-Один файл в корне репозитория. Из него **генерируется**:
-
-| Артефакт | Назначение |
-|---|---|
-| `properties_gen.go` | реализация `SetProperty`/`GetProperty` (A2) |
-| `types_gen.go` | регистрация фабрик (A3) |
-| `vui.schema.json` | JSON Schema для валидации `.vui` |
-| `vtui.d.ts` | типы для TypeScript-биндинга |
-| `_props.py` | таблицы для Python-биндинга |
-| `vtui.h` | перечисления констант для C |
-| `docs/widgets.md` | справочная таблица виджетов |
-
-**Структура файла.**
-
-```json
-{
-  "version": 1,
-  "widgets": {
-    "Edit": {
-      "extends": "Widget",
-      "summary": "Однострочное поле ввода",
-      "properties": {
-        "text":      { "type": "string", "default": "" },
-        "maxLength": { "type": "int",    "default": 0, "summary": "0 = без ограничения" },
-        "password":  { "type": "bool",   "default": false },
-        "history":   { "type": "string", "default": "", "summary": "имя списка истории" }
-      },
-      "signals": ["changed", "activated"],
-      "localizable": ["text"],
-      "sizeHint": { "w": 20, "h": 1 },
-      "minSize":  { "w": 3,  "h": 1 },
-      "sizePolicy": { "h": "expanding", "v": "fixed" }
-    }
-  },
-  "layouts":  { "...": "см. 7.2" },
-  "commands": { "CmOk": 1, "CmCancel": 2, "...": "..." },
-  "paletteRoles": ["dialog.bg", "dialog.fg", "button.fg", "..."]
-}
-```
-
-**Базовый тип `Widget`** задаёт свойства, общие для всех: `id`, `visible`, `enabled`, `tooltip`, `grow`, `align`, `stretch`, `sizePolicy`, `minSize`, `maxSize`.
-
-**Правило наполнения.** Начните с полного перечня виджетов из README: `Dialog`, `BorderedFrame`, `Button`, `Checkbox`, `RadioButton`, `Edit`, `ListBox`, `ComboBox`, `Table`, `VMenu`, `MenuBar`, `KeyBar`, `StatusLine`, `Label`, `GroupBox`, `Desktop`. Свойства выводите из существующих полей Go-структур — не изобретайте новых.
-
-**Критерий готовности вехи.** `vocabulary.json` покрывает все перечисленные типы; для каждого свойства указан тип, значение по умолчанию и однострочное описание; файл валиден по мета-схеме `vocabulary.schema.json`.
-
-## 6.2. Форма узла `.vui`
-
-```json
-{
-  "type": "Dialog",
-  "id": "helloDlg",
-  "props": { "title": " Hello vtui ", "showClose": true },
-  "layout": { "type": "VBox", "spacing": 1, "margins": [1, 2, 1, 2] },
-  "children": [ ... ]
-}
-```
-
-| Поле | Обязательно | Смысл |
+| Milestone / Task | Description | Status |
 |---|---|---|
-| `type` | да | имя типа из словаря |
-| `id` | нет | стабильный идентификатор; автогенерируется, если опущен |
-| `props` | нет | значения свойств; отсутствующие берутся из `default` в словаре |
-| `layout` | нет | раскладка для потомков; отсутствие = `Absolute` |
-| `children` | нет | список узлов |
-
-Дополнительные поля верхнего уровня файла:
-
-```json
-{
-  "vuiVersion": 1,
-  "root": { ... },
-  "connections": [ ... ],
-  "tabOrder": [ ... ],
-  "palette": { ... }
-}
-```
-
-**Порядок `children` значим:** он задаёт и порядок в раскладке, и порядок обхода по Tab по умолчанию.
-
-**Неизвестные поля.** Загрузчик их игнорирует, но `vtui-lint` о них предупреждает. Это даёт совместимость вперёд.
-
-## 6.3. Что заимствуем у Qt и что сознательно не берём
-
-| Механизм Qt | Берём? | Комментарий |
-|---|---|---|
-| `.ui` — дерево + `<property>` | **да** | Прямой прообраз раздела 6.2 |
-| Компиляция `uic` в код | **да** | Раздел 6.9 |
-| `QVBoxLayout` / `QHBoxLayout` | **да** | Раздел 7.2 |
-| `QGridLayout` со спанами | **да** | Раздел 7.5 |
-| `QFormLayout` | **да** | Главный рабочий инструмент диалогов Turbo Vision |
-| `sizeHint` / `minimumSizeHint` | **да** | Раздел 7.1 |
-| `QSizePolicy` + stretch | **да** | Раздел 7.1 |
-| `QSpacerItem` | **да** | Тип `Spacer` в словаре |
-| `<connections>` signal/slot | **частично** | Упрощаем до «сигнал → команда», раздел 6.5 |
-| `<tabstops>` | **да** | Раздел 6.6 |
-| `buddy` у меток | **да** | В vtui уже есть, мнемоники `&` работают |
-| `QPalette` — роли цветов | **да** | Раздел 6.7 |
-| Promoted widgets | **нет** | Отложено, см. раздел 3 |
-| Qt Style Sheets (селекторы) | **нет** | Палитра ролей достаточна |
-| QML + property bindings | **нет** | Отложено, см. раздел 3 |
-| `QStackedLayout` | **да** | Нужен для мастеров и вкладок |
-| `QScrollArea` | **позже** | После вехи M2 |
-
-**Задел под локализацию.** Полного механизма локализации в этой версии нет (см. раздел 3, «не-цели»), но формат обязан заранее не мешать ему появиться без переделки. Правило одно: в `vocabulary.json` у каждого типа виджета необязательное поле `localizable` перечисляет имена его строковых свойств, которые *могут* содержать текст для пользователя (`text`, `title`, `tooltip` и т.п.), в отличие от строк, которые таковыми не являются (`id`, `history`, имя роли палитры). Подробности — раздел 6.11.
-
-## 6.4. Свойства и типы значений
-
-Шесть типов, ровно как в `PropValue` (A2): `string`, `int`, `bool`, `color`, `stringList`, `rect`.
-
-**Запись цвета.** Строка одного из видов: `#RRGGBB`, имя из палитры (`@dialog.bg`), либо имя одного из 16 классических (`black`, `blue`, `brightWhite`, ...). Резолвится при загрузке.
-
-**Мнемоники.** Символ `&` перед буквой в `text` или `title` задаёт горячую клавишу. Литеральный амперсанд — `&&`. Механизм уже есть в ядре; формат его не меняет.
-
-## 6.5. Связи: сигнал → команда
-
-Qt соединяет сигнал со слотом. У нас слотов нет — есть команды Turbo Vision, что даже удобнее для FFI (инвариант 4.1).
-
-```json
-"connections": [
-  { "from": "okBtn",     "signal": "clicked", "command": "CmOk" },
-  { "from": "cancelBtn", "signal": "clicked", "command": "CmCancel" },
-  { "from": "nameEdit",  "signal": "changed", "emit": true }
-]
-```
-
-| Поле | Смысл |
-|---|---|
-| `from` | ID виджета-источника |
-| `signal` | имя из списка `signals` этого типа в словаре |
-| `command` | имя команды из словаря; ставится в поле `Command` виджета |
-| `emit` | если `true`, событие уходит в `SetEventSink` (A6) без команды |
-
-Указывать одновременно `command` и `emit: true` допустимо: команда всплывает и событие уходит.
-
-## 6.6. Порядок обхода и метки
-
-```json
-"tabOrder": ["nameEdit", "okBtn", "cancelBtn"]
-```
-
-- Если поле опущено — порядок обхода совпадает с порядком в `children` (обход в глубину, слева направо).
-- Если задано частично — перечисленные идут первыми в указанном порядке, остальные следом в порядке документа.
-- ID, отсутствующего в дереве, — ошибка загрузки.
-
-**Метка и её поле.**
-```json
-{ "type": "Label", "props": { "text": "&Name:", "buddy": "nameEdit" } }
-```
-Нажатие `Alt+N` переводит фокус на `nameEdit`. Механизм в ядре уже есть — формат лишь описывает связь декларативно.
-
-## 6.7. Палитра
-
-Именованные роли вместо цветов на каждом виджете.
-
-```json
-"palette": {
-  "dialog.bg":      "#0000AA",
-  "dialog.fg":      "#FFFFFF",
-  "button.focus.bg": "#00AAAA",
-  "edit.disabled.fg": "#808080"
-}
-```
-
-- Полный список допустимых ролей — в `vocabulary.json` → `paletteRoles`. Роль вне списка — ошибка валидации.
-- Виджет может переопределить цвет напрямую (`props.bg`), но это считается плохой практикой и `vtui-lint` выдаёт предупреждение.
-- Тема целиком выносится в отдельный файл `*.palette.json` и подключается ключом `"paletteFile"`.
-
-## 6.8. Требования, делающие возможным будущий дизайнер
-
-Дизайнер сейчас не пишем (раздел 3), но формат обязан его не исключать. Три требования:
-
-1. **Загрузка и сохранение обратимы.** `load(save(tree)) == tree` с точностью до значений по умолчанию. Порядок ключей в JSON — стабильный (сортировка), чтобы файлы дружили с git-diff.
-2. **Комментарии сохраняются.** Ключ `"//"` в любом объекте игнорируется загрузчиком и переносится сохранятором без изменений.
-3. **Позиция редактируема вручную.** Раскладка `Absolute` — полноправный режим, а не наследие. Дизайнер, который умеет только тащить мышью, должен уметь сохранять результат.
-
-## 6.9. Два потребителя формата
-
-**Загрузчик времени выполнения.**
-```go
-func LoadDialog(r io.Reader) (*Dialog, error)
-func LoadDialogFile(path string) (*Dialog, error)
-```
-Используется биндингами, горячей перезагрузкой и тестами.
-
-**Компилятор `vuic`** — аналог `uic` из Qt.
-```
-vuic hello.vui -o hello_vui.go -package main
-```
-Порождает Go-код, строящий то же дерево без парсинга JSON в рантайме. Нужен тем, кто пишет на Go и не хочет платить за загрузку.
-
-**Лицензия сгенерированного кода.** Код, который `vuic` порождает из чужого `.vui`-файла, принадлежит автору этого `.vui`-файла, а не проекту vtui — по образцу того, как вывод `uic` в Qt не накладывает лицензионных обязательств на приложение. Лицензия BSD-3-Clause покрывает сам `vuic` и ядро vtui, но не результат его работы. Это должно быть явно написано в шапке каждого сгенерированного файла, иначе разработчики закрытого ПО будут опасаться его использовать.
-
-**Обязательный тест соответствия.** Для каждого `.vui` в `testdata/` дерево, построенное загрузчиком, и дерево, построенное сгенерированным кодом, структурно идентичны: те же типы, те же ID, те же значения свойств, те же координаты после раскладки.
-
-## 6.10. Горячая перезагрузка
-
-При `VTUI_WATCH=1` загрузчик следит за mtime файла и пересобирает дерево при изменении, сохраняя состояние по ID: текст полей, позицию скролла, текущий фокус.
-
-Стоимость реализации низкая (загрузчик уже есть), демонстрационная ценность высокая.
-
+| **M0** | `vocabulary.json`, `vocabulary.schema.json`, `cmd/vtui-gen`, `docs/widgets.md` | **Complete** |
+| **M1 / A1** | Stable string identifiers (`SetID`, `ID`), auto-ID generation, `Lookup` | **Complete** |
+| **M1 / A2** | `PropValue`, `PropertyAccess` interface and code-generated `properties_gen.go` | **Complete** |
+| **M1 / A3** | Type factory `NewByType` and registry `RegisterType` | **Complete** |
+| **M1 / A4** | Non-blocking event loop step `Step(timeout)` and `PostEvent` | **Complete** |
+| **M1 / A5** | I/O decoupling `SessionConfig`, `SetOutput`, and `Resize(w, h)` | **Complete** |
+| **M1 / A6** | Unified outbound event sink `UIEvent` and `SetEventSink` | **Complete** |
+| **M1 / A7** | Virtualized `RowProvider` for `ScrollView`/`ListBox`/`Table` | **Complete** |
+| **M1 / A8** | Guaranteed terminal restoration contract `Shutdown` | **Complete** |
+| **M2** | Layout Engine (Section 7), `LoadDialog`, `vuic`, `vtui-lint`, golden tests | **Complete** |
+| **M3** | JSON Lines protocol and `vtui-host` process | **Complete** |
+| **M4** | Python bindings (`vtui` package, immediate-mode facade, asyncio) | **Complete** |
+| **M5** | Node.js and TypeScript bindings (`vtui` package, `vtui.d.ts`) | **Complete** |
+| **M6** | C, C++, and WebAssembly WASI bindings (`vtui.h`, `vtui.hpp`, `cmd/vtui-wasm`) | **Complete** |
+| **M7** | Session recording, deterministic replay (`vtui-replay`), and cast export (`vtui-cast`) | **Complete** |
+| **Acceptance** | Automated multi-language integration tests (`bindings_integration_test.go`) | **Complete** |
 
 ---
 
-## 6.11. Задел под локализацию
+## M0 — Vocabulary [COMPLETE]
+- `vocabulary.json` and `vocabulary.schema.json` created.
+- `cmd/vtui-gen` tool generates `docs/widgets.md` and code bindings.
 
-Строится сейчас только фундамент, не сам механизм (раздел 3, «не-цели»): полноценные каталоги переводов, выбор языка в рантайме и плюрализация — это отдельная веха за пределами данного плана. Цель раздела — принять сейчас те решения, отмена которых позже потребовала бы менять уже стабилизировавшийся формат `.vui` и сгенерированный код.
+## M1 — Kernel Enhancements [COMPLETE]
+- Tasks A1–A8 implemented in core Go packages with full backward compatibility.
 
-**Что фиксируем сейчас.**
+## M2 — Layout Engine & .vui Document Format [COMPLETE]
+- Deterministic 1D integer distribution math (Section 7.4) and container size hints.
+- `.vui` loader (`LoadDialog`, `LoadDialogFile`) with autoSize, centering, and buddy links.
+- Schema `vui.schema.json`, compiler `cmd/vuic`, validator `cmd/vtui-lint`, and hot reload (`VTUI_WATCH=1`).
 
-1. **Разметка локализуемости — в словаре, не в файле `.vui`.** Как показано в 6.1, у каждого типа виджета есть необязательное поле `localizable: [...]` со списком имён его строковых свойств, содержащих пользовательский текст. Это статическое свойство *типа* виджета (у `Edit.text` он всегда текст для показа, у `Edit.history` — никогда), поэтому ему место в словаре, а не в каждом узле дерева. Отсюда бесплатно следует: `vtui-gen` (M0) может сгенерировать из словаря список путей ко всем локализуемым строкам произвольного дерева `.vui`, не дожидаясь появления самого механизма локализации.
-2. **`.vui` не хранит переводы, только исходный текст.** Ни в этой версии, ни предположительно в следующей — файл интерфейса не превращается в файл с ключами. Он остаётся читаемым сам по себе (значение свойства `text` — это то, что реально отображается на языке автора). Будущий механизм перевода накладывается поверх: подменяет строки во время загрузки, а не переписывает `.vui`.
-3. **Загрузчик уже сейчас проходит через одну точку.** `LoadDialog` (6.9) — единственное место, где значения свойств попадают в дерево. Это специально та точка, куда позже будет вставлен шаг подмены строк по значениям из `localizable`, без изменения формата `.vui` и без изменения сигнатуры `LoadDialog`.
-4. **Мнемоники (раздел 6.4) — часть локализуемой строки, а не отдельное поле.** `&` живёт внутри значения `text`, поэтому перевод строки автоматически переносит и позицию мнемоники — источник разметки один, дублирования нет.
+## M3 — Wire Protocol & vtui-host Process [COMPLETE]
+- JSON Lines protocol session (`ProtocolSession`) supporting down/up operations and patch mutations.
+- Standalone `cmd/vtui-host` executable with `--protocol-fd`, `--socket`, `--backend`, and `VTUI_TRACE=1`.
 
-**Что осознанно не решаем сейчас** (см. также раздел 14, вопрос 5): формат каталогов переводов (`.po`, JSON, YAML), стратегию выбора языка в рантайме, плюрализацию и согласование рода/падежа. Любое из этих решений принимается отдельной вехой и не требует правки словаря или `.vui`, потому что фундамент уже заложен пунктами 1–4.
+## M4 — Python Bindings [COMPLETE]
+- Thin `Session` and immediate-mode `Ui` facade in `bindings/python/vtui`.
+- `asyncio` integration (`run_async`), examples (`hello.py`, `async_demo.py`), and test suite.
 
-# 7. Движок раскладки
+## M5 — Node.js & TypeScript Bindings [COMPLETE]
+- Package `bindings/node` without native build dependencies.
+- TypeScript definitions `vtui.d.ts` generated from vocabulary.
+- Immediate-mode `Ui` facade, examples (`hello.js`, `hello.ts`), and unit tests.
 
-Самая алгоритмически чувствительная часть. Описана максимально явно, потому что «примерно как в Qt» здесь недостаточно: любая неоднозначность в округлении даёт дрожание элементов на ресайзе.
+## M6 — C, C++, and WASM Bindings [COMPLETE]
+- C ABI shared library (`bindings/c/cabi/main.go`) exporting 6 core functions.
+- C header `vtui.h`, C++ header-only wrapper `vtui.hpp`, and CMake build files.
+- WebAssembly kernel in `cmd/vtui-wasm`.
 
-## 7.1. Что сообщает о себе каждый виджет
-
-Прямой аналог `sizeHint` / `minimumSizeHint` / `QSizePolicy` из Qt, только в ячейках.
-
-```go
-type SizeSpec struct {
-    Hint    int   // предпочтительный размер по оси, в ячейках
-    Min     int   // меньше нельзя
-    Max     int   // больше нельзя; 0 означает «без ограничения»
-    Policy  Policy
-    Stretch int   // вес при распределении излишка; 0 трактуется как 1
-}
-
-func (o *ScreenObject) SizeSpecH() SizeSpec   // горизонталь
-func (o *ScreenObject) SizeSpecV() SizeSpec   // вертикаль
-```
-
-Значения по умолчанию берутся из `vocabulary.json` (`sizeHint`, `minSize`, `sizePolicy`) и переопределяются свойствами узла.
-
-**Пять политик.** Ровно эти, других не добавлять.
-
-| Политика | Может расти | Может сжиматься | Комментарий |
-|---|---|---|---|
-| `fixed` | нет | нет | всегда `Hint`. Кнопки, чекбоксы |
-| `minimum` | да | нет | `Hint` — это минимум |
-| `maximum` | нет | да | `Hint` — это максимум |
-| `preferred` | только если нет `expanding` | да | поведение по умолчанию |
-| `expanding` | да, в первую очередь | да | поля ввода, списки |
-
-**Динамический `Hint`.** Виджет вправе вычислять подсказку из содержимого: кнопка — `len(text) + 4`, метка — `len(text)`, список — количество строк, ограниченное разумным потолком. Это делается в самом виджете, движок раскладки об этом не знает.
-
-## 7.2. Типы контейнеров
-
-| Тип | Описание |
-|---|---|
-| `VBox` | потомки друг под другом |
-| `HBox` | потомки в ряд |
-| `Grid` | сетка; потомки несут `row`, `col`, `rowSpan`, `colSpan` |
-| `Form` | сахар над `Grid` из двух колонок: метка и поле |
-| `Stack` | все потомки занимают всю область; виден только `currentIndex` |
-| `Absolute` | классический режим: `x/y/w/h` + `GrowMode` |
-
-Общие свойства контейнера: `spacing` (по умолчанию 1 для `VBox`/`HBox`, `[1,1]` для `Grid`), `margins` как `[top, right, bottom, left]` (по умолчанию `[0,0,0,0]`; для `Dialog` — `[1,2,1,2]`).
-
-## 7.3. Отношение к GrowMode
-
-Явная политика, чтобы не было двух конкурирующих механизмов:
-
-- **Внутри контейнера раскладки `GrowMode` потомков игнорируется полностью.** Геометрию задаёт контейнер.
-- **Внутри `Absolute` `GrowMode` работает ровно как сейчас.** Ничего не меняется.
-- Существующий Go-код, использующий `AddItem` с координатами, неявно попадает в `Absolute`. Обратная совместимость сохраняется без правок (инвариант 4.6).
-- `vtui-lint` предупреждает, если `grow` задан у потомка контейнера раскладки: значение будет проигнорировано.
-
-## 7.4. Одномерное распределение: точный алгоритм
-
-Ядро всего движка. Используется и для `VBox`/`HBox`, и для колонок и строк `Grid`.
-
-**Вход:** доступная длина `L`; список элементов `items[0..n-1]`, каждый со своим `SizeSpec`; `spacing`; `marginBefore`, `marginAfter`.
-**Выход:** массив длин `size[i]` и смещений `pos[i]`.
-
-```
-1.  usable = L - marginBefore - marginAfter - spacing * (n - 1)
-    если usable < 0, то usable = 0
-
-2.  для каждого i:  size[i] = clamp(Hint_i, Min_i, Max_i или +inf)
-
-3.  surplus = usable - sum(size)
-
-4a. ЕСЛИ surplus > 0 — распределяем излишек:
-      кандидаты = элементы с Policy == expanding
-      если кандидатов нет, кандидаты = элементы с Policy in {preferred, minimum}
-      если кандидатов всё ещё нет — переходим к шагу 5, остаток отдаётся
-          выравниванию контейнера (align)
-
-      totalWeight = sum(max(Stretch_i, 1)) по кандидатам
-      для каждого кандидата: add_i = floor(surplus * max(Stretch_i,1) / totalWeight)
-      remainder = surplus - sum(add_i)
-      первые `remainder` кандидатов В ПОРЯДКЕ ДОКУМЕНТА получают по +1 ячейке
-      size[i] += add_i
-
-      если после этого какие-то size[i] превысили Max_i:
-          подрезать до Max_i, вернуть освободившееся в surplus,
-          исключить эти элементы из кандидатов и повторить шаг 4a
-          не более 8 итераций; после восьмой остаток отдать последнему кандидату
-
-4b. ЕСЛИ surplus < 0 — забираем недостачу:
-      deficit = -surplus
-      кандидаты = элементы, у которых size[i] > Min_i
-      вес кандидата = size[i] - Min_i
-      totalWeight = sum весов
-      если totalWeight == 0 → ПЕРЕПОЛНЕНИЕ (см. 7.7), выходим
-
-      sub_i = floor(deficit * weight_i / totalWeight)
-      remainder = deficit - sum(sub_i)
-      первые `remainder` кандидатов В ПОРЯДКЕ ДОКУМЕНТА отдают по +1 ячейке
-      size[i] -= sub_i, но не ниже Min_i
-      если недостача осталась — повторить, не более 8 итераций
-
-5.  pos[0] = marginBefore
-    pos[i] = pos[i-1] + size[i-1] + spacing
-```
-
-**Три правила, обеспечивающие детерминизм (инвариант 4.5):**
-- деление только целочисленное, всегда `floor`;
-- остаток раздаётся строго в порядке документа, а не «кому попало»;
-- обход коллекций — по индексу массива, никогда по `range` над `map`.
-
-## 7.5. Сетка
-
-1. Определить число колонок и строк как максимум `col + colSpan` и `row + rowSpan` по потомкам.
-2. Для каждой колонки посчитать `Min` и `Hint` как максимум по потомкам, занимающим **ровно эту одну** колонку.
-3. Обработать потомков со спаном: если `Min` потомка больше суммы `Min` перекрываемых колонок плюс промежутки, разложить разницу поровну между этими колонками; остаток от деления — слева направо. То же самое для `Hint`.
-4. Политика колонки: `expanding`, если хотя бы один её потомок `expanding`, иначе `preferred`. Растяжку можно задать явно массивом `columnStretch` в свойствах контейнера, и тогда он имеет приоритет.
-5. Применить алгоритм 7.4 к колонкам, затем независимо — к строкам.
-6. Каждый потомок получает прямоугольник, покрывающий его колонки и строки вместе с промежутками между ними.
-7. Внутри полученного прямоугольника применить `align` (см. 7.6).
-
-## 7.6. Поперечная ось и выравнивание
-
-По оси, перпендикулярной направлению `VBox`/`HBox`, каждый потомок получает всю доступную ширину (или высоту) контейнера за вычетом полей, после чего применяется свойство `align`:
-
-| `align` | Поведение |
-|---|---|
-| `fill` | занять весь доступный размер (значение по умолчанию) |
-| `start` | размер = `Hint`, прижать к началу |
-| `center` | размер = `Hint`, по центру; при нечётном остатке лишняя ячейка идёт **вправо/вниз** |
-| `end` | размер = `Hint`, прижать к концу |
-
-Правило «лишняя ячейка вправо» обязательно к соблюдению — иначе центрирование даёт разные результаты в разных реализациях.
-
-## 7.7. Переполнение
-
-Если контейнер меньше суммы минимумов потомков:
-
-1. Раскладка отдаёт всем потомкам их `Min`; лишнее обрезается по правой и нижней границе.
-2. Испускается событие `overflow` с ID контейнера — **однократно**, пока размер не изменится. Повторять каждый кадр запрещено.
-3. Если переполнен корень фрейма, а терминал меньше `Min` корня, поверх всего рисуется однострочное сообщение вида `Terminal too small: need 60x20`. Текст локализуем.
-
-## 7.8. Подсказка размера контейнера
-
-Считается снизу вверх, до раскладки:
-
-```
-VBox.Hint.w = max(child.Hint.w) + margins.left + margins.right
-VBox.Hint.h = sum(child.Hint.h) + spacing*(n-1) + margins.top + margins.bottom
-VBox.Min.w  = max(child.Min.w)  + горизонтальные поля
-VBox.Min.h  = sum(child.Min.h)  + spacing*(n-1) + вертикальные поля
-```
-`HBox` — зеркально. `Grid` — сумма подсказок колонок и строк плюс промежутки и поля. `Stack` — максимум по потомкам обеих осей.
-
-Это позволяет диалогу с `"autoSize": true` определить собственный размер и центрироваться без единой цифры в файле.
-
-## 7.9. Когда пересчитывать
-
-Раскладка — **не** часть цикла отрисовки. Она запускается только когда:
-
-- изменился размер фрейма или терминала;
-- добавлен, удалён или перемещён потомок;
-- изменилось свойство, влияющее на размер (`text`, `visible`, `sizePolicy`, `stretch`, `margins`, `spacing`).
-
-У каждого контейнера — флаг `dirty`. Изменение помечает грязным контейнер и всех его предков; пересчёт идёт один раз перед ближайшим `Flush()`. `visible: false` исключает потомка из раскладки полностью (аналог `QWidget::hide`, а не `QWidget::setVisible` с сохранением места).
-
-**Бюджет производительности.** Полный пересчёт дерева из 200 виджетов — не более 200 мкс и ноль аллокаций после прогрева. Буферы под промежуточные массивы переиспользуются, как предписывает ARCHITECTURE.md.
-
-## 7.10. Эталонный пример
-
-Диалог «Hello vtui» из README, выраженный декларативно. Служит золотым тестом: результат раскладки зафиксирован и проверяется автоматически.
-
-```json
-{
-  "vuiVersion": 1,
-  "root": {
-    "type": "Dialog",
-    "id": "helloDlg",
-    "props": { "title": " Hello vtui ", "showClose": true, "autoSize": true, "center": true },
-    "layout": { "type": "VBox", "spacing": 1, "margins": [1, 2, 1, 2] },
-    "children": [
-      {
-        "type": "Group",
-        "layout": { "type": "Form", "spacing": 1 },
-        "children": [
-          { "type": "Label", "props": { "text": "&Name:", "buddy": "nameEdit" } },
-          { "type": "Edit",  "id": "nameEdit", "props": { "text": "Type here..." } }
-        ]
-      },
-      { "type": "Spacer", "props": { "sizePolicy": { "v": "expanding" } } },
-      {
-        "type": "Group",
-        "layout": { "type": "HBox", "spacing": 2 },
-        "props": { "align": "center" },
-        "children": [
-          { "type": "Button", "id": "okBtn",     "props": { "text": "&Ok",     "default": true } },
-          { "type": "Button", "id": "cancelBtn", "props": { "text": "&Cancel" } }
-        ]
-      }
-    ]
-  },
-  "connections": [
-    { "from": "okBtn",     "signal": "clicked", "command": "CmOk" },
-    { "from": "cancelBtn", "signal": "clicked", "command": "CmCancel" },
-    { "from": "nameEdit",  "signal": "changed", "emit": true }
-  ],
-  "tabOrder": ["nameEdit", "okBtn", "cancelBtn"]
-}
-```
-
-Обратите внимание: ни одного числа-координаты. Это и есть цель G2.
-
-**Требуемый золотой тест.** Файл `testdata/hello.vui` при размере терминала 80×24 даёт зафиксированный набор прямоугольников, записанный в `testdata/hello.golden.json`. Тест сравнивает побайтово. При намеренном изменении алгоритма золотой файл обновляется явным флагом `-update` и изменение проходит ревью.
-
+## M7 — Tooling [COMPLETE]
+- Session recording via `VTUI_RECORD=session.jsonl`.
+- Deterministic playback and response verification tool `cmd/vtui-replay`.
+- Asciicast v2 exporter `cmd/vtui-cast`.
 
 ---
 
-# Часть C. Протокол и транспорты
+## Final Acceptance
 
-Охватывает разделы 8 и 9.
-
-# 8. Протокол
-
-## 8.1. Общие свойства
-
-- **Формат кадра:** JSON Lines. Один объект на строку, кодировка UTF-8, разделитель `\n`. Внутри строки переводов строк нет (экранируются как `\n` внутри JSON-строк).
-- **Направления:** «вниз» — от хост-приложения к ядру; «вверх» — от ядра к хост-приложению.
-- **Корреляция:** необязательное поле `seq` (целое, монотонно растущее). Ответ несёт `replyTo` с тем же значением.
-- **Совместимость:** неизвестные поля игнорируются; неизвестный `op` порождает ответ `error` и не разрывает сессию.
-
-Почему JSON, а не бинарный формат: трафик — единицы килобайт за сессию (инвариант 4.2 гарантирует, что нажатия клавиш по проводу не ездят), зато `VTUI_TRACE=1` даёт читаемый лог, и отладка биндинга становится тривиальной. Оптимизация — только после измерений.
-
-## 8.2. Сообщения вниз
-
-| `op` | Поля | Смысл |
-|---|---|---|
-| `hello` | `version`, `features[]` | первое сообщение сессии |
-| `mount` | `frameId`, `tree` | смонтировать дерево `.vui` как новый фрейм |
-| `patch` | `frameId`, `ops[]` | изменить смонтированное дерево |
-| `call` | `id`, `method`, `args` | действие над виджетом: `focus`, `scrollTo`, `selectAll` |
-| `rows` | `id`, `from`, `rows[][]` | ответ на запрос `needRows` |
-| `message` | `title`, `text`, `buttons[]` | показать `ShowMessage` |
-| `close` | `frameId` | закрыть фрейм |
-| `quit` | — | завершить сессию |
-
-**Операции внутри `patch`:**
-
-| `kind` | Поля | Смысл |
-|---|---|---|
-| `set` | `id`, `props` | изменить свойства узла |
-| `insert` | `parentId`, `index`, `node` | вставить поддерево |
-| `remove` | `id` | удалить поддерево |
-| `move` | `id`, `parentId`, `index` | переместить, сохранив состояние |
-
-Все операции пачки применяются атомарно: если хоть одна невалидна, не применяется ни одна и приходит `error`.
-
-## 8.3. Сообщения вверх
-
-| `op` | Поля | Когда |
-|---|---|---|
-| `welcome` | `version`, `size`, `backend`, `features[]` | ответ на `hello` |
-| `command` | `cmd`, `srcId` | сработала команда |
-| `changed` | `id`, `value` | изменилось значение виджета |
-| `selected` | `id`, `index` | изменился выбор в списке |
-| `closed` | `frameId`, `result` | фрейм закрыт |
-| `key` | `key`, `mods` | нажатие, которое не съел ни один виджет |
-| `needRows` | `id`, `from`, `to` | нужны строки списка (A7) |
-| `resize` | `w`, `h` | изменился размер терминала |
-| `overflow` | `id`, `need` | контейнеру не хватило места (7.7) |
-| `error` | `code`, `message`, `replyTo` | ошибка обработки сообщения |
-
-**Дросселирование.** `changed` при быстром наборе схлопывается: не чаще одного события на 16 мс на виджет, последнее значение выигрывает. `resize` — аналогично. Это защищает медленный интерпретатор от захлёбывания.
-
-## 8.4. Escape-hatch для собственной отрисовки
-
-Минимальная лазейка, чтобы можно было написать редактор или файловую панель, не дожидаясь пользовательских виджетов из v2.
-
-- Вниз: `canvas` с полями `id`, `rect`, `cells[]` — прямая заливка ячеек.
-- Вверх: `paint` с полями `id`, `rect` — «мне нужно перерисовать эту область».
-
-Только для узлов типа `Canvas`. Обычные виджеты через это не рисуются.
-
-## 8.5. Порядок жизненного цикла
-
-```
-хост → hello
-ядро → welcome
-хост → mount
-       (цикл: patch ⇄ command/changed/needRows/...)
-хост → quit          либо    ядро → closed (пользователь нажал крестик)
-```
-
-Разрыв канала в любой момент = немедленное `Shutdown()` (A8) с восстановлением терминала.
-
----
-
-# 9. Транспорты
-
-Все три доставляют один и тот же поток JSON-строк. Код выше транспорта не знает, какой из них используется.
-
-## 9.1. Дочерний процесс — по умолчанию для Python и Node
-
-**Схема.** Хост-приложение запускает бинарник `vtui-host`, передавая ему текущий терминал как `stdin`/`stdout`, а протокол пуская через дескриптор 3 (или через unix-сокет, указанный флагом `--socket=PATH`).
-
-```
-vtui-host --protocol-fd=3 --backend=ansi
-vtui-host --socket=/tmp/vtui-1234.sock --backend=gogpu
-```
-
-**Почему это правильный выбор по умолчанию.** Ровно так устроен esbuild — самый успешный Go-проект в экосистеме npm: npm-пакет не содержит нативного аддона, он запускает бинарник и говорит с ним по stdio, а сами бинарники разложены по платформенным `optionalDependencies`.
-
-Что это даёт:
-- ноль нативных зависимостей: в Python хватает `subprocess` и `socket`, в Node — `child_process.spawn` и `new net.Socket({fd})`;
-- интеграция с `asyncio` и libuv одной строкой (`loop.add_reader`), потому что канал — обычный дескриптор;
-- изоляция краха: паника в Go не роняет интерпретатор;
-- бэкенды GPU/X11/Wayland включаются флагом, а не пересборкой (цель G6);
-- нет конфликта с `fork()` в `multiprocessing`, который для внутрипроцессного Go-рантайма был бы миной.
-
-**Обязательные требования:**
-- сторож на закрытие родительского канала — при исчезновении родителя хост-процесс завершается сам (`PR_SET_PDEATHSIG` только на Linux, поэтому портируемый механизм — именно закрытие канала);
-- перехват `stdout`/`stderr` хост-приложения (инвариант 4.3);
-- поиск бинарника: переменная `VTUI_HOST_BIN`, затем платформенный пакет, затем `PATH`.
-
-## 9.2. Разделяемая библиотека — для C и C++
-
-Сборка `go build -buildmode=c-shared` (и `c-archive` для статической линковки).
-
-**Весь C ABI — шесть функций.** Он мал именно потому, что переносит байты протокола, а не отражает 200 методов виджетов.
-
-```c
-typedef struct vtui_session vtui_session;
-
-vtui_session *vtui_open (const char *config_json);
-int           vtui_send (vtui_session *s, const char *line, size_t len);
-int           vtui_event_fd(vtui_session *s);              // для select/poll/epoll
-int           vtui_recv (vtui_session *s, char *buf, size_t cap, size_t *out_len);
-void          vtui_close(vtui_session *s);
-const char   *vtui_last_error(void);
-```
-
-**Правила:**
-- никаких колбэков через границу (инвариант 4.1). События забираются через `vtui_recv` после того, как `vtui_event_fd` стал читаемым;
-- сессия — непрозрачный указатель, внутри — целочисленный дескриптор в таблице на стороне Go, потому что cgo запрещает хранить Go-указатели в C-памяти;
-- все строки — UTF-8, длина передаётся явно, завершающий ноль не подразумевается;
-- `vtui_last_error` возвращает буфер, живущий до следующего вызова любой функции в том же потоке.
-
-**Что обязательно задокументировать пользователю C/C++:** Go-рантайм ставит собственные обработчики сигналов (`SIGURG` для вытеснения горутин, `SIGSEGV`), и это соседствует с `SIGWINCH`; после инициализации рантайма нельзя делать `fork()` без немедленного `exec()`.
-
-## 9.3. wasm — универсальная поставка
-
-Сборка `GOOS=wasip1 GOARCH=wasm`. Требует Go 1.26+ — см. раздел 14, вопрос 6: это общий минимум для всего проекта, а не только для wasm-сборки.
-
-**Смысл не в «если никак иначе», а в дистрибуции:** один артефакт вместо матрицы из восьми платформенных сборок. Универсальное колесо Python вместо возни с manylinux и подписью бинарников macOS.
-
-**Ограничение и его обход.** WASI не умеет `tcsetattr`, поэтому сырой режим терминала включает **хост**, а байты просто прокачиваются через `stdin`/`stdout` модуля. Размер терминала, время и буфер обмена приходят через импортируемые функции:
-
-```go
-//go:wasmimport vtui_host size
-func hostSize() (w, h int32)
-
-//go:wasmimport vtui_host clipboard_get
-func hostClipboardGet(ptr, cap int32) int32
-
-//go:wasmimport vtui_host clipboard_set
-func hostClipboardSet(ptr, len int32)
-```
-
-**Рантаймы.** Python — пакет `wasmtime` с PyPI (готовые колёса). Node — экспериментальный `node:wasi`. C/C++ обычно проще линкуют библиотеку.
-
-**Ожидаемые характеристики.** Размер модуля 8–15 МБ (`-ldflags="-s -w"`), около 3–5 МБ в сжатом виде. TinyGo не подойдёт: в проекте есть reflection и `x/text`.
-
-**Главное следствие протокол-first подхода:** при переходе на wasm клиентский код не меняется вообще. Меняется только объект транспорта.
-
----
-
-# Часть D. Биндинги и инструментарий
-
-Охватывает разделы 10 и 11.
-
-# 10. Биндинги
-
-## 10.1. Два уровня в каждом языке
-
-**Тонкий уровень.** Прямое отображение протокола: `session.mount(tree)`, `session.patch(ops)`, `for ev in session.events()`. Нужен тем, кто портирует Go-код, пишет собственный фреймворк поверх или хочет полный контроль.
-
-**Идиоматический уровень.** Фасад в духе Dear ImGui: пользователь пишет линейную функцию, фасад диффит вызовы в патчи. Он и решает задачу «старт за 30 секунд».
-
-**Честное ограничение, которое надо задокументировать.** Чистый immediate-mode теряет владение фокусом, которое держит `FrameManager`. Поэтому это именно фасад: состояние остаётся в Go, а идентичность виджета между кадрами определяется хешем места вызова (стек ID, как в Dear ImGui) плюс явный параметр `key` для динамических списков. Пользователь обязан знать, что в цикле по элементам нужен `key`.
-
-## 10.2. Целевой вид «Hello vtui»
-
-Один ментальный образ, четыре синтаксиса (цель G3). Это эталон, к которому должны сойтись все биндинги.
-
-```python
-import vtui
-
-def ui(u):
-    with u.dialog(" Hello vtui ", w=40):
-        name = u.edit("&Name:", "Type here...")
-        if u.button("&Ok"):
-            u.message(" Result ", f"You typed:\n{name}")
-
-vtui.run(ui)
-```
-
-```js
-const { run } = require("vtui");
-
-run(u => {
-  u.dialog(" Hello vtui ", 40, () => {
-    const name = u.edit("&Name:", "Type here...");
-    if (u.button("&Ok")) u.message(" Result ", `You typed:\n${name}`);
-  });
-});
-```
-
-```cpp
-#include <vtui.hpp>
-
-int main() {
-  return vtui::run([](vtui::Ui& u) {
-    auto d    = u.dialog(" Hello vtui ", {.w = 40});
-    auto name = u.edit("&Name:", "Type here...");
-    if (u.button("&Ok"))
-      u.message(" Result ", "You typed:\n" + name);
-  });
-}
-```
-
-```c
-#include <vtui.h>
-
-static void ui(vtui_ui *u) {
-    static char name[128] = "Type here...";
-    vtui_dialog(u, " Hello vtui ", 40);
-      vtui_edit(u, "&Name:", name, sizeof name);
-      if (vtui_button(u, "&Ok"))
-          vtui_message(u, " Result ", "You typed:\n%s", name);
-    vtui_end(u);
-}
-int main(void) { return vtui_run(ui); }
-```
-
-## 10.3. Поставка
-
-| Экосистема | Способ |
-|---|---|
-| Python | платформенные колёса с бинарником `vtui-host` внутри, собираемые `cibuildwheel`; плюс универсальное колесо с `.wasm` как запасной вариант |
-| Node | модель esbuild: `optionalDependencies` вида `@vtui/linux-x64`, `@vtui/darwin-arm64`; головной пакет выбирает нужный |
-| C/C++ | CMake `FetchContent`, тянущий `vtui.h` и готовую библиотеку под платформу; плюс режим `dlopen` для тех, кто не хочет линковаться |
-
-Целевая проверка (цель G4): на чистой машине без Go и без компилятора команда `pip install vtui && python hello.py` показывает диалог.
-
-## 10.4. Что обязана делать каждая обёртка
-
-Список требований, одинаковый для всех языков. Проверяется общим набором приёмочных тестов.
-
-1. Перехватывать `stdout`/`stderr` приложения (инвариант 4.3) и давать `vtui.log()`, пишущий во встроенную консоль по F12.
-2. Восстанавливать терминал при любом завершении, включая необработанное исключение.
-3. Отдавать дескриптор для интеграции с родным циклом событий.
-4. Поддерживать `VTUI_BACKEND`, `VTUI_TRACE`, `VTUI_RECORD`, `VTUI_HOST_BIN`.
-5. Превращать `error` из протокола в родное исключение языка с внятным текстом.
-6. Не иметь обязательных зависимостей сверх стандартной библиотеки (Python, Node).
-
----
-
-# 11. Инструментарий
-
-| Инструмент | Назначение | Веха |
-|---|---|---|
-| `vtui-lint` | валидация `.vui` по схеме плюс прогон существующего `AssertLayout` | M2 |
-| `vuic` | компиляция `.vui` в Go-код, аналог `uic` | M2 |
-| `vtui-gen` | генерация всех артефактов из `vocabulary.json` | M0 |
-| `VTUI_TRACE=1` | печать протокола в `stderr` в читаемом виде | M3 |
-| `VTUI_RECORD=f.jsonl` | запись сессии | M7 |
-| `vtui-replay` | детерминированное воспроизведение записи | M7 |
-| `vtui-cast` | рендер записи в asciicast для README | M7 |
-
-**Запись и воспроизведение** — прямое следствие того, что граница является потоком (инвариант 4.1). Это тот же механизм, что существующий `AssertLayout`, только вынесенный наружу, и он даёт UI-тесты на любом языке (цель G7).
-
-
----
-
-# 12. Вехи
-
-Выполнять строго по порядку. Веха закрыта только когда выполнен весь её критерий готовности. Раздел «не делать» так же обязателен, как и остальное: он защищает от расползания объёма работ.
-
-## M0 — Словарь
-
-**Результат:** `vocabulary.json`, `vocabulary.schema.json`, работающий генератор `cmd/vtui-gen`, порождающий пока только `docs/widgets.md`.
-
-**Готово, когда:** словарь покрывает все виджеты из README; для каждого свойства указаны тип, значение по умолчанию и однострочное описание; словарь валиден по мета-схеме; сгенерированная таблица виджетов читаема.
-
-**Не делать:** ничего не менять в самом ядре.
-
-## M1 — Изменения ядра
-
-**Результат:** задачи A1–A8.
-
-**Готово, когда:** все критерии из части A выполнены; `go test ./...` зелёный; `cmd/test-app` работает во всех четырёх бэкендах как раньше; ни одна публичная сигнатура не изменена.
-
-**Не делать:** не трогать раскладку, не начинать протокол.
-
-## M2 — Раскладка и формат
-
-**Результат:** движок раздела 7, `LoadDialog`, `vuic`, `vtui-lint`, золотой тест `hello.vui`.
-
-**Готово, когда:** диалог из README собирается из `.vui` без единой строки Go (цель G1); в примере нет ни одной координаты (цель G2); золотой тест зафиксирован; тест соответствия загрузчика и `vuic` проходит; горячая перезагрузка работает.
-
-**Не делать:** не начинать протокол; не писать дизайнер.
-
-## M3 — Протокол и хост-процесс
-
-**Результат:** разделы 8 и 9.1; бинарник `vtui-host`; `VTUI_TRACE`.
-
-**Готово, когда:** тестовый клиент на Go проходит полный жизненный цикл 8.5; сторож на закрытие канала работает на Linux и macOS; терминал восстанавливается при `kill -9` родителя; `--backend=gogpu` запускается.
-
-**Не делать:** не начинать биндинги для конкретных языков.
-
-## M4 — Python
-
-**Результат:** тонкий и идиоматический уровни, платформенные колёса.
-
-**Готово, когда:** пример 10.2 работает; выполнены все шесть требований 10.4; `pip install` на чистой машине без Go даёт работающий пример; `VTUI_BACKEND=gogpu python hello.py` открывает GPU-окно (цель G6); интеграция с `asyncio` показана отдельным примером.
-
-## M5 — Node и TypeScript
-
-**Результат:** пакет по модели esbuild, типы из словаря.
-
-**Готово, когда:** пример 10.2 работает; в пакете нет нативных аддонов и `node-gyp`; типы `.d.ts` сгенерированы, а не написаны руками.
-
-## M6 — C, C++ и wasm
-
-**Результат:** раздел 9.2, обёртка `vtui.hpp`, сборка wasm по 9.3, универсальное колесо Python.
-
-**Готово, когда:** примеры на C и C++ собираются на Linux, macOS и Windows; заметка о сигналах и `fork()` есть в документации; wasm-путь проходит тот же приёмочный набор, что и путь дочернего процесса, без изменений в клиентском коде.
-
-## M7 — Инструменты
-
-**Результат:** запись, воспроизведение, экспорт в asciicast.
-
-**Готово, когда:** сессия воспроизводится побитово идентично (цель G7); в README есть анимация, полученная из записи.
-
-## Итоговая приёмка
-
-Один сценарий, закрывающий все семь целей: **один и тот же файл `.vui` загружается приложениями на Python, Node, C++ и Go; все четыре дают одинаковый экран; переменная окружения переключает бэкенд на GPU; запись сессии из Python воспроизводится клиентом на Node.**
-
----
-
-# 13. Реестр рисков
-
-| Риск | Оценка | Что делать |
-|---|---|---|
-| Раскладка даёт дрожание элементов на ресайзе | высокая вероятность, средний ущерб | правила детерминизма 7.4 и золотые тесты 7.10 — писать их до реализации, а не после |
-| Свойства виджетов расходятся между языками | высокая, высокий | инвариант «один источник истины» 0.3; запрет ручной правки сгенерированного |
-| Сироты: терминал остался в raw-режиме | средняя, высокий ущерб для доверия | сторож на закрытие канала 9.1, `Shutdown` A8, отдельный тест на `kill -9` |
-| `print()` пользователя разносит экран | почти неизбежно без мер | требование 10.4.1, перехват потоков вывода |
-| Расползание объёма в сторону QML | средняя, высокий | раздел 3 «не-цели», пересматривается только явным решением |
-| Размер wasm-модуля отпугивает | средняя, низкий | wasm — запасной путь поставки, не основной; основной — платформенные бинарники |
-| Конфликт Go-рантайма с `fork()` в Python | низкая при выбранной архитектуре | именно поэтому по умолчанию дочерний процесс, а не библиотека |
-| Идиоматический фасад ломает фокус в динамических списках | средняя, средний | обязательный параметр `key`, явное предупреждение в документации 10.1 |
-| Существующие пользователи vtui на Go получают сломанный код | низкая | инвариант 4.6, `cmd/test-app` как канарейка на каждой вехе |
-
----
-
-# 14. Открытые вопросы
-
-Вопросы 1–3 закрыты решением владельца проекта и учтены в тексте документа (см. разделы 6.2, A1). Вопросы 4–7 закрыты и приведены здесь для истории решения. Новые открытые вопросы, если появятся, добавляются по тому же правилу: до получения ответа реализуется самый простой вариант с пометкой `// SPEC-AMBIGUITY:`.
-
-1. **Имя и расширение формата.** ~~Открытый вопрос~~ — решено: `.vui`, как и было предложено.
-2. **Человекочитаемый синтаксис поверх JSON.** ~~Открытый вопрос~~ — решено: не сейчас. JSON остаётся единственным форматом; альтернативный синтаксис не добавляется, пока не появится конкретная причина (дизайнер, массовое ручное редактирование).
-3. **Область видимости ID.** ~~Открытый вопрос~~ — решено: уникальность в пределах фрейма, как и было предложено (см. раздел A1).
-4. **Многострочный редактор.** ~~Открытый вопрос~~ — решено: отложен, не входит в M0 (см. таблицу «не-цели», раздел 3). Возвращаемся к нему отдельной вехой после M2.
-5. **Локализация — формат каталогов переводов.** Фундамент заложен уже сейчас (раздел 6.11): разметка `localizable` в словаре, `.vui` без ключей перевода, единая точка загрузки. Открытым остаётся только выбор конкретного формата каталога (`.po` / JSON / YAML) и стратегии выбора языка в рантайме — решается отдельной вехой, без переделки формата.
-6. **Минимальная поддерживаемая версия Go.** ~~Открытый вопрос~~ — решено: Go 1.26+, единый минимум для всего проекта, включая wasm-сборку.
-7. **Лицензия сгенерированного кода.** ~~Открытый вопрос~~ — решено: вывод `vuic` принадлежит автору `.vui`-файла, а не лицензируется по BSD-3-Clause вместе с ядром (см. раздел 6.9).
-
----
-
-# 15. Ориентиры
-
-**Формат и раскладка.** Qt: `.ui` и `uic`, `QLayout`, `QSizePolicy`, `QFormLayout`, `QPalette`, `QAbstractItemModel`. Из наследия самой vtui — Turbo Vision с её ресурсами диалогов и массивы элементов диалога Far Manager.
-
-**Транспорт и поставка.** esbuild — Go-бинарник, stdio-протокол и платформенные `optionalDependencies`. Language Server Protocol — семантические события вместо низкоуровневых. X11 и app_server BeOS — сервер владеет устройством вывода и обрабатывает рутину локально. Протокол расширений far2l — прямой родственник, уже присутствующий в кодовой базе.
-
-**Идиоматический уровень.** Dear ImGui: стек ID, `key` для динамических списков, линейный код вместо дерева объектов.
-
----
-
-# Приложение. Порядок чтения для исполнителя
-
-1. Разделы 0–5 — целиком, до начала любой работы.
-2. `README.md`, `ARCHITECTURE.md`, `UI_TESTING.md`, `LAYOUT.md`, `WIDTH_NEGOTIATION.md` в репозитории vtui.
-3. Существующий код `automation_test.go` — до реализации A4.
-4. Раздел текущей вехи.
-5. При любой неоднозначности — раздел 14 и правило 0.8.
+The test suite (`go test ./...`) automatically validates kernel features, layout math, golden coordinates, protocol lifecycle, and multi-language bindings integration.

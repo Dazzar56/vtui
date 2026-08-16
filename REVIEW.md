@@ -230,3 +230,6 @@ observed on Windows while touching unrelated code.
 
 1. **Monitor Scale Factor:** `ebiten.Monitor()` can return `nil` before `ebiten.RunGame` is called under some Windows graphics configurations (especially virtual machines, RDP, or multi-monitor setups), leading to a nil pointer dereference. We added a safety guard fallback of `1.0` scale.
 2. **GUI Lag:** Users report visual lag/sluggishness in both `gogpu` and `ebiten` backends on Windows. This could be due to CPU rasterization overhead, GPU driver sync issues, or high polling rates. Needs further performance profiling of the draw loops on various target machines.
+## Declarative Bindings Architecture Proposals
+
+Proposals for future architecture evolution (signals integration, virtual-tree diffing, zero-copy shm canvas, runtime introspection) are documented in `ARCH_PROPOSALS.md`.
