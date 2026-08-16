@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"strconv"
+	"time"
 )
 
 // VuiNode describes a single widget node in .vui JSON format.
@@ -60,13 +61,83 @@ func LoadDialog(r io.Reader) (*Window, error) {
 }
 
 // LoadDialogFile loads and instantiates a dialog/window tree from a .vui file path.
+// If VTUI_WATCH=1 is set, it starts an automatic reload watcher preserving widget states.
 func LoadDialogFile(path string) (*Window, error) {
+	win, err := loadDialogFileOnce(path)
+	if err != nil {
+		return nil, err
+	}
+
+	if os.Getenv("VTUI_WATCH") == "1" {
+		watchVuiFile(path, win)
+	}
+
+	return win, nil
+}
+
+func loadDialogFileOnce(path string) (*Window, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
 	return LoadDialog(f)
+}
+
+func watchVuiFile(path string, targetWin *Window) {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return
+	}
+	lastMtime := fi.ModTime()
+
+	go func() {
+		for {
+			time.Sleep(200 * time.Millisecond)
+			if FrameManager == nil || FrameManager.IsShutdown() {
+				return
+			}
+			info, err := os.Stat(path)
+			if err != nil {
+				continue
+			}
+			if info.ModTime().After(lastMtime) {
+				lastMtime = info.ModTime()
+				DebugLog("VUI: Hot reloading %s...", path)
+				FrameManager.PostTask(func() {
+					stateMap := make(map[string]any)
+					walk(targetWin, func(el UIElement) bool {
+						id := el.GetId()
+						if id != "" {
+							if dc, ok := el.(DataControl); ok {
+								stateMap[id] = dc.GetData()
+							}
+						}
+						return true
+					})
+
+					newWin, err := loadDialogFileOnce(path)
+					if err == nil && newWin != nil {
+						walk(newWin, func(el UIElement) bool {
+							id := el.GetId()
+							if id != "" {
+								if val, ok := stateMap[id]; ok {
+									if dc, ok := el.(DataControl); ok {
+										dc.SetData(val)
+									}
+								}
+							}
+							return true
+						})
+						targetWin.SetPosition(newWin.X1, newWin.Y1, newWin.X2, newWin.Y2)
+						targetWin.rootGroup = newWin.rootGroup
+						targetWin.rootGroup.SetOwner(targetWin)
+						FrameManager.Redraw()
+					}
+				})
+			}
+		}
+	}()
 }
 
 // LayoutContainerElement is an interface for containers that hold child elements with a layout.
