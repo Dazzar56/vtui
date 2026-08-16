@@ -37,6 +37,8 @@ type ScreenObject struct {
 	minH           int
 	maxW           int
 	maxH           int
+	sizeSpecH      *SizeSpec
+	sizeSpecV      *SizeSpec
 }
 
 // SetID sets the stable identifier for the element.

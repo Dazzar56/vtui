@@ -86,6 +86,8 @@ type UIElement interface {
 	WantsChars() bool
 	GetFocusLink() UIElement
 	MoveRelative(dx, dy int)
+	SizeSpecH() SizeSpec
+	SizeSpecV() SizeSpec
 }
 
 // Container is an interface for elements that have child UI elements.
