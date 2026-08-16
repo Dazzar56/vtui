@@ -69,8 +69,9 @@ func TestAttributesToANSI(t *testing.T) {
 	attr1 := CommonLvbUnderscore
 	attr2 := SetIndexFore(0, 4)
 	gotReset := attributesToANSI(attr2, attr1, nil, ColorProfileTrueColor, nil)
-	// attr1 has underscore, attr2 does NOT. Should trigger reset '0'.
-	if gotReset[:4] != "\x1b[0m" {
+	// attr1 has underscore, attr2 does NOT. Reset is emitted as the first
+	// SGR parameter of the combined sequence, so it starts "\x1b[0;".
+	if !strings.HasPrefix(gotReset, "\x1b[0;") {
 		t.Errorf("Reset expected, got %q", gotReset)
 	}
 }
@@ -111,12 +112,13 @@ func TestAnsiRenderer_SetWindowTitle(t *testing.T) {
 		t.Fatal("Renderer is not AnsiRenderer")
 	}
 
+	var buf bytes.Buffer
+	scr.Writer = &buf
 	ansiRenderer.SetWindowTitle("New Title")
 
-	out := ansiRenderer.frameOut.String()
 	expected := "\x1b]0;New Title\x07"
-	if !strings.Contains(out, expected) {
-		t.Errorf("Expected window title sequence %q in output, got %q", expected, out)
+	if !strings.Contains(buf.String(), expected) {
+	t.Errorf("Expected window title sequence %q in output, got %q", expected, buf.String())
 	}
 }
 
@@ -460,7 +462,7 @@ func TestAnsiRenderer_RelativeCursorMoves(t *testing.T) {
 	got := r.frameOut.String()
 
 	var want strings.Builder
-	want.WriteString("\x1b[?25l")
+	want.WriteString("\x1b[?2026h\x1b[?25l")
 	want.WriteString("\x1b[1;1H")
 	var lastAttr uint64 = ^uint64(0)
 	writeAttributesToANSI(&want, attr, lastAttr, nil, ColorProfileTrueColor, nil)
@@ -495,7 +497,7 @@ func TestAnsiRenderer_RuneWriting(t *testing.T) {
 	got := r.frameOut.String()
 
 	var want strings.Builder
-	want.WriteString("\x1b[?25l")
+	want.WriteString("\x1b[?2026h\x1b[?25l")
 	want.WriteString("\x1b[1;1H")
 	writeAttributesToANSI(&want, attr, ^uint64(0), nil, ColorProfileTrueColor, nil)
 	want.WriteString(" aЖ中")
@@ -503,3 +505,63 @@ func TestAnsiRenderer_RuneWriting(t *testing.T) {
 		t.Fatalf("render\ngot  %q\nwant %q", got, want.String())
 	}
 }
+
+func TestScreenRow(t *testing.T) {
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(10, 2)
+	family := RegisterCluster("👨‍👩‍👧‍👦")
+	scr.Write(0, 0, []CharInfo{
+		{Char: 'H'},
+		{Char: 'i'},
+		{Char: 0},
+		{Char: family},
+		{Char: WideCharFiller},
+		{Char: '!'},
+	})
+
+	got := ScreenRow(scr, 0, 0, 5)
+	want := "Hi 👨‍👩‍👧‍👦!"
+	if got != want {
+		t.Errorf("ScreenRow = %q, want %q", got, want)
+	}
+}
+
+// TestAnsiRenderer_UnicodeOverwriteClearsTrailingGarbage verifies that updating
+// a row that held wide/unicode characters overwrites ghost glyph remnants.
+func TestAnsiRenderer_UnicodeOverwriteClearsTrailingGarbage(t *testing.T) {
+	r := &AnsiRenderer{parent: &ScreenBuf{ColorProfile: ColorProfileTrueColor}}
+	w, h := 10, 1
+	shadow := make([]CharInfo, w*h)
+	buf := make([]CharInfo, w*h)
+
+	// shadow: wide unicode at col 0, filler, "test", then spaces
+	shadow[0] = CharInfo{Char: '📁'}
+	shadow[1] = CharInfo{Char: WideCharFiller}
+	shadow[2] = CharInfo{Char: 't'}
+	shadow[3] = CharInfo{Char: 'e'}
+	shadow[4] = CharInfo{Char: 's'}
+	shadow[5] = CharInfo{Char: 't'}
+	for i := 6; i < 10; i++ {
+		shadow[i] = CharInfo{Char: ' '}
+	}
+
+	// buf: "hi" at cols 0..1, then spaces
+	buf[0] = CharInfo{Char: 'h'}
+	buf[1] = CharInfo{Char: 'i'}
+	for i := 2; i < 10; i++ {
+		buf[i] = CharInfo{Char: ' '}
+	}
+
+	r.Render(buf, shadow, w, h, false)
+	got := r.frameOut.String()
+
+	// Full rewrite must cover the trailing spaces to wipe the old "test" and wide remnants.
+	if !strings.Contains(got, "hi") || !strings.Contains(got, "\x1b[1;1H") {
+		t.Fatalf("Expected render to contain position and text, got %q", got)
+	}
+	if !strings.Contains(got, "hi    ") {
+		t.Errorf("Expected trailing spaces to overwrite previous content, got %q", got)
+	}
+}
+
+

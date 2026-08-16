@@ -232,32 +232,29 @@ func scaleSurfaceBox(src *ImageSurface, w, h int) *ImageSurface {
 	if sh < scaleSerialRows {
 		workers = 1
 	}
-	rowPass := func(y0, y1 int, prefR, prefG, prefB []uint32) {
+	rowPass := func(y0, y1 int) {
 		for y := y0; y < y1; y++ {
 			row := y * src.Stride
-			var rSum, gSum, bSum uint32
-			prefR[0], prefG[0], prefB[0] = 0, 0, 0
-			for x := 0; x < sw; x++ {
-				o := row + x*4
-				rSum += uint32(src.Pix[o])
-				gSum += uint32(src.Pix[o+1])
-				bSum += uint32(src.Pix[o+2])
-				prefR[x+1], prefG[x+1], prefB[x+1] = rSum, gSum, bSum
-			}
 			tRow := y * w * 3
 			for cx := range xr {
 				r := &xr[cx]
 				x2 := r.first + int(r.count)
+				var rSum, gSum, bSum uint32
+				for x := r.first; x < x2; x++ {
+					o := row + x*4
+					rSum += uint32(src.Pix[o])
+					gSum += uint32(src.Pix[o+1])
+					bSum += uint32(src.Pix[o+2])
+				}
 				o := tRow + cx*3
-				tmp[o] = uint16((uint64(prefR[x2]-prefR[r.first]) * r.inv) >> 32)
-				tmp[o+1] = uint16((uint64(prefG[x2]-prefG[r.first]) * r.inv) >> 32)
-				tmp[o+2] = uint16((uint64(prefB[x2]-prefB[r.first]) * r.inv) >> 32)
+				tmp[o] = uint16((uint64(rSum) * r.inv) >> 32)
+				tmp[o+1] = uint16((uint64(gSum) * r.inv) >> 32)
+				tmp[o+2] = uint16((uint64(bSum) * r.inv) >> 32)
 			}
 		}
 	}
-	pref := make([]uint32, (sw+1)*3*workers)
 	if workers == 1 {
-		rowPass(0, sh, pref[:sw+1], pref[sw+1:2*(sw+1)], pref[2*(sw+1):3*(sw+1)])
+		rowPass(0, sh)
 	} else {
 		var wg sync.WaitGroup
 		rowsPer := (sh + workers - 1) / workers
@@ -270,12 +267,11 @@ func scaleSurfaceBox(src *ImageSurface, w, h int) *ImageSurface {
 			if y0 >= y1 {
 				continue
 			}
-			bank := wkr * 3 * (sw + 1)
 			wg.Add(1)
-			go func(y0, y1 int, prefR, prefG, prefB []uint32) {
+			go func(y0, y1 int) {
 				defer wg.Done()
-				rowPass(y0, y1, prefR, prefG, prefB)
-			}(y0, y1, pref[bank:bank+sw+1], pref[bank+sw+1:bank+2*(sw+1)], pref[bank+2*(sw+1):bank+3*(sw+1)])
+				rowPass(y0, y1)
+			}(y0, y1)
 		}
 		wg.Wait()
 	}

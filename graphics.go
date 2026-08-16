@@ -2,6 +2,7 @@ package vtui
 
 import (
 	"os"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -59,9 +60,19 @@ func DetectGraphicsProtocol() GraphicsProtocol {
 }
 
 func detectGraphicsProtocol(env func(string) string) GraphicsProtocol {
+	if prots := envGraphicsProtocolsWith(env); len(prots) > 0 {
+		return prots[0]
+	}
+	return GraphicsNone
+}
+
+func envGraphicsProtocolsWith(env func(string) string) []GraphicsProtocol {
 	if forced := env("VTUI_GRAPHICS"); forced != "" {
 		if p, ok := ParseGraphicsProtocol(forced); ok {
-			return p
+			if p == GraphicsNone {
+				return nil
+			}
+			return []GraphicsProtocol{p}
 		}
 	}
 
@@ -69,30 +80,52 @@ func detectGraphicsProtocol(env func(string) string) GraphicsProtocol {
 	// half transmitted image corrupts the whole session. Stay silent
 	// unless the user explicitly opted in above.
 	if env("TMUX") != "" || strings.HasPrefix(env("TERM"), "screen") {
-		return GraphicsNone
+		return nil
 	}
 
 	term := strings.ToLower(env("TERM"))
 	prog := strings.ToLower(env("TERM_PROGRAM"))
 
 	switch {
+	// Windows Terminal speaks sixel (and nothing else); the variable is
+	// inherited by WSL sessions started from it, so a Linux f4 opened from
+	// WT lands here too.
+	case env("WT_SESSION") != "":
+		return []GraphicsProtocol{GraphicsSixel}
 	case env("KITTY_WINDOW_ID") != "" || strings.Contains(term, "kitty"):
-		return GraphicsKitty
+		return []GraphicsProtocol{GraphicsKitty}
 	case prog == "ghostty" || env("GHOSTTY_RESOURCES_DIR") != "":
-		return GraphicsKitty
-	case prog == "wezterm" || env("WEZTERM_PANE") != "":
-		return GraphicsKitty
+		return []GraphicsProtocol{GraphicsKitty, GraphicsSixel}
+	case isWezTermEnv(env):
+		// On Windows and in WSL, WezTerm is reached through ConPTY, which
+		// forwards image sequences only on the modern build. The environment
+		// cannot tell the builds apart, so defer to the DA1 query: conhost
+		// declares sixel (parameter 4) only when it also forwards kitty.
+		if runtime.GOOS == "windows" || env("WSL_DISTRO_NAME") != "" || env("WSL_INTEROP") != "" {
+			return nil
+		}
+		return weztermProtocols()
 	case prog == "iterm.app" || env("ITERM_SESSION_ID") != "":
-		return GraphicsITerm2
+		return []GraphicsProtocol{GraphicsITerm2, GraphicsSixel}
 	case env("KONSOLE_VERSION") != "":
-		return GraphicsSixel
+		return []GraphicsProtocol{GraphicsSixel}
 	case strings.Contains(term, "foot") || strings.Contains(term, "mlterm") ||
 		strings.Contains(term, "yaft") || strings.Contains(term, "contour") ||
 		strings.Contains(term, "wayst"):
-		return GraphicsSixel
+		return []GraphicsProtocol{GraphicsSixel}
 	}
 
-	return GraphicsNone
+	return nil
+}
+
+// isWezTermEnv reports whether the environment belongs to a WezTerm session.
+func isWezTermEnv(env func(string) string) bool {
+	return strings.ToLower(env("TERM_PROGRAM")) == "wezterm" || env("WEZTERM_PANE") != ""
+}
+
+// weztermProtocols is WezTerm's protocol list, best first.
+func weztermProtocols() []GraphicsProtocol {
+	return []GraphicsProtocol{GraphicsKitty, GraphicsSixel}
 }
 
 // ImageSurface is a plain top-down RGBA8 pixel buffer. It deliberately does
@@ -402,6 +435,17 @@ func (g *GraphicsLayer) CellSize() (int, int) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return g.cellW, g.cellH
+}
+
+// EffectiveCellSize is the cell geometry images are laid out against for the
+// active protocol: sixel on Windows Terminal/conhost uses its fixed 10x20
+// virtual cell, everything else uses the reported size.
+func (g *GraphicsLayer) EffectiveCellSize() (int, int) {
+	cw, ch := g.CellSize()
+	if g.Protocol() == GraphicsSixel {
+		return sixelCellSize(cw, ch)
+	}
+	return cw, ch
 }
 
 // Add registers a new placement and returns its identifier.

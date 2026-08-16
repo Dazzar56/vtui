@@ -250,6 +250,7 @@ type frameManager struct {
 	workspaceTabDrag         *AppScreen
 	workspaceTabDragHits     []workspaceTabHit
 	running                  bool
+	lastTitle                string
 
 	lastMouseClickTime     time.Time
 	lastMouseX, lastMouseY int
@@ -335,7 +336,8 @@ func (fm *frameManager) tickAnimations() {
 // for the persistent workspace tab bar.
 func (fm *frameManager) WorkspaceTopInset() int {
 	if fm.WorkspaceTabMode == WorkspaceTabsAlways ||
-		(fm.WorkspaceTabMode == WorkspaceTabsMultiple && len(fm.Screens) > 1) {
+		(fm.WorkspaceTabMode == WorkspaceTabsMultiple && len(fm.Screens) > 1) ||
+		(fm.WorkspaceTabMode == WorkspaceTabsOnCtrl && fm.ctrlPressed) {
 		return 1
 	}
 	return 0
@@ -1571,9 +1573,12 @@ func (fm *frameManager) cleanupOrphanedMenus() {
 
 // SetWindowTitle updates the terminal or application window title.
 func (fm *frameManager) SetWindowTitle(title string) {
+	if title == fm.lastTitle {
+		return
+	}
+	fm.lastTitle = title
 	if fm.scr != nil && fm.scr.Renderer != nil {
 		fm.scr.Renderer.SetWindowTitle(title)
-		fm.scr.Renderer.Flush()
 	}
 }
 
@@ -1620,6 +1625,9 @@ func (fm *frameManager) GetBackendName() string {
 	rName := fmt.Sprintf("%T", fm.scr.Renderer)
 	if strings.Contains(rName, "Gogpu") {
 		return "GUI (GoGPU)"
+	}
+	if strings.Contains(rName, "Ebiten") {
+		return "GUI (Ebiten)"
 	}
 	if strings.Contains(rName, "X11") {
 		return "GUI (X11)"
@@ -2235,6 +2243,10 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 		}
 		fm.ctrlPressed = ctrl
 		if wasCtrlPressed != fm.ctrlPressed && fm.WorkspaceTabMode == WorkspaceTabsOnCtrl {
+			// The overlay tab strip takes and releases the top row as Ctrl is
+			// held, so frames must relayout; a plain redraw would leave the
+			// image where it was and let it paint over the tabs.
+			fm.ResizeAllScreens()
 			fm.Redraw()
 		}
 

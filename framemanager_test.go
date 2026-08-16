@@ -1723,6 +1723,25 @@ func TestFrameManager_WorkspaceTopInsetModes(t *testing.T) {
 	}
 }
 
+func TestFrameManager_OnCtrlInsetTracksCtrlState(t *testing.T) {
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	fm := &frameManager{}
+	fm.Init(scr)
+	fm.ConfigureWorkspaceTabs(WorkspaceTabsOnCtrl, WorkspaceCtrlTabDirect)
+
+	// The overlay strip is drawn while Ctrl is held, so that row must be
+	// reserved then; otherwise a full-screen image paints over the tabs.
+	fm.ctrlPressed = true
+	if got := fm.WorkspaceTopInset(); got != 1 {
+		t.Fatalf("on-ctrl mode while ctrl is held inset = %d, want 1", got)
+	}
+	fm.ctrlPressed = false
+	if got := fm.WorkspaceTopInset(); got != 0 {
+		t.Fatalf("on-ctrl mode without ctrl inset = %d, want 0", got)
+	}
+}
+
 func TestFrameManager_WorkspaceTabsAndCounterRendering(t *testing.T) {
 	SetDefaultPalette()
 	scr := NewSilentScreenBuf()

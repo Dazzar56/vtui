@@ -1,36 +1,53 @@
 package vtui
 
 import (
-	"strconv"
 	"strings"
 )
 
-// attributesToANSI генерирует минимальную ANSI-последовательность для перехода между состояниями аттрибутов.
+// attributesToANSI returns the minimal ANSI sequence transitioning between attribute states.
 func attributesToANSI(attr, lastAttr uint64, activePal *[256]uint32, profile ColorProfile, quantCache map[uint32]uint8) string {
 	var b strings.Builder
 	writeAttributesToANSI(&b, attr, lastAttr, activePal, profile, quantCache)
 	return b.String()
 }
 
-// writeAttributesToANSI merges style, fg and bg into a single CSI
-// ("\x1b[1;38;2;R;G;B;48;2;R;G;Bm") instead of one escape per component:
-// identical terminal semantics, ~4 bytes shorter per component. Stack
-// buffers only, so the Render hot path stays allocation-free.
+func appendUint8(dst []byte, v uint8) []byte {
+	if v < 10 {
+		return append(dst, byte('0'+v))
+	}
+	if v < 100 {
+		return append(dst, byte('0'+v/10), byte('0'+v%10))
+	}
+	return append(dst, byte('0'+v/100), byte('0'+(v/10)%10), byte('0'+v%10))
+}
+
+// writeAttributesToANSI merges style, fg and bg into a single CSI (~4 bytes
+// shorter per component, no allocations) with identical terminal semantics.
 func writeAttributesToANSI(b *strings.Builder, attr, lastAttr uint64, activePal *[256]uint32, profile ColorProfile, quantCache map[uint32]uint8) {
-	if attr == lastAttr {
-		return
-	}
-
-	resetTriggered := false
-	const flagsMask = (ForegroundIntensity | ForegroundDim | CommonLvbUnderscore | CommonLvbReverse | CommonLvbStrikeout)
-	if (lastAttr&flagsMask)&^(attr&flagsMask) != 0 {
-		b.WriteString("\x1b[0m")
-		lastAttr = 0
-		resetTriggered = true
-	}
-
 	var buf [64]byte
-	n := 0
+	n := formatAttributesCSI(buf[:], attr, lastAttr, activePal, profile, quantCache)
+	if n > 0 {
+		b.Write(buf[:n])
+	}
+}
+
+// writeAttributesToBuffer writes directly to the zero-allocation byteBuffer.
+func writeAttributesToBuffer(b *byteBuffer, attr, lastAttr uint64, activePal *[256]uint32, profile ColorProfile, quantCache map[uint32]uint8) {
+	var buf [64]byte
+	n := formatAttributesCSI(buf[:], attr, lastAttr, activePal, profile, quantCache)
+	if n > 0 {
+		b.Write(buf[:n])
+	}
+}
+
+func formatAttributesCSI(buf []byte, attr, lastAttr uint64, activePal *[256]uint32, profile ColorProfile, quantCache map[uint32]uint8) int {
+	if attr == lastAttr {
+		return 0
+	}
+
+	buf[0] = '\x1b'
+	buf[1] = '['
+	n := 2
 	first := true
 	writeSep := func() {
 		if !first {
@@ -38,6 +55,16 @@ func writeAttributesToANSI(b *strings.Builder, attr, lastAttr uint64, activePal 
 			n++
 		}
 		first = false
+	}
+
+	resetTriggered := false
+	const flagsMask = (ForegroundIntensity | ForegroundDim | CommonLvbUnderscore | CommonLvbReverse | CommonLvbStrikeout)
+	if (lastAttr&flagsMask)&^(attr&flagsMask) != 0 {
+		buf[n] = '0'
+		n++
+		first = false
+		lastAttr = 0
+		resetTriggered = true
 	}
 
 	if attr&ForegroundIntensity != 0 && lastAttr&ForegroundIntensity == 0 {
@@ -78,12 +105,12 @@ func writeAttributesToANSI(b *strings.Builder, attr, lastAttr uint64, activePal 
 		n += writeColorANSI(buf[n:], true, attr, activePal, profile, quantCache)
 	}
 
-	if n > 0 {
-		b.WriteByte('\x1b')
-		b.WriteByte('[')
-		b.Write(buf[:n])
-		b.WriteByte('m')
+	if n > 2 {
+		buf[n] = 'm'
+		n++
+		return n
 	}
+	return 0
 }
 
 // writeColorANSI appends one colour component — "P;2;R;G;B" (true colour) or
@@ -135,30 +162,30 @@ func writeColorANSI(dst []byte, isBg bool, attr uint64, activePal *[256]uint32, 
 
 // appendColor256 appends "P;5;N" to dst and returns the byte count.
 func appendColor256(dst []byte, isBg bool, idx uint8) int {
+	p := dst[:0]
 	if isBg {
-		copy(dst, "48;5;")
+		p = append(p, "48;5;"...)
 	} else {
-		copy(dst, "38;5;")
+		p = append(p, "38;5;"...)
 	}
-	n := 5
-	return n + copy(dst[n:], strconv.AppendInt(dst[n:n], int64(idx), 10))
+	p = appendUint8(p, idx)
+	return len(p)
 }
 
 // appendColorRGB appends "P;2;R;G;B" to dst and returns the byte count.
 func appendColorRGB(dst []byte, isBg bool, r, g, b uint8) int {
+	p := dst[:0]
 	if isBg {
-		copy(dst, "48;2;")
+		p = append(p, "48;2;"...)
 	} else {
-		copy(dst, "38;2;")
+		p = append(p, "38;2;"...)
 	}
-	n := 5
-	n += copy(dst[n:], strconv.AppendInt(dst[n:n], int64(r), 10))
-	dst[n] = ';'
-	n++
-	n += copy(dst[n:], strconv.AppendInt(dst[n:n], int64(g), 10))
-	dst[n] = ';'
-	n++
-	return n + copy(dst[n:], strconv.AppendInt(dst[n:n], int64(b), 10))
+	p = appendUint8(p, r)
+	p = append(p, ';')
+	p = appendUint8(p, g)
+	p = append(p, ';')
+	p = appendUint8(p, b)
+	return len(p)
 }
 
 // colorToANSI returns one colour component (no CSI, no 'm') as a string,
@@ -179,9 +206,7 @@ var idx16BG = [...]string{
 }
 
 func idxTo16ColorANSI(isBg bool, idx uint8) string {
-	if idx > 15 {
-		idx = idx % 16 // safe fallback
-	}
+	idx = idx & 15
 	if isBg {
 		return idx16BG[idx]
 	}
