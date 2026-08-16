@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdarg.h>
 #include <unistd.h>
+#include <errno.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
@@ -30,6 +31,8 @@ struct vtui_session {
 };
 
 vtui_session *vtui_open(const char *config_json) {
+    signal(SIGPIPE, SIG_IGN);
+
     int sv[2];
     if (socketpair(AF_UNIX, SOCK_STREAM, 0, sv) < 0) {
         set_last_error("failed to create socketpair");
@@ -111,7 +114,10 @@ int vtui_event_fd(vtui_session *s) {
 
 int vtui_recv(vtui_session *s, char *buf, size_t cap, size_t *out_len) {
     if (!s || !s->stream_in) return -1;
-    if (fgets(buf, (int)cap, s->stream_in) == NULL) {
+    while (fgets(buf, (int)cap, s->stream_in) == NULL) {
+        if (errno == EINTR) {
+            continue;
+        }
         return -1;
     }
     if (out_len) {
@@ -145,6 +151,8 @@ struct vtui_ui {
     char current_children[4096];
     char last_cmd_src[64];
     int mounted;
+    char *last_edit_buf;
+    size_t last_edit_cap;
 };
 
 void vtui_dialog(vtui_ui *u, const char *title, int w) {
@@ -156,6 +164,8 @@ void vtui_dialog(vtui_ui *u, const char *title, int w) {
 
 void vtui_edit(vtui_ui *u, const char *label, char *buf, size_t buf_cap) {
     if (!u) return;
+    u->last_edit_buf = buf;
+    u->last_edit_cap = buf_cap;
     char entry[512];
     snprintf(entry, sizeof(entry),
         "%s{\"type\":\"Group\",\"layout\":{\"type\":\"Form\",\"spacing\":1},\"children\":["
@@ -267,6 +277,19 @@ int vtui_run(vtui_ui_func ui_fn) {
             if (strstr(buf, "\"op\":\"closed\"") != NULL) {
                 if (strstr(buf, "\"frameId\":\"mainDlg\"") != NULL) {
                     break;
+                }
+            }
+            if (strstr(buf, "\"op\":\"changed\"") != NULL) {
+                char *val = strstr(buf, "\"value\":\"");
+                if (val && u.last_edit_buf && u.last_edit_cap > 0) {
+                    val += 9;
+                    char *end = strchr(val, '"');
+                    if (end) {
+                        size_t len = end - val;
+                        if (len >= u.last_edit_cap) len = u.last_edit_cap - 1;
+                        strncpy(u.last_edit_buf, val, len);
+                        u.last_edit_buf[len] = '\0';
+                    }
                 }
             }
             if (strstr(buf, "\"op\":\"command\"") != NULL) {

@@ -65,6 +65,7 @@ func runSession(in io.Reader, out io.Writer, backend string) {
 	scr := vtui.NewScreenBuf()
 	scr.AllocBuf(w, h)
 	vtui.FrameManager.Init(scr)
+	vtui.FrameManager.Push(vtui.NewDesktop())
 	vtui.FrameManager.SetHostMode(true)
 
 	session := vtui.NewProtocolSession(in, out, vtui.FrameManager)

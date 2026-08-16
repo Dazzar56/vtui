@@ -57,7 +57,7 @@ func NewEdit(x, y, width int, defaultText string) *Edit {
 		HistoryPos:         -1,
 		selStart:           -1,
 		selAnchor:          -1,
-		clearFlag:          false,
+		clearFlag:          len(defaultText) > 0,
 		ColorTextIdx:       ColDialogEdit,
 		ColorUnchangedIdx:  ColDialogEditUnchanged,
 		ColorSelectedIdx:   ColDialogEditSelected,
@@ -439,6 +439,7 @@ func (e *Edit) InsertString(text string) {
 	if e.OnTextChange != nil {
 		e.OnTextChange(string(e.text))
 	}
+	e.NotifyChange()
 }
 
 func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
@@ -494,6 +495,7 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 				if e.OnTextChange != nil {
 					e.OnTextChange(string(e.text))
 				}
+				e.NotifyChange()
 			}
 		}
 		return true
@@ -772,6 +774,7 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 		if e.OnTextChange != nil {
 			e.OnTextChange(string(e.text))
 		}
+		e.NotifyChange()
 		return true
 
 	case vtinput.VK_DELETE:

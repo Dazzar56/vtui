@@ -72,10 +72,21 @@ class Session extends EventEmitter {
 
     this.stream = this.proc.stdio[3];
 
+    if (this.stream) {
+      this.stream.on("error", err => {
+        if (err.code === "ECONNRESET" || err.code === "EPIPE") {
+          return;
+        }
+        this.emit("error", err);
+      });
+    }
+
     const rl = readline.createInterface({
       input: this.stream,
       crlfDelay: Infinity,
     });
+
+    rl.on("error", () => {});
 
     rl.on("line", line => {
       if (!line) return;
