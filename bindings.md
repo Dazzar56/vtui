@@ -1049,6 +1049,7 @@ int main(void) { return vtui_run(ui); }
 | **M5** | Биндинги для Node и TypeScript | **Готово** |
 | **M6** | Биндинги C / C++ и WASM | **Готово** |
 | **M7** | Инструменты записи и воспроизведения (`VTUI_RECORD`, `vtui-replay`, `vtui-cast`) | **Готово** |
+| **Приёмка** | Сквозные тесты интеграции биндингов (`bindings_integration_test.go`) | **Готово** |
 
 ---
 
