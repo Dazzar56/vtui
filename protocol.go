@@ -73,6 +73,8 @@ type ProtocolSession struct {
 	tracing       bool
 	closed        bool
 	throttleMap   map[string]time.Time
+	recordFile    *os.File
+	recordStart   time.Time
 }
 
 // NewProtocolSession creates a new protocol session over the given I/O streams.
@@ -80,6 +82,14 @@ func NewProtocolSession(in io.Reader, out io.Writer, fm *frameManager) *Protocol
 	if fm == nil {
 		fm = FrameManager
 	}
+	recPath := os.Getenv("VTUI_RECORD")
+	var recF *os.File
+	if recPath != "" {
+		if f, err := os.Create(recPath); err == nil {
+			recF = f
+		}
+	}
+
 	ps := &ProtocolSession{
 		in:            in,
 		out:           out,
@@ -87,6 +97,8 @@ func NewProtocolSession(in io.Reader, out io.Writer, fm *frameManager) *Protocol
 		mountedFrames: make(map[string]Frame),
 		tracing:       os.Getenv("VTUI_TRACE") == "1",
 		throttleMap:   make(map[string]time.Time),
+		recordFile:    recF,
+		recordStart:   time.Now(),
 	}
 
 	// Wire FrameManager event sink to protocol output
@@ -109,6 +121,16 @@ func (ps *ProtocolSession) send(msg UpMessage) error {
 	}
 	if ps.tracing {
 		fmt.Fprintf(os.Stderr, "[VTUI_TRACE:UP] %s\n", string(data))
+	}
+	if ps.recordFile != nil {
+		elapsed := time.Since(ps.recordStart).Seconds()
+		recLine, _ := json.Marshal(map[string]any{
+			"time": elapsed,
+			"dir":  "up",
+			"msg":  msg,
+		})
+		_, _ = ps.recordFile.Write(append(recLine, '\n'))
+		_ = ps.recordFile.Sync()
 	}
 	_, err = ps.out.Write(append(data, '\n'))
 	return err
@@ -170,6 +192,18 @@ func (ps *ProtocolSession) Serve() error {
 		}
 		if ps.tracing {
 			fmt.Fprintf(os.Stderr, "[VTUI_TRACE:DOWN] %s\n", string(line))
+		}
+		if ps.recordFile != nil {
+			elapsed := time.Since(ps.recordStart).Seconds()
+			var raw any
+			_ = json.Unmarshal(line, &raw)
+			recLine, _ := json.Marshal(map[string]any{
+				"time": elapsed,
+				"dir":  "down",
+				"msg":  raw,
+			})
+			_, _ = ps.recordFile.Write(append(recLine, '\n'))
+			_ = ps.recordFile.Sync()
 		}
 
 		var msg DownMessage
@@ -369,6 +403,10 @@ func (ps *ProtocolSession) Close() {
 		return
 	}
 	ps.closed = true
+	if ps.recordFile != nil {
+		_ = ps.recordFile.Close()
+		ps.recordFile = nil
+	}
 	ps.mu.Unlock()
 
 	if ps.fm != nil {

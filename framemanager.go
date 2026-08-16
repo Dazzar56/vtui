@@ -301,6 +301,14 @@ func (fm *frameManager) GetActiveToast() string {
 // FrameManager is the global instance of the frame manager.
 var FrameManager = &frameManager{}
 
+// FrameManagerType is the exported type for the frame manager.
+type FrameManagerType = frameManager
+
+// NewFrameManager creates a new, independent FrameManager instance.
+func NewFrameManager() *FrameManagerType {
+	return &frameManager{}
+}
+
 func (fm *frameManager) AddAnimation(anim func(dt float64) bool) {
 	fm.animMu.Lock()
 	defer fm.animMu.Unlock()
