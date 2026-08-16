@@ -66,9 +66,22 @@ public:
         return values_[id] == "1";
     }
 
+    static std::string escapeJson(const std::string& s) {
+        std::string out;
+        for (char c : s) {
+            if (c == '"') out += "\\\"";
+            else if (c == '\\') out += "\\\\";
+            else if (c == '\n') out += "\\n";
+            else if (c == '\r') out += "\\r";
+            else if (c == '\t') out += "\\t";
+            else out += c;
+        }
+        return out;
+    }
+
     void message(const std::string& title, const std::string& text) {
         std::ostringstream ss;
-        ss << "{\"op\":\"message\",\"title\":\"" << title << "\",\"text\":\"" << text << "\",\"buttons\":[\"&Ok\"]}\n";
+        ss << "{\"op\":\"message\",\"title\":\"" << escapeJson(title) << "\",\"text\":\"" << escapeJson(text) << "\",\"buttons\":[\"&Ok\"]}\n";
         std::string msg = ss.str();
         vtui_send(session_, msg.c_str(), msg.size());
     }

@@ -340,6 +340,18 @@ func (e *Edit) SetText(text string) {
 	e.leftPos = 0
 	e.selStart = -1
 	e.selAnchor = -1
+	e.NotifyChange()
+}
+
+func (e *Edit) NotifyChange() {
+	e.ScreenObject.NotifyChange()
+	if FrameManager != nil && e.ID() != "" {
+		FrameManager.emitEventSink(UIEvent{
+			Kind:  "changed",
+			SrcID: e.ID(),
+			Value: PropValString(e.GetText()),
+		})
+	}
 }
 
 // SelectAll selects the entire text and sets the clear flag,
@@ -790,6 +802,7 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 		if e.OnTextChange != nil {
 			e.OnTextChange(string(e.text))
 		}
+		e.NotifyChange()
 		return true
 
 	case vtinput.VK_INSERT:

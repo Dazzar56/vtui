@@ -329,18 +329,10 @@ func (so *ScreenObject) HandleCommand(cmd int, args any) bool {
 	}
 	DebugLog("CMD: [%p] ID %d dropped (no owner)", so, cmd)
 	if FrameManager != nil {
-		srcID := ""
-		if s, ok := args.(string); ok {
-			srcID = s
+		if args == nil && so.ID() != "" {
+			args = so.ID()
 		}
-		if srcID == "" {
-			srcID = so.ID()
-		}
-		FrameManager.emitEventSink(UIEvent{
-			Kind:  "command",
-			Cmd:   cmd,
-			SrcID: srcID,
-		})
+		return FrameManager.EmitCommand(cmd, args)
 	}
 	return false
 }

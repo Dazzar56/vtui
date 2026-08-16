@@ -194,12 +194,37 @@ int vtui_checkbox(vtui_ui *u, const char *text, int default_state) {
     return default_state;
 }
 
+static void escape_json_str(const char *in, char *out, size_t out_cap) {
+    if (!in || !out || out_cap == 0) return;
+    size_t j = 0;
+    for (size_t i = 0; in[i] != '\0' && j + 2 < out_cap; i++) {
+        if (in[i] == '"') {
+            out[j++] = '\\'; out[j++] = '"';
+        } else if (in[i] == '\\') {
+            out[j++] = '\\'; out[j++] = '\\';
+        } else if (in[i] == '\n') {
+            out[j++] = '\\'; out[j++] = 'n';
+        } else if (in[i] == '\r') {
+            out[j++] = '\\'; out[j++] = 'r';
+        } else if (in[i] == '\t') {
+            out[j++] = '\\'; out[j++] = 't';
+        } else {
+            out[j++] = in[i];
+        }
+    }
+    out[j] = '\0';
+}
+
 void vtui_message(vtui_ui *u, const char *title, const char *text) {
     if (!u || !u->session) return;
-    char msg[512];
+    char esc_title[128];
+    char esc_text[1024];
+    escape_json_str(title ? title : " Message ", esc_title, sizeof(esc_title));
+    escape_json_str(text ? text : "", esc_text, sizeof(esc_text));
+    char msg[2048];
     snprintf(msg, sizeof(msg),
         "{\"op\":\"message\",\"title\":\"%s\",\"text\":\"%s\",\"buttons\":[\"&Ok\"]}\n",
-        title ? title : " Message ", text ? text : "");
+        esc_title, esc_text);
     vtui_send(u->session, msg, strlen(msg));
 }
 
