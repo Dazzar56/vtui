@@ -55,7 +55,11 @@ class Ui {
     if (this.containerStack.length > 0) {
       this.containerStack[this.containerStack.length - 1].children.push(node);
     }
-    return this.clickedIds.has(btnId);
+    if (this.clickedIds.has(btnId)) {
+      this.clickedIds.delete(btnId);
+      return true;
+    }
+    return false;
   }
 
   checkbox(text, defaultValue = false, id = null) {

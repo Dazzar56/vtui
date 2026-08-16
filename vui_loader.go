@@ -218,8 +218,20 @@ func LoadVuiDocument(doc *VuiDocument) (*Window, error) {
 		}
 	}
 
-	winW := win.X2 - win.X1 + 1
-	winH := win.Y2 - win.Y1 + 1
+	winW := 0
+	winH := 0
+	if doc.Root.Props != nil {
+		if w, ok := doc.Root.Props["w"].(float64); ok {
+			winW = int(w)
+		} else if w, ok := doc.Root.Props["width"].(float64); ok {
+			winW = int(w)
+		}
+		if h, ok := doc.Root.Props["h"].(float64); ok {
+			winH = int(h)
+		} else if h, ok := doc.Root.Props["height"].(float64); ok {
+			winH = int(h)
+		}
+	}
 
 	layoutType := "VBox"
 	spacing := 1
@@ -259,6 +271,13 @@ func LoadVuiDocument(doc *VuiDocument) (*Window, error) {
 		winH = calcH
 		win.MinW = hSpec.Min + 2
 		win.MinH = vSpec.Min + 2
+	} else {
+		if winW <= 0 {
+			winW = win.X2 - win.X1 + 1
+		}
+		if winH <= 0 {
+			winH = win.Y2 - win.Y1 + 1
+		}
 	}
 
 	scrW, scrH := 80, 25

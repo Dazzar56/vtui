@@ -29,6 +29,9 @@ def _find_host_binary(explicit_path: Optional[str] = None) -> str:
     base = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
     candidates = [
         os.path.join(base, "cmd", "vtui-host", "vtui-host"),
+        os.path.join(base, "bindings", "cpp", "build", "vtui-host"),
+        os.path.join(base, "bindings", "c", "build", "vtui-host"),
+        os.path.join(base, "bindings", "build", "vtui-host"),
         os.path.join(base, "build", "vtui-host"),
         os.path.join(base, "vtui-host"),
         os.path.join(os.path.expanduser("~"), "go", "bin", "vtui-host"),

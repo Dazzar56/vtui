@@ -123,15 +123,16 @@ int vtui_recv(vtui_session *s, char *buf, size_t cap, size_t *out_len) {
 void vtui_close(vtui_session *s) {
     if (!s) return;
     vtui_send(s, "{\"op\":\"quit\"}\n", 14);
+    if (s->fd >= 0) {
+        shutdown(s->fd, SHUT_WR);
+    }
+    if (s->pid > 0) {
+        int status = 0;
+        waitpid(s->pid, &status, 0);
+    }
     if (s->stream_in) fclose(s->stream_in);
     if (s->stream_out) fclose(s->stream_out);
     if (s->fd >= 0) close(s->fd);
-    if (s->pid > 0) {
-        int status;
-        // Wait synchronously to ensure vtui-host restores the terminal cleanly
-        // before we return control to the shell, avoiding race conditions.
-        waitpid(s->pid, &status, 0);
-    }
     free(s);
 }
 
@@ -174,7 +175,11 @@ int vtui_button(vtui_ui *u, const char *text) {
         (u->current_children[0] != '\0') ? "," : "",
         text ? text : "&Ok");
     strncat(u->current_children, entry, sizeof(u->current_children) - strlen(u->current_children) - 1);
-    return (strcmp(u->last_cmd_src, "okBtn") == 0);
+    if (strcmp(u->last_cmd_src, "okBtn") == 0) {
+        u->last_cmd_src[0] = '\0';
+        return 1;
+    }
+    return 0;
 }
 
 int vtui_checkbox(vtui_ui *u, const char *text, int default_state) {
@@ -235,7 +240,9 @@ int vtui_run(vtui_ui_func ui_fn) {
         if (out_len > 0) {
             buf[out_len] = '\0';
             if (strstr(buf, "\"op\":\"closed\"") != NULL) {
-                break;
+                if (strstr(buf, "\"frameId\":\"mainDlg\"") != NULL) {
+                    break;
+                }
             }
             if (strstr(buf, "\"op\":\"command\"") != NULL) {
                 char *src = strstr(buf, "\"srcId\":\"");

@@ -49,7 +49,12 @@ public:
     bool button(const std::string& text) {
         std::string id = "btn_" + sanitizeId(text);
         addButton(text, id);
-        return clickedIds_.find(id) != clickedIds_.end();
+        auto it = clickedIds_.find(id);
+        if (it != clickedIds_.end()) {
+            clickedIds_.erase(it);
+            return true;
+        }
+        return false;
     }
 
     bool checkbox(const std::string& text, bool defVal = false) {

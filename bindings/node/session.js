@@ -24,6 +24,9 @@ function findHostBinary(explicit) {
   const base = path.resolve(__dirname, "../..");
   const candidates = [
     path.join(base, "cmd/vtui-host/vtui-host"),
+    path.join(base, "bindings/cpp/build/vtui-host"),
+    path.join(base, "bindings/c/build/vtui-host"),
+    path.join(base, "bindings/build/vtui-host"),
     path.join(base, "build/vtui-host"),
     path.join(base, "vtui-host"),
     path.join(os.homedir(), "go/bin/vtui-host"),

@@ -88,8 +88,10 @@ class Ui:
         btn_id = id or f"btn_{text.replace('&', '').strip()}"
         cmd_id = 1000 + abs(hash(btn_id)) % 8000
         self._add_element("Button", {"text": text, "command": cmd_id}, btn_id)
-        clicked = btn_id in self._clicked_ids
-        return clicked
+        if btn_id in self._clicked_ids:
+            self._clicked_ids.remove(btn_id)
+            return True
+        return False
 
     def checkbox(self, text: str, value: bool = False, id: Optional[str] = None) -> bool:
         """Declares a Checkbox. Returns its current boolean state."""

@@ -868,6 +868,7 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 		if e.OnTextChange != nil {
 			e.OnTextChange(string(e.text))
 		}
+		e.NotifyChange()
 		// Path hints: typing a path separator in an enabled edit opens the
 		// autocomplete menu when the host provider has anything to suggest.
 		if (testChar == '/' || testChar == '\\') && e.PathHintsEnabled && PathHintProvider != nil && FrameManager != nil {
