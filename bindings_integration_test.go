@@ -64,6 +64,31 @@ func TestIntegration_PHPBindings(t *testing.T) {
 		t.Fatalf("PHP bindings test failed: %v\nOutput:\n%s", err, string(out))
 	}
 }
+func TestIntegration_LuaBindings(t *testing.T) {
+	var luaBin string
+	for _, cand := range []string{"luajit", "lua", "lua5.4", "lua5.3", "lua5.2", "lua5.1"} {
+		if p, err := exec.LookPath(cand); err == nil {
+			luaBin = p
+			break
+		}
+	}
+	if luaBin == "" {
+		t.Skip("Lua interpreter (luajit/lua) not found on this system. To test Lua bindings, install Lua: 'sudo apt install luajit' (Debian/Ubuntu) or 'brew install luajit' (macOS)")
+	}
+
+	testFile := filepath.Join("bindings", "lua", "tests", "test_vtui.lua")
+	if _, err := os.Stat(testFile); err != nil {
+		t.Skipf("Lua test file %s not found", testFile)
+	}
+
+	luaDir, _ := filepath.Abs(filepath.Join("bindings", "lua"))
+	cmd := exec.Command(luaBin, testFile)
+	cmd.Env = append(os.Environ(), "LUA_PATH="+luaDir+"/?.lua;;")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("Lua bindings test failed: %v\nOutput:\n%s", err, string(out))
+	}
+}
 func TestIntegration_CBindingsCompilation(t *testing.T) {
 	cc, err := exec.LookPath("gcc")
 	if err != nil {

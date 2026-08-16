@@ -15,10 +15,26 @@ import (
 )
 
 func main() {
-	protoFDFlag := flag.String("protocol-fd", "", "File descriptor number for protocol communication")
+	protoFDFlag := flag.String("protocol-fd", "", "File descriptor number for bidirectional protocol communication")
+	protoInFDFlag := flag.String("protocol-in-fd", "", "File descriptor number for protocol input")
+	protoOutFDFlag := flag.String("protocol-out-fd", "", "File descriptor number for protocol output")
 	socketFlag := flag.String("socket", "", "Unix domain socket path for protocol communication")
+	socketListenFlag := flag.String("socket-listen", "", "Unix domain socket path to listen on for protocol communication")
 	backendFlag := flag.String("backend", "ansi", "Rendering backend (ansi, gogpu, x11, wayland, ebiten)")
 	flag.Parse()
+
+	if *protoInFDFlag != "" && *protoOutFDFlag != "" {
+		inFD, err1 := strconv.Atoi(*protoInFDFlag)
+		outFD, err2 := strconv.Atoi(*protoOutFDFlag)
+		if err1 == nil && err2 == nil {
+			inF := os.NewFile(uintptr(inFD), "protocol_in")
+			outF := os.NewFile(uintptr(outFD), "protocol_out")
+			defer inF.Close()
+			defer outF.Close()
+			runSession(inF, outF, *backendFlag)
+			return
+		}
+	}
 
 	if *protoFDFlag != "" {
 		fd, err := strconv.Atoi(*protoFDFlag)
@@ -29,6 +45,25 @@ func main() {
 		f := os.NewFile(uintptr(fd), "protocol_stream")
 		defer f.Close()
 		runSession(f, f, *backendFlag)
+		return
+	}
+
+	if *socketListenFlag != "" {
+		_ = os.Remove(*socketListenFlag)
+		l, err := net.Listen("unix", *socketListenFlag)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "vtui-host: failed to listen on socket %s: %v\n", *socketListenFlag, err)
+			os.Exit(1)
+		}
+		defer l.Close()
+		defer os.Remove(*socketListenFlag)
+		conn, err := l.Accept()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "vtui-host: failed to accept socket connection: %v\n", err)
+			os.Exit(1)
+		}
+		defer conn.Close()
+		runSession(conn, conn, *backendFlag)
 		return
 	}
 

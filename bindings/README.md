@@ -11,6 +11,7 @@
 | **Python** | Immediate-mode facade (`asyncio` ready) | [bindings/python/README.md](python/README.md) |
 | **Node.js / TypeScript** | Immediate-mode & Typed definitions (`esbuild` style) | [bindings/node/README.md](node/README.md) |
 | **PHP** | Immediate-mode facade via standard streams | [bindings/php/README.md](php/README.md) |
+| **Lua** | Immediate-mode facade (Lua 5.1+ / LuaJIT) | [bindings/lua/README.md](lua/README.md) |
 | **C** | Lightweight 6-function C ABI & immediate facade | [bindings/c/README.md](c/README.md) |
 | **C++** | Modern C++17 RAII wrapper (`vtui.hpp`) | [bindings/cpp/README.md](cpp/README.md) |
 | **WebAssembly (WASM)** | Universal `wasip1` module | [cmd/vtui-wasm](../cmd/vtui-wasm) |
@@ -61,6 +62,19 @@ run(function(Ui $u) {
         }
     });
 });
+```
+### Lua
+```lua
+local vtui = require("vtui")
+
+vtui.run(function(u)
+    u:dialog(" Hello vtui ", 40, function()
+        local name = u:edit("&Name:", "Type here...")
+        if u:button("&Ok") then
+            u:message(" Result ", "You typed:\n" .. name)
+        end
+    end)
+end)
 ```
 
 ### C++ (C++17)
