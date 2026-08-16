@@ -12,47 +12,39 @@ import (
 	"github.com/soniakeys/quant/median"
 )
 
-// Sixel output backend. Sixel is the lowest common denominator of terminal
-// graphics: Windows Terminal and conhost speak only sixel, and every terminal
-// that speaks kitty or iTerm2 speaks sixel too (except kitty itself). It is
-// what makes images work on Windows Terminal, on conhost on recent Windows 11,
-// and through the ConPTY bridge that WSL and Windows console applications are
-// attached to. Note that only the modern ConPTY build (Windows Terminal 1.22+)
-// forwards image escape sequences; the detection layer queries DA1 rather than
-// assuming that every ConPTY does.
+// Sixel output backend: the lowest common denominator of terminal graphics,
+// which is what makes images work on Windows Terminal, conhost and the ConPTY
+// bridge. Only the modern ConPTY build (Windows Terminal 1.22+) forwards image
+// escapes, so detection queries DA1 rather than assuming it.
 //
-// Unlike kitty, sixel has no server-side image store: the terminal keeps no
-// pixels we can re-place. The encoder therefore caches the *encoded* bytes
-// keyed on surface content, crop and destination size, so a still picture or
-// a pan inside a cached crop costs a cursor move and a byte copy, exactly like
-// the kitty backend's upload cache.
+// Sixel has no server-side image store, so the encoder caches the *encoded*
+// bytes keyed on surface content, crop and destination size: a still picture
+// or a pan inside a cached crop costs a cursor move and a byte copy, like the
+// kitty backend's upload cache.
 
 const (
-	// sixelCacheLimit bounds the encoded images kept in memory. A viewer
-	// shows one picture at a time; a gallery a screenful; a pan step reuses
-	// the previous crop only when it did not change.
+	// sixelCacheLimit bounds the encoded images kept in memory: a viewer
+	// shows one picture at a time, a gallery a screenful.
 	sixelCacheLimit = 48
 
-	// sixelMaxColors is the number of colour registers used. One value is
-	// reserved as the transparent sentinel, so the palette has 255 entries.
+	// sixelMaxColors is the colour register count; one value is the
+	// transparent sentinel, so the palette has 255 entries.
 	sixelMaxColors = 255
 
 	// sixelCellFallbackW/H is the assumed cell geometry when the terminal
-	// cannot report one. It matches the viewer's own fallback so placement
-	// and rendering agree on the aspect ratio.
+	// cannot report one, matching the viewer's fallback so placement and
+	// rendering agree on the aspect ratio.
 	sixelCellFallbackW = 8
 	sixelCellFallbackH = 16
 
-	// sixelIndexTransparent marks a pixel whose alpha is zero: it is left
-	// unencoded so P2=1 keeps whatever the text layer already drew there.
+	// sixelIndexTransparent marks a zero-alpha pixel: left unencoded so P2=1
+	// keeps whatever the text layer drew there.
 	sixelIndexTransparent = 0xFF
 )
 
-// sixelGrid returns the sixel raster size for a cell rectangle in device
-// pixels. With a square pixel aspect ratio (Pan;Pad = 1;1) one sixel column
-// is one device pixel and one sixel band is six device pixels, so a
-// cols x rows cell box rasterises to cols*cw columns and rows*ch rows. The
-// last band may be partial; the emit loop leaves the rows beyond dh unset.
+// sixelGrid returns the sixel raster size for a cell rectangle: with
+// Pan;Pad = 1;1, a cols x rows box rasterises to cols*cw columns and rows*ch
+// rows. The last band may be partial; the emit loop leaves rows beyond dh unset.
 func sixelGrid(cols, rows, cw, ch int) (dw, dh int) {
 	if cw <= 0 || ch <= 0 {
 		cw, ch = sixelCellFallbackW, sixelCellFallbackH
@@ -68,12 +60,11 @@ func sixelGrid(cols, rows, cw, ch int) (dw, dh int) {
 	return dw, dh
 }
 
-// sixelCellSize resolves the cell geometry sixel should rasterise to. conhost
-// draws sixel into a fixed 10x20 virtual cell whatever the font really is, so
-// WSL sessions (WT_SESSION) and native Windows builds use that too. A
-// terminal that rasterises sixel itself — WezTerm in particular — keeps its
-// font cell even on Windows. Everywhere else the reported cell wins, falling
-// back to 8x16 while still unknown.
+// sixelCellSize resolves the cell geometry to rasterise to. conhost draws
+// sixel into a fixed 10x20 virtual cell whatever the font is, so WSL sessions
+// (WT_SESSION) and native Windows builds use that too. Terminals that
+// rasterise sixel themselves — WezTerm in particular — keep their font cell
+// even on Windows; elsewhere the reported cell wins, falling back to 8x16.
 func sixelCellSize(cw, ch int) (int, int) {
 	return sixelCellSizeWith(os.Getenv, runtime.GOOS, cw, ch)
 }
@@ -89,21 +80,19 @@ func sixelCellSizeWith(env func(string) string, goos string, cw, ch int) (int, i
 }
 
 // sixelPalette is the fixed 255-colour palette every image is quantised to:
-// the 6x6x6 colour cube plus 39 grey levels. A fixed palette keeps the
-// encoder deterministic and allocation-free, and the Floyd-Steinberg dither
-// below hides the banding a fixed palette would otherwise show.
+// the 6x6x6 cube plus 39 greys. Fixed keeps encoding deterministic and
+// allocation-free; the dither below hides the banding it would otherwise show.
 var sixelPalette [sixelMaxColors][3]byte
 
 // sixelPalI is the palette as int32, used by the dithering error paths.
 var sixelPalI [sixelMaxColors][3]int32
 
 // sixelLUT maps 15-bit RGB (5 bits per channel) to the nearest palette entry,
-// so per-pixel quantisation is one lookup instead of a 255-entry search.
+// making per-pixel quantisation a single lookup.
 var sixelLUT [1 << 15]uint8
 
-// sixelPalDef caches the fixed ";2;R;G;B" colour triple for every palette
-// entry, so the register header emits one string instead of formatting three
-// percentages per colour.
+// sixelPalDef caches the ";2;R;G;B" colour triple per entry so the register
+// header emits one string instead of formatting three percentages each.
 var sixelPalDef [sixelMaxColors]string
 
 func init() {
@@ -136,8 +125,7 @@ func init() {
 	}
 }
 
-// buildSixelLUT maps 15-bit RGB (5 bits per channel) to the nearest entry of
-// the given palette, so per-pixel quantisation is one lookup.
+// buildSixelLUT maps 15-bit RGB (5 bits per channel) to the nearest palette entry.
 func buildSixelLUT(palI [][3]int32) []uint8 {
 	lut := make([]uint8, 1<<15)
 	for k := range lut {
@@ -166,22 +154,21 @@ type sixelCacheEntry struct {
 	data string
 }
 
-// sixelEncoder tracks what has already been encoded so that panning or
-// scrolling re-sends cached bytes instead of re-quantising the picture.
+// sixelEncoder caches encoded images so panning re-sends bytes instead of
+// re-quantising the picture.
 type sixelEncoder struct {
 	cache map[uint64]sixelCacheEntry
 	order []uint64
 
 	// cellSize resolves the raster cell geometry; nil means sixelCellSize.
-	// Tests pin it so the output does not depend on the host terminal.
+	// Tests pin it so output does not depend on the host terminal.
 	cellSize func(cw, ch int) (int, int)
 
-	// adaptive selects a per-image median-cut palette instead of the fixed
-	// cube: slower, but far less banding on photos with a narrow gamut.
+	// adaptive uses a per-image median-cut palette: slower, but far less
+	// banding on photos with a narrow gamut.
 	adaptive bool
 
-	// Scratch reused across encodes, like go-sixel's scratch buffers: the
-	// encoder is render-thread only, so the buffers never need a lock.
+	// Scratch reused across encodes; render-thread only, so never locked.
 	idx      []byte
 	emitBits []byte
 	emitUsed []bool
@@ -215,9 +202,8 @@ func newSixelEncoder() *sixelEncoder {
 	return newSixelEncoderWith(os.Getenv)
 }
 
-// newSixelEncoderWith is newSixelEncoder with the environment injected, so the
-// palette opt-in is testable without a terminal. VTUI_SIXEL_PALETTE=adaptive
-// selects the per-image median-cut palette instead of the fixed cube.
+// newSixelEncoderWith is newSixelEncoder with the environment injected so the
+// palette opt-in is testable without a terminal: VTUI_SIXEL_PALETTE=adaptive.
 func newSixelEncoderWith(env func(string) string) *sixelEncoder {
 	return &sixelEncoder{
 		cache:    make(map[uint64]sixelCacheEntry),
@@ -225,13 +211,12 @@ func newSixelEncoderWith(env func(string) string) *sixelEncoder {
 	}
 }
 
-// adaptiveSixelPalette builds a median-cut palette of up to 255 colours from
-// the scaled surface, together with its LUT and the ready-to-emit ";2;R;G;B"
-// colour definitions. Large rasters are subsampled first: palette quality
-// barely depends on pixel count, while median-cut cost does.
+// adaptiveSixelPalette builds a median-cut palette of up to 255 colours with
+// its LUT and ";2;R;G;B" definitions. Large rasters are subsampled first:
+// palette quality barely depends on pixel count, but median-cut cost does.
 func adaptiveSixelPalette(scaled *ImageSurface) ([][3]int32, []string, []uint8) {
-	// The surface stores straight (non-premultiplied) RGBA, which is exactly
-	// the NRGBA layout, so it wraps as image.NRGBA without copying.
+	// Surface RGBA is straight (non-premultiplied), i.e. exactly NRGBA, so it
+	// wraps as image.NRGBA without copying.
 	src := image.Image(&image.NRGBA{Pix: scaled.Pix, Stride: scaled.Stride, Rect: image.Rect(0, 0, scaled.Width, scaled.Height)})
 	const budget = 1 << 18
 	if scaled.Width*scaled.Height > budget {
@@ -264,8 +249,8 @@ func adaptiveSixelPalette(scaled *ImageSurface) ([][3]int32, []string, []uint8) 
 	return palI, palDef, buildSixelLUT(palI)
 }
 
-// Reset is a no-op: sixel has no terminal-side state to drop. A forced
-// redraw re-paints every text cell, and the fresh sixel then draws over it.
+// Reset is a no-op: sixel keeps no terminal-side state; a forced redraw
+// re-paints the text cells and the fresh sixel draws over them.
 func (s *sixelEncoder) Reset(sb kittyBuffer) {}
 
 // Render replaces the currently visible placements with the given list.
@@ -314,9 +299,8 @@ func (s *sixelEncoder) writeCursor(sb kittyBuffer, row, col int) {
 	sb.WriteByte('H')
 }
 
-// sixelWriteCoord appends a non-negative terminal coordinate digit by digit
-// through WriteByte, so the hot cache-hit path stays allocation-free even
-// though it goes through the kittyBuffer interface.
+// sixelWriteCoord appends a coordinate digit by digit through WriteByte so
+// the cache-hit path stays allocation-free through the kittyBuffer interface.
 func sixelWriteCoord(sb kittyBuffer, n int) {
 	if n >= 10 {
 		sixelWriteCoord(sb, n/10)
@@ -330,8 +314,7 @@ func sixelWriteInt(sb *strings.Builder, scratch *[16]byte, v int) {
 }
 
 // encode scales the crop to the destination size, quantises it and returns one
-// complete DCS string. The palette is the fixed cube unless the encoder is in
-// adaptive mode, which builds a per-image median-cut palette instead.
+// complete DCS string, using the fixed cube or an adaptive median-cut palette.
 func (s *sixelEncoder) encode(surf *ImageSurface, sx, sy, sw, sh, dw, dh int) string {
 	src := surf
 	if sx != 0 || sy != 0 || sw != surf.Width || sh != surf.Height {
@@ -360,12 +343,10 @@ func (s *sixelEncoder) encode(surf *ImageSurface, sx, sy, sw, sh, dw, dh int) st
 
 	var sb strings.Builder
 	var scratch [16]byte
-	// Pre-size the builder: pixel data averages about half a character per
-	// sixel pixel plus a register switch per register per band. A wrong
-	// guess costs a single growth instead of repeated reallocations.
+	// Pre-size the builder; a wrong guess costs one growth instead of many.
 	sb.Grow(dw*dh/2 + len(regs)*(dh/6*2+16) + 64)
-	// P2=1 keeps the existing screen content behind zero (transparent)
-	// pixels; "1;1;W;H declares square pixels and the image extent.
+	// P2=1 keeps screen content behind transparent pixels; "1;1;W;H declares
+	// square pixels and the image extent.
 	sb.WriteString("\x1bP0;1;8q\"1;1;")
 	sixelWriteInt(&sb, &scratch, dw)
 	sb.WriteByte(';')
@@ -388,8 +369,8 @@ func sixelQuantize(surf *ImageSurface, idx []byte) {
 }
 
 // sixelQuantizePal is sixelQuantize with the palette's LUT and colours
-// injected, so an adaptive palette reuses the same dithering. Transparent
-// pixels become the sentinel and neither receive nor diffuse error.
+// injected so adaptive palettes reuse the same dithering. Transparent pixels
+// become the sentinel and neither receive nor diffuse error.
 func sixelQuantizePal(surf *ImageSurface, idx []byte, lut []uint8, palI [][3]int32) {
 	w, h := surf.Width, surf.Height
 	pix, stride, opaque := surf.Pix, surf.Stride, surf.Opaque
@@ -407,9 +388,9 @@ func sixelQuantizePal(surf *ImageSurface, idx []byte, lut []uint8, palI [][3]int
 					idx[do+x] = sixelIndexTransparent
 					continue
 				}
-				// A half-transparent pixel is drawn as its own colour:
-				// sixel can only be opaque or untouched, and blending
-				// against unknown text below is not expressible.
+				// Half-transparent pixels draw as their own colour: sixel is
+				// opaque or untouched only, and blending with unknown text
+				// below is not expressible.
 			}
 			r := clamp255(int32(pix[o]) + cur[x+1][0]/16)
 			g := clamp255(int32(pix[o+1]) + cur[x+1][1]/16)
@@ -471,16 +452,13 @@ func sixelRegisters(idx []byte) (remap []int, regs []int) {
 	return remap, regs
 }
 
-// sixelEmitData turns the quantised pixels into sixel scanlines: one pass per
-// colour register per band, so each sixel character only ever carries one
-// colour. Runs are RLE-compressed; blank columns inside a pass are emitted as
-// zero-bit characters so they still advance the sixel cursor.
+// sixelEmitData turns quantised pixels into sixel scanlines: one pass per
+// colour register per band so each character carries one colour, RLE-compressed.
 func (s *sixelEncoder) sixelEmitData(sb *strings.Builder, idx []byte, remap []int, nreg, dw, dh int) {
 	nbands := (dh + 5) / 6
 	workers := scaleWorkers
-	// Each band clears its own bit plane and RLEs its registers; the only
-	// cross-band state is the '-' separator, so bands can run in parallel.
-	// Small rasters stay serial: goroutine setup would dominate the work.
+	// Bands are independent apart from the '-' separator, so they can run in
+	// parallel; small rasters stay serial, where goroutine setup dominates.
 	if nbands < 2*workers {
 		sixelEmitBands(sb, idx, remap, nreg, dw, dh, 0, nbands,
 			s.reuseEmitBits(dw*nreg), s.reuseEmitUsed(nreg))
@@ -491,9 +469,7 @@ func (s *sixelEncoder) sixelEmitData(sb *strings.Builder, idx []byte, remap []in
 	bitsAll := s.reuseEmitBits(workers * dw * nreg)
 	usedAll := s.reuseEmitUsed(workers * nreg)
 	bandsPer := (nbands + workers - 1) / workers
-	// Pre-size the per-worker builders so they grow at most once; the
-	// estimate covers the run characters plus a colour switch per register
-	// per band, the same shape the serial path uses.
+	// Pre-size per-worker builders so they grow at most once.
 	for i := range outs {
 		outs[i].Grow(dw*dh/(2*workers) + nreg*(bandsPer*3+16) + 64)
 	}
@@ -520,9 +496,9 @@ func (s *sixelEncoder) sixelEmitData(sb *strings.Builder, idx []byte, remap []in
 	}
 }
 
-// sixelEmitBands emits the sixel bands in [b0, b1). The '-' separator is
-// written before every band except the global first, so splitting the range
-// across workers produces byte-identical output to the serial pass.
+// sixelEmitBands emits the bands in [b0, b1). The '-' separator precedes every
+// band but the global first, so splitting across workers matches the serial
+// pass byte for byte.
 func sixelEmitBands(sb *strings.Builder, idx []byte, remap []int, nreg, dw, dh, b0, b1 int, bits []byte, bandUsed []bool) {
 	var scratch [16]byte
 	for band := b0; band < b1; band++ {
@@ -560,11 +536,10 @@ func sixelEmitBands(sb *strings.Builder, idx []byte, remap []int, nreg, dw, dh, 
 			sb.WriteByte('#')
 			sixelWriteInt(sb, &scratch, r)
 			base := r * dw
-			// Blank columns still advance the sixel cursor, so this pass must
-			// emit a zero-bit character for each gap; otherwise every pixel to
-			// the right of a blank shifts left and the picture tears into
-			// diagonal stripes. Only trailing blanks can be skipped, because
-			// the following '$' or '-' returns the cursor to the left edge.
+			// Blank columns still advance the sixel cursor, so each gap needs a
+			// zero-bit character or everything to the right shifts left and the
+			// picture tears into diagonal stripes. Trailing blanks can be
+			// skipped: the following '$' or '-' returns the cursor to the edge.
 			end := dw
 			for end > 0 && bits[base+end-1] == 0 {
 				end--

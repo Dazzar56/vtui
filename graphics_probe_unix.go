@@ -8,16 +8,16 @@ import (
 	"time"
 )
 
-// da1Sixel sends a primary device attributes query and reads the answer,
-// reporting whether the terminal declares sixel support (parameter 4).
-// Best effort: a terminal that never answers simply yields false after a
-// short budget, which leaves detection at the environment result.
+// da1Sixel queries the primary device attributes and reports whether the
+// terminal declares sixel (parameter 4). Best effort: a terminal that never
+// answers yields false after a short budget, leaving detection to the
+// environment result.
 func da1Sixel() bool {
 	in, out := os.Stdin, os.Stdout
-	// Prefer the controlling terminal: stdin/stdout may be pipes even
-	// though a tty is attached (a daemonised server, a redirect). In a
-	// daemon there is no controlling terminal, so this fails and the
-	// received PTY descriptors are used instead.
+	// Prefer the controlling terminal: stdin/stdout may be pipes even with a
+	// tty attached (a daemonised server, a redirect). In a daemon there is no
+	// controlling terminal, so this fails and the received PTY descriptors
+	// are used instead.
 	if tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0); err == nil {
 		defer tty.Close()
 		in, out = tty, tty

@@ -87,9 +87,8 @@ func envGraphicsProtocolsWith(env func(string) string) []GraphicsProtocol {
 	prog := strings.ToLower(env("TERM_PROGRAM"))
 
 	switch {
-	// Windows Terminal speaks sixel (and nothing else); the variable is
-	// inherited by WSL sessions started from it, so a Linux f4 opened from
-	// WT lands here too.
+	// Windows Terminal speaks sixel (and nothing else); WSL sessions started
+	// from it inherit the variable, so a Linux f4 opened from WT lands here too.
 	case env("WT_SESSION") != "":
 		return []GraphicsProtocol{GraphicsSixel}
 	case env("KITTY_WINDOW_ID") != "" || strings.Contains(term, "kitty"):
@@ -98,9 +97,10 @@ func envGraphicsProtocolsWith(env func(string) string) []GraphicsProtocol {
 		return []GraphicsProtocol{GraphicsKitty, GraphicsSixel}
 	case isWezTermEnv(env):
 		// On Windows and in WSL, WezTerm is reached through ConPTY, which
-		// forwards image sequences only on the modern build. The environment
-		// cannot tell the builds apart, so defer to the DA1 query: conhost
-		// declares sixel (parameter 4) only when it also forwards kitty.
+		// forwards image sequences only on the modern build and the
+		// environment cannot tell the builds apart, so defer to the DA1
+		// query: conhost declares sixel (parameter 4) only when it also
+		// forwards kitty.
 		if runtime.GOOS == "windows" || env("WSL_DISTRO_NAME") != "" || env("WSL_INTEROP") != "" {
 			return nil
 		}
@@ -137,9 +137,9 @@ type ImageSurface struct {
 	Stride int
 	Pix    []byte
 
-	// Opaque reports that every pixel has alpha 255, set by decoders from
-	// the source format so the block renderer and scaler can skip per-pixel
-	// alpha work (99% of pictures have no alpha).
+	// Opaque reports that every pixel has alpha 255, set by decoders so the
+	// block renderer and scaler can skip per-pixel alpha work (99% of
+	// pictures have no alpha).
 	Opaque bool
 
 	hash      uint64

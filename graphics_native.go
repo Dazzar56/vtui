@@ -9,15 +9,14 @@ import (
 // keep around. A viewer shows one picture at a time, a gallery a screenful.
 const nativeCacheLimit = 64
 
-// nativeWorkMargin is the working copy's reach past the visible window, as a
-// fraction of the window size on each side: pans that stay inside the copy
-// are answered by cutting pixels out of it instead of resampling the source.
+// nativeWorkMargin is the working copy's reach past the visible window, as
+// a fraction of the window size on each side: pans inside it are answered by
+// cutting pixels out of the copy instead of resampling the source.
 const nativeWorkMargin = 0.25
 
 // nativeWorkMaxZoom is the highest zoom at which the working copy pays for
-// itself. Beyond it a pan step is so large relative to the visible window
-// that the margin would have to grow the copy several times over, making the
-// resample dearer than the per-pan one it replaces.
+// itself: beyond it, the margin would grow the copy several times over per
+// pan, dearer than the resample it replaces.
 const nativeWorkMaxZoom = 2.0
 
 type nativeCacheEntry struct {
@@ -32,10 +31,9 @@ type nativeGraphicsCache struct {
 	entries map[uint64]*nativeCacheEntry
 	order   []uint64
 
-	// work is the working copy: the region of a zoomed picture that is being
-	// viewed, resampled once at the current scale with a margin. Panning
-	// inside it cuts the visible window out of the copy - a pixel copy
-	// instead of a fresh resample.
+	// work is the working copy: the zoomed region under view, resampled once
+	// at the current scale with a margin; panning inside it cuts the window
+	// out of the copy - a pixel copy instead of a fresh resample.
 	workHash  uint64
 	workScale float64
 	workRect  image.Rectangle
@@ -89,10 +87,9 @@ func (c *nativeGraphicsCache) scaled(p *ImagePlacement, w, h int) *nativeCacheEn
 		return entry
 	}
 
-	// The working copy: when the picture is zoomed past the window, resample
-	// the visible region plus a margin once and answer the pans that stay
-	// inside it with a cut. Only worth it while the margin keeps the copy
-	// within reach of the window's own size.
+	// When the picture is zoomed past the window, resample the visible region
+	// plus a margin once and answer the pans that stay inside it with a cut;
+	// only worth it while the margin keeps the copy within reach of the window.
 	if sx != 0 || sy != 0 || sw < p.Surface.Width || sh < p.Surface.Height {
 		r := image.Rect(sx, sy, sx+sw, sy+sh)
 		scale := float64(w) / float64(sw)
@@ -129,8 +126,8 @@ func (c *nativeGraphicsCache) workMatch(hash uint64, scale float64) bool {
 	return math.Abs(c.workScale-scale) <= 1e-9*scale
 }
 
-// makeWork resamples the region around r once, with nativeWorkMargin of spare
-// room on each side, and keeps it as the working copy.
+// makeWork resamples the region around r once, with nativeWorkMargin of
+// spare room on each side, and keeps it as the working copy.
 func (c *nativeGraphicsCache) makeWork(src *ImageSurface, hash uint64, r image.Rectangle, scale float64) {
 	mx := int(float64(r.Dx())*nativeWorkMargin + 0.5)
 	my := int(float64(r.Dy())*nativeWorkMargin + 0.5)
@@ -235,9 +232,9 @@ func blitSurface(dst *image.RGBA, src *ImageSurface, px, py int) image.Rectangle
 
 	line := (x1 - x0) * 4
 	if src.Opaque {
-		// The common case, and the fastest one: an opaque source can be
-		// stamped in with a row copy instead of per-pixel alpha maths. The
-		// block renderer already does the same for its cells.
+		// The common, fastest case: an opaque source stamps in with a row copy
+		// instead of per-pixel alpha maths, as the block renderer does for
+		// its cells.
 		for y := y0; y < y1; y++ {
 			srcOff := (y-py)*src.Stride + (x0-px)*4
 			dstOff := (y-b.Min.Y)*dst.Stride + (x0-b.Min.X)*4

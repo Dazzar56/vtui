@@ -764,9 +764,8 @@ func (r *AnsiRenderer) SetPalette(pal *[256]uint32) {
 	}
 }
 
-// isGhostProneText reports text Unicode (CJK, emoji, clusters) that can
-// shift width through font fallback; box/block elements are fixed
-// single-column cells that never shift.
+// isGhostProneText reports Unicode that can shift width through font
+// fallback; box/block runes are fixed single-column cells that never shift.
 func isGhostProneText(ch uint64) bool {
 	if ch < 0x80 {
 		return false
@@ -834,9 +833,9 @@ func (r *AnsiRenderer) Render(buf, shadow []CharInfo, w, h int, force bool) {
 			continue
 		}
 
-		// Font fallback can shift the physical columns of text Unicode, so
-		// such rows redraw in full to wipe out ghost remnants; ASCII and
-		// box-drawing rows keep the fast sparse diff.
+		// Font fallback can shift columns of text Unicode, so such rows
+		// redraw in full to wipe out ghost remnants; ASCII and box-drawing
+		// rows keep the sparse diff.
 		var startX, endX int
 		if rowHasGhost {
 			startX = 0
@@ -918,9 +917,8 @@ func (r *AnsiRenderer) writeRelCursor(n int, dir byte) {
 }
 
 func (r *AnsiRenderer) SetWindowTitle(title string) {
-	// The title is not part of a frame: write it straight out under writeMu
-	// instead of appending to frameOut, so a title update can neither resend
-	// the pending frame nor race the render loop.
+	// Titles are not part of a frame: write under writeMu so an update can
+	// neither resend the pending frame nor race the render loop.
 	r.parent.writeMu.Lock()
 	defer r.parent.writeMu.Unlock()
 	r.write(fmt.Sprintf("\x1b]0;%s\x07", title))
@@ -1003,10 +1001,8 @@ func (r *AnsiRenderer) write(s string) {
 	if r.parent.Writer != nil {
 		w = r.parent.Writer
 	}
-	// A frame can be hundreds of kilobytes; hand it over in chunks so a
-	// relay or bridge that reads the tty (WSL, ConPTY) can keep up. A byte
-	// lost mid-frame otherwise lands inside a multibyte character and the
-	// terminal turns it into U+FFFD — a visible "?" in the picture.
+	// Hand large frames over in chunks so a relay reading the tty (WSL,
+	// ConPTY) can keep up; a byte lost mid-frame becomes U+FFFD on screen.
 	const writeChunk = 8192
 	for len(s) > 0 {
 		n := len(s)

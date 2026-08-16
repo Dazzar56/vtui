@@ -18,10 +18,9 @@ func da1Sixel() bool {
 	if err := windows.GetConsoleMode(hIn, &oldIn); err != nil {
 		return false
 	}
-	// Terminal answers are delivered to ReadFile only while VT input is
-	// enabled; the application's input reader deliberately clears it, so
-	// enable it for the duration of the query and hand the original mode
-	// back afterwards.
+	// Terminal answers reach ReadFile only while VT input is enabled, and the
+	// app's input reader deliberately clears it, so enable it for the query
+	// and restore the original mode afterwards.
 	if err := windows.SetConsoleMode(hIn, oldIn|windows.ENABLE_VIRTUAL_TERMINAL_INPUT); err != nil {
 		return false
 	}

@@ -7,12 +7,10 @@ package vtui
 // Windows GPU stacks, so every shape is decomposed into single-rect fills.
 // Two paths:
 //
-//   - Runtime converter (gogpu_renderer.go, what f4 uses): any rune the
-//     loaded font covers is rasterized through the same pipeline as
-//     DrawString and memoized - pixel-identical to the text around it.
+//   - Runtime converter (gogpu_renderer.go): any rune the loaded font covers
+//     is rasterized like DrawString and memoized - pixel-identical to text.
 //   - Fallback table (gogpu_glyph_table.go): runes the GUI font lacks are
-//     drawn from this committed table, rasterized from the reference font
-//     below.
+//     drawn from this committed table, rasterized from the reference font.
 //
 // TestGenerateGlyphTable verifies the table is current, or regenerates it:
 //

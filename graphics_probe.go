@@ -6,10 +6,10 @@ import (
 	"strings"
 )
 
-// ProbeGraphicsProtocols resolves the graphics protocols the terminal
-// supports, best first, combining environment detection with an active DA1
-// query where the environment alone is not conclusive. Call once at startup
-// before the input reader starts, and hand the first entry to SetProtocol.
+// ProbeGraphicsProtocols resolves the terminal's graphics protocols, best
+// first, combining environment detection with a DA1 query where the
+// environment alone is not conclusive. Call once at startup before the input
+// reader starts, and hand the first entry to SetProtocol.
 func ProbeGraphicsProtocols() []GraphicsProtocol {
 	return probeGraphicsProtocolsWith(os.Getenv, da1Sixel)
 }
@@ -20,10 +20,10 @@ func probeGraphicsProtocolsWith(env func(string) string, da1 func() bool) []Grap
 	if envs := envGraphicsProtocolsWith(env); len(envs) > 0 {
 		return envs
 	}
-	// The environment says nothing about images. Ask the device itself
-	// whether it is a sixel terminal: this is how a bare conhost (no
-	// WT_SESSION), or an xterm built with sixel support, is recognised
-	// without corrupting old terminals that would print raw escape garbage.
+	// The environment says nothing about images, so ask the device whether it
+	// is a sixel terminal: this recognises a bare conhost (no WT_SESSION) or
+	// an xterm built with sixel support without corrupting old terminals with
+	// raw escape garbage.
 	if da1() {
 		// A sixel-positive DA1 means a modern ConPTY bridge that also forwards
 		// kitty, so WezTerm behind it can use its best renderer.
@@ -47,9 +47,8 @@ func cellSizeResponseComplete(s string) bool {
 	return strings.HasSuffix(s, "t") && strings.Contains(s, "\x1b[6;")
 }
 
-// parseDA1Sixel reports whether a primary device attributes answer declares
-// sixel graphics. The first parameter is the conformance level; a standalone
-// '4' among the parameters is the sixel extension (VT330/VT340).
+// parseDA1Sixel reports whether a device attributes answer declares sixel: a
+// standalone '4' among the parameters (the first is the conformance level).
 func parseDA1Sixel(s string) bool {
 	i := strings.Index(s, "\x1b[?")
 	if i < 0 {
