@@ -41,7 +41,17 @@ func TestDebugLog_Rotation(t *testing.T) {
 	log2 := strings.TrimSuffix(baseLog, ".log") + ".2.log"
 
 	os.Setenv("VTUI_DEBUG", baseLog)
-	defer os.Setenv("VTUI_DEBUG", "")
+	defer func() {
+		os.Setenv("VTUI_DEBUG", "")
+		// Close the handle opened by the last DebugLog before t.TempDir
+		// cleanup unlinks the log: Windows cannot remove an open file.
+		logMu.Lock()
+		if logFile != nil {
+			logFile.Close()
+			logFile = nil
+		}
+		logMu.Unlock()
+	}()
 
 	// Helper to reset internal state for testing
 	resetRotation := func() {
