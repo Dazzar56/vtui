@@ -197,7 +197,7 @@ func (r *EbitenRenderer) Render(buf, shadow []CharInfo, w, h int, forceRedraw bo
 					// anything the geometric path declines goes to the font.
 					px, py := currX*r.cellW, y*r.cellH
 					if isBoxDrawRune(ch) &&
-						drawBoxGlyph(img, ch, px, py, r.cellW*rw, r.cellH, r.scale, rgbColor(fg)) {
+						drawBoxGlyph(img, ch, px, py, r.cellW*rw, r.cellH, r.scale, fg) {
 						sx += rw
 						continue
 					}

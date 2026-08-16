@@ -226,7 +226,7 @@ func (r *WaylandRenderer) Render(buf, shadow []CharInfo, w, h int, forceRedraw b
 
 				if char != 0 && char != ' ' {
 					r.stats.glyphs++
-					if !r.drawCustomChar(img, char, cpx, py, cw, ch, fgColor) {
+					if !r.drawCustomChar(img, char, cpx, py, cw, ch, cfg) {
 						r.drawCachedGlyph(img, currCell.Char, cpx, py, rw, cfg, cbg, fgColor, bgColor)
 					}
 				}
@@ -316,8 +316,8 @@ func (r *WaylandRenderer) drawCachedGlyph(img *image.RGBA, cellVal uint64, px, p
 	}
 }
 
-func (r *WaylandRenderer) drawCustomChar(img *image.RGBA, char rune, px, py, cw, ch int, col color.Color) bool {
-	return drawBoxGlyph(img, char, px, py, cw, ch, r.host.scale, col)
+func (r *WaylandRenderer) drawCustomChar(img *image.RGBA, char rune, px, py, cw, ch int, fg uint32) bool {
+	return drawBoxGlyph(img, char, px, py, cw, ch, r.host.scale, fg)
 }
 
 func (r *WaylandRenderer) Flush() {

@@ -301,7 +301,7 @@ func (r *X11Renderer) Render(buf, shadow []CharInfo, w, h int, forceRedraw bool)
 
 				if char != 0 && char != ' ' {
 					r.stats.glyphs++
-					if !r.drawCustomChar(img, char, cpx, py, cw, ch, fgColor) {
+					if !r.drawCustomChar(img, char, cpx, py, cw, ch, cfg) {
 						r.drawCachedGlyph(img, currCell.Char, cpx, py, rw, cfg, cbg, fgColor, bgColor)
 					}
 				}
@@ -425,6 +425,6 @@ func (r *X11Renderer) reportStats() {
 	r.stats = renderStats{lastReport: time.Now()}
 }
 
-func (r *X11Renderer) drawCustomChar(img *image.RGBA, char rune, px, py, cw, ch int, col color.Color) bool {
-	return drawBoxGlyph(img, char, px, py, cw, ch, r.host.scale, col)
+func (r *X11Renderer) drawCustomChar(img *image.RGBA, char rune, px, py, cw, ch int, fg uint32) bool {
+	return drawBoxGlyph(img, char, px, py, cw, ch, r.host.scale, fg)
 }

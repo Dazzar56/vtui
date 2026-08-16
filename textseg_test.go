@@ -1,6 +1,9 @@
 package vtui
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func TestClusterWidth_Combining(t *testing.T) {
 	cases := []struct {
@@ -28,6 +31,94 @@ func TestClusterWidth_Combining(t *testing.T) {
 			t.Errorf("%s: ClusterWidth(%q) = %d, want %d", c.name, c.in, got, c.want)
 		}
 	}
+}
+
+// clusterList walks s through ForEachClusterAt and returns the emitted
+// (text, width) pairs.
+func clusterList(s string) []string {
+	var out []string
+	ForEachClusterAt(s, func(cluster string, width, _, _ int) {
+		out = append(out, fmt.Sprintf("%s:%d", cluster, width))
+	})
+	return out
+}
+
+// TestClusterPaths_Equivalent is the safety net for the rune-by-rune fast
+// path: for a broad corpus of names (ASCII, Cyrillic, CJK, Hangul, Japanese,
+// emoji, ZWJ sequences, flags, combining marks, Indic, Thai, Arabic, symbols,
+// controls) the fast path must emit exactly the same clusters, widths and
+// rune offsets as the reference uniseg walk.
+func TestClusterPaths_Equivalent(t *testing.T) {
+	corpus := []string{
+		"",
+		"report_2026_final.txt",
+		"отчет_2026_финал.txt",
+		"报告_2026_最终版.txt",
+		"한글_문서_2026_최종본.hwp",
+		"ㄱㄴㄷㄹㅁㅂㅅ_자모.txt",
+		"ひらがな_カタカナ_日本語.txt",
+		"🚂🐐🦆🐏💐🍍💗👄  😳😎🖤",
+		"👨\u200D👩\u200D👧\u200D👦 family.jpg",
+		"👍🏽👍🏻👍🏿 test.md",
+		"1\uFE0F\u20E3 keycap.txt",
+		"🇷🇺 отчёт 🇯🇵 報告",
+		"café_resumé_naïve.txt",
+		"नमस्ते_दुनिया_2026.txt",
+		"на\u0483звание_файла.txt",
+		"か\u3099き\u309Aく.txt",
+		"soft\u00ADhyphen.txt",
+		"अनु\u091C्ञा_2026.txt",
+		"বাংলা_ফাইল_পরীক্ষা.docx",
+		"สวัสดี_โลก_2569.pdf",
+		"تقريرُ_المشروعِ_2026.docx",
+		"العَرَبِيَّة.txt",
+		"ျမန္မာစာ.txt",
+		"한국어_파일_테스트.txt",
+		"日本語のテスト.txt",
+		"تقرير_المشروع_2026.docx",
+		"✓ ★ ♥ ⚠ ²³⁄₄",
+		"ＡＢＣ 全角 テスト",
+		"line1\nline2\r\ntab\tend",
+		"a\uFFFD\uFFFDb",
+		"x\x01y\x7Fz",
+	}
+	for _, s := range corpus {
+		dispatched := clusterList(s)
+		uniseg := clusterListRef(s)
+		if len(dispatched) != len(uniseg) {
+			t.Errorf("%q: dispatched %d clusters, uniseg %d\nfast: %v\nref:  %v",
+				s, len(dispatched), len(uniseg), dispatched, uniseg)
+			continue
+		}
+		for i := range dispatched {
+			if dispatched[i] != uniseg[i] {
+				t.Errorf("%q: cluster %d fast=%q uniseg=%q\nfast: %v\nref:  %v",
+					s, i, dispatched[i], uniseg[i], dispatched, uniseg)
+				break
+			}
+		}
+		if got, want := StringWidth(s), widthOf(s); got != want {
+			t.Errorf("%q: StringWidth = %d, uniseg walk = %d", s, got, want)
+		}
+	}
+}
+
+// clusterListRef walks s with the reference uniseg walk.
+func clusterListRef(s string) []string {
+	var out []string
+	forEachClusterUniseg(s, func(cluster string, width, _, _ int) {
+		out = append(out, fmt.Sprintf("%s:%d", cluster, width))
+	})
+	return out
+}
+
+// widthOf sums the reference walk's widths; it is the old StringWidth body.
+func widthOf(s string) int {
+	total := 0
+	forEachClusterUniseg(s, func(_ string, w, _, _ int) {
+		total += w
+	})
+	return total
 }
 
 func TestStringWidth_MatchesWcwidth(t *testing.T) {

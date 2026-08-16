@@ -373,8 +373,9 @@ func (t *Table) DisplayObject(scr *ScreenBuf) {
 	yOffset := 0
 
 	// 1. Draw Header
+	widths := t.resolvedWidths()
 	if t.ShowHeader {
-		t.drawRow(scr, t.Y1, -1, Palette[t.ColorTitleIdx])
+		t.drawRow(scr, t.Y1, -1, Palette[t.ColorTitleIdx], widths)
 		yOffset++
 	}
 
@@ -399,7 +400,7 @@ func (t *Table) DisplayObject(scr *ScreenBuf) {
 			//isSelected := false
 			// Calculate standard attribute as a fallback (passed into drawRow)
 			attr := Palette[t.ColorTextIdx]
-			t.drawRow(scr, currY, rowIdx, attr)
+			t.drawRow(scr, currY, rowIdx, attr, widths)
 		} else {
 			// Fill empty space with background color
 			scr.FillRect(t.X1, currY, t.X2, currY, ' ', Palette[t.ColorTextIdx])
@@ -409,7 +410,6 @@ func (t *Table) DisplayObject(scr *ScreenBuf) {
 	// 3. Draw Vertical Separators if needed
 	if t.ShowSeparators {
 		p := NewPainter(scr)
-		widths := t.resolvedWidths()
 		currX := t.X1
 		sepChar := boxSymbols[bsV]     // │
 		sepY2 := t.Y2 - t.MarginBottom // do not cross the search line
@@ -429,9 +429,8 @@ func (t *Table) DisplayObject(scr *ScreenBuf) {
 	}
 }
 
-func (t *Table) drawRow(scr *ScreenBuf, y int, rowIdx int, attr uint64) {
+func (t *Table) drawRow(scr *ScreenBuf, y int, rowIdx int, attr uint64, widths []int) {
 	endX := t.X1 + t.GetContentWidth() - 1
-	widths := t.resolvedWidths()
 
 	currX := t.X1
 	for colIdx, col := range t.Columns {
@@ -560,8 +559,8 @@ func (t *Table) formatSortedHeader(title string, width int, align Alignment) str
 }
 
 func (t *Table) formatCell(text string, width int, align Alignment) string {
-	text = TruncateString(text, width, "")
-	vLen := StringWidth(text)
+	var vLen int
+	text, vLen = truncateStringWidth(text, width, "")
 	if vLen >= width {
 		return text
 	}

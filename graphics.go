@@ -2,6 +2,7 @@ package vtui
 
 import (
 	"os"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -59,9 +60,19 @@ func DetectGraphicsProtocol() GraphicsProtocol {
 }
 
 func detectGraphicsProtocol(env func(string) string) GraphicsProtocol {
+	if prots := envGraphicsProtocolsWith(env); len(prots) > 0 {
+		return prots[0]
+	}
+	return GraphicsNone
+}
+
+func envGraphicsProtocolsWith(env func(string) string) []GraphicsProtocol {
 	if forced := env("VTUI_GRAPHICS"); forced != "" {
 		if p, ok := ParseGraphicsProtocol(forced); ok {
-			return p
+			if p == GraphicsNone {
+				return nil
+			}
+			return []GraphicsProtocol{p}
 		}
 	}
 
@@ -69,30 +80,52 @@ func detectGraphicsProtocol(env func(string) string) GraphicsProtocol {
 	// half transmitted image corrupts the whole session. Stay silent
 	// unless the user explicitly opted in above.
 	if env("TMUX") != "" || strings.HasPrefix(env("TERM"), "screen") {
-		return GraphicsNone
+		return nil
 	}
 
 	term := strings.ToLower(env("TERM"))
 	prog := strings.ToLower(env("TERM_PROGRAM"))
 
 	switch {
+	// Windows Terminal speaks sixel (and nothing else); the variable is
+	// inherited by WSL sessions started from it, so a Linux f4 opened from
+	// WT lands here too.
+	case env("WT_SESSION") != "":
+		return []GraphicsProtocol{GraphicsSixel}
 	case env("KITTY_WINDOW_ID") != "" || strings.Contains(term, "kitty"):
-		return GraphicsKitty
+		return []GraphicsProtocol{GraphicsKitty}
 	case prog == "ghostty" || env("GHOSTTY_RESOURCES_DIR") != "":
-		return GraphicsKitty
-	case prog == "wezterm" || env("WEZTERM_PANE") != "":
-		return GraphicsKitty
+		return []GraphicsProtocol{GraphicsKitty, GraphicsSixel}
+	case isWezTermEnv(env):
+		// On Windows and in WSL, WezTerm is reached through ConPTY, which
+		// forwards image sequences only on the modern build. The environment
+		// cannot tell the builds apart, so defer to the DA1 query: conhost
+		// declares sixel (parameter 4) only when it also forwards kitty.
+		if runtime.GOOS == "windows" || env("WSL_DISTRO_NAME") != "" || env("WSL_INTEROP") != "" {
+			return nil
+		}
+		return weztermProtocols()
 	case prog == "iterm.app" || env("ITERM_SESSION_ID") != "":
-		return GraphicsITerm2
+		return []GraphicsProtocol{GraphicsITerm2, GraphicsSixel}
 	case env("KONSOLE_VERSION") != "":
-		return GraphicsSixel
+		return []GraphicsProtocol{GraphicsSixel}
 	case strings.Contains(term, "foot") || strings.Contains(term, "mlterm") ||
 		strings.Contains(term, "yaft") || strings.Contains(term, "contour") ||
 		strings.Contains(term, "wayst"):
-		return GraphicsSixel
+		return []GraphicsProtocol{GraphicsSixel}
 	}
 
-	return GraphicsNone
+	return nil
+}
+
+// isWezTermEnv reports whether the environment belongs to a WezTerm session.
+func isWezTermEnv(env func(string) string) bool {
+	return strings.ToLower(env("TERM_PROGRAM")) == "wezterm" || env("WEZTERM_PANE") != ""
+}
+
+// weztermProtocols is WezTerm's protocol list, best first.
+func weztermProtocols() []GraphicsProtocol {
+	return []GraphicsProtocol{GraphicsKitty, GraphicsSixel}
 }
 
 // ImageSurface is a plain top-down RGBA8 pixel buffer. It deliberately does
@@ -104,8 +137,24 @@ type ImageSurface struct {
 	Stride int
 	Pix    []byte
 
+	// Opaque reports that every pixel has alpha 255, set by decoders from
+	// the source format so the block renderer and scaler can skip per-pixel
+	// alpha work (99% of pictures have no alpha).
+	Opaque bool
+
 	hash      uint64
 	hashValid bool
+}
+
+func surfaceByteLen(w, h, stride int) (int, bool) {
+	if w <= 0 || h <= 0 || stride < 0 || w > int(^uint(0)>>1)/4 {
+		return 0, false
+	}
+	row := w * 4
+	if stride < row || h-1 > (int(^uint(0)>>1)-row)/stride {
+		return 0, false
+	}
+	return (h-1)*stride + row, true
 }
 
 // NewImageSurface allocates a zeroed (fully transparent) surface.
@@ -116,18 +165,25 @@ func NewImageSurface(w, h int) *ImageSurface {
 	if h < 0 {
 		h = 0
 	}
+	if w == 0 || h == 0 {
+		return &ImageSurface{Width: w, Height: h, Stride: w * 4}
+	}
+	stride := w * 4
+	if _, ok := surfaceByteLen(w, h, stride); !ok {
+		return nil
+	}
 	return &ImageSurface{
 		Width:  w,
 		Height: h,
-		Stride: w * 4,
-		Pix:    make([]byte, w*h*4),
+		Stride: stride,
+		Pix:    make([]byte, (h-1)*stride+stride),
 	}
 }
 
 // NewImageSurfaceFromPix wraps an existing RGBA buffer without copying it.
 // It returns nil when the buffer is too small for the declared geometry.
 func NewImageSurfaceFromPix(w, h, stride int, pix []byte) *ImageSurface {
-	if w <= 0 || h <= 0 || stride < w*4 || len(pix) < stride*(h-1)+w*4 {
+	if required, ok := surfaceByteLen(w, h, stride); !ok || len(pix) < required {
 		return nil
 	}
 	return &ImageSurface{Width: w, Height: h, Stride: stride, Pix: pix}
@@ -135,8 +191,11 @@ func NewImageSurfaceFromPix(w, h, stride int, pix []byte) *ImageSurface {
 
 // Valid reports whether the surface can be sampled at all.
 func (s *ImageSurface) Valid() bool {
-	return s != nil && s.Width > 0 && s.Height > 0 && s.Stride >= s.Width*4 &&
-		len(s.Pix) >= s.Stride*(s.Height-1)+s.Width*4
+	if s == nil {
+		return false
+	}
+	required, ok := surfaceByteLen(s.Width, s.Height, s.Stride)
+	return ok && len(s.Pix) >= required
 }
 
 // SetPixel writes one RGBA pixel. Out of range coordinates are ignored.
@@ -149,6 +208,7 @@ func (s *ImageSurface) SetPixel(x, y int, r, g, b, a byte) {
 	s.Pix[o+1] = g
 	s.Pix[o+2] = b
 	s.Pix[o+3] = a
+	s.Opaque = s.Opaque && a == 255
 	s.hashValid = false
 }
 
@@ -166,6 +226,7 @@ func (s *ImageSurface) PixelAt(x, y int) (r, g, b, a byte) {
 func (s *ImageSurface) Invalidate() {
 	if s != nil {
 		s.hashValid = false
+		s.Opaque = false
 	}
 }
 
@@ -225,11 +286,15 @@ func (s *ImageSurface) Crop(x, y, w, h int) *ImageSurface {
 		return nil
 	}
 	out := NewImageSurface(w, h)
+	if out == nil {
+		return nil
+	}
 	for row := 0; row < h; row++ {
 		src := (y+row)*s.Stride + x*4
 		dst := row * out.Stride
 		copy(out.Pix[dst:dst+w*4], s.Pix[src:src+w*4])
 	}
+	out.Opaque = s.Opaque
 	return out
 }
 
@@ -370,6 +435,17 @@ func (g *GraphicsLayer) CellSize() (int, int) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return g.cellW, g.cellH
+}
+
+// EffectiveCellSize is the cell geometry images are laid out against for the
+// active protocol: sixel on Windows Terminal/conhost uses its fixed 10x20
+// virtual cell, everything else uses the reported size.
+func (g *GraphicsLayer) EffectiveCellSize() (int, int) {
+	cw, ch := g.CellSize()
+	if g.Protocol() == GraphicsSixel {
+		return sixelCellSize(cw, ch)
+	}
+	return cw, ch
 }
 
 // Add registers a new placement and returns its identifier.

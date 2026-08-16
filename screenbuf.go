@@ -5,9 +5,12 @@ import (
 	"io"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
+	"unsafe"
 )
 
 type ColorProfile int
@@ -641,11 +644,71 @@ type framePreparer interface {
 	PrepareFlush() func()
 }
 
-// AnsiRenderer реализует SurfaceRenderer через ESC-последовательности.
+// byteBuffer is a reusable byte slice buffer with zero allocations across frames.
+type byteBuffer []byte
+
+func (b *byteBuffer) Len() int {
+	return len(*b)
+}
+
+func (b *byteBuffer) Cap() int {
+	return cap(*b)
+}
+
+func (b *byteBuffer) Reset() {
+	*b = (*b)[:0]
+}
+
+func (b *byteBuffer) Grow(n int) {
+	if cap(*b)-len(*b) < n {
+		newBuf := make([]byte, len(*b), 2*cap(*b)+n)
+		copy(newBuf, *b)
+		*b = newBuf
+	}
+}
+
+func (b *byteBuffer) Write(p []byte) (int, error) {
+	*b = append(*b, p...)
+	return len(p), nil
+}
+
+func (b *byteBuffer) WriteByte(c byte) error {
+	*b = append(*b, c)
+	return nil
+}
+
+func (b *byteBuffer) WriteString(s string) (int, error) {
+	*b = append(*b, s...)
+	return len(s), nil
+}
+
+func (b *byteBuffer) WriteRune(r rune) (int, error) {
+	if r < 0x80 {
+		*b = append(*b, byte(r))
+		return 1, nil
+	}
+	var buf [utf8.UTFMax]byte
+	n := utf8.EncodeRune(buf[:], r)
+	*b = append(*b, buf[:n]...)
+	return n, nil
+}
+
+func (b *byteBuffer) String() string {
+	if len(*b) == 0 {
+		return ""
+	}
+	return unsafe.String(unsafe.SliceData(*b), len(*b))
+}
+
+func (b *byteBuffer) Bytes() []byte {
+	return *b
+}
+
+// AnsiRenderer implements SurfaceRenderer via ESC sequences.
 type AnsiRenderer struct {
 	parent   *ScreenBuf
 	lastAttr uint64
-	frameOut strings.Builder
+	frameOut byteBuffer
 
 	cursorX, cursorY int
 	cursorVis        bool
@@ -660,6 +723,7 @@ type AnsiRenderer struct {
 	gfxProto GraphicsProtocol
 	gfxGen   uint64
 	gfxKitty *kittyEncoder
+	gfxSixel *sixelEncoder
 	gfxList  []ImagePlacement
 }
 
@@ -680,11 +744,22 @@ func (r *AnsiRenderer) SetPalette(pal *[256]uint32) {
 			r.parent.HostPaletteValid[i] = true
 		}
 	}
-	// One rebuild for the whole palette change, not one per changed entry:
-	// a full (re)load used to allocate 256 maps in a row.
 	if changed {
 		r.parent.quantCache = make(map[uint32]uint8)
 	}
+}
+
+// isGhostProneText reports text Unicode (CJK, emoji, clusters) that can
+// shift width through font fallback; box/block elements are fixed
+// single-column cells that never shift.
+func isGhostProneText(ch uint64) bool {
+	if ch < 0x80 {
+		return false
+	}
+	if ch >= 0x2500 && ch <= 0x259F {
+		return false
+	}
+	return true
 }
 
 func (r *AnsiRenderer) Render(buf, shadow []CharInfo, w, h int, force bool) {
@@ -702,7 +777,7 @@ func (r *AnsiRenderer) Render(buf, shadow []CharInfo, w, h int, force bool) {
 		return
 	}
 
-	r.frameOut.WriteString("\x1b[?25l") // Hide cursor during draw
+	r.frameOut.WriteString("\x1b[?2026h\x1b[?25l") // Atomic update + hide cursor during draw
 
 	r.termCursorInvalid = true
 	lastX, lastY := -1, -1
@@ -716,26 +791,84 @@ func (r *AnsiRenderer) Render(buf, shadow []CharInfo, w, h int, force bool) {
 	}
 
 	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
-			idx := y*w + x
-			if !force && buf[idx] == shadow[idx] {
+		rowOff := y * w
+		firstDiff, lastDiff := -1, -1
+		rowHasGhost := false
+
+		if force {
+			firstDiff = 0
+			lastDiff = w - 1
+			rowHasGhost = true
+		} else {
+			for x := 0; x < w; x++ {
+				bCell := buf[rowOff+x]
+				sCell := shadow[rowOff+x]
+				if bCell != sCell {
+					if firstDiff == -1 {
+						firstDiff = x
+					}
+					lastDiff = x
+				}
+				if isGhostProneText(bCell.Char) || isGhostProneText(sCell.Char) || IsCompChar(bCell.Char) || IsCompChar(sCell.Char) {
+					rowHasGhost = true
+				}
+			}
+		}
+
+		if firstDiff == -1 {
+			continue
+		}
+
+		// Font fallback can shift the physical columns of text Unicode, so
+		// such rows redraw in full to wipe out ghost remnants; ASCII and
+		// box-drawing rows keep the fast sparse diff.
+		var startX, endX int
+		if rowHasGhost {
+			startX = 0
+			endX = w - 1
+		} else {
+			startX = firstDiff
+			endX = lastDiff
+		}
+
+		for x := startX; x <= endX; x++ {
+			idx := rowOff + x
+			if !force && !rowHasGhost && buf[idx] == shadow[idx] {
 				continue
 			}
 
 			if x != lastX+1 || y != lastY {
-				r.frameOut.WriteString(fmt.Sprintf("\x1b[%d;%dH", y+1, x+1))
+				if y == lastY && !rowHasGhost {
+					if x > lastX+1 {
+						r.writeRelCursor(x-lastX-1, 'C')
+					} else {
+						r.writeRelCursor(lastX+1-x, 'D')
+					}
+				} else {
+					r.writeCursorPos(y+1, x+1)
+				}
 			}
 
 			attr := buf[idx].Attributes
-			r.frameOut.WriteString(attributesToANSI(attr, r.lastAttr, activePal, r.parent.ColorProfile, r.parent.quantCache))
-			r.lastAttr = attr
+			if attr != r.lastAttr {
+				writeAttributesToBuffer(&r.frameOut, attr, r.lastAttr, activePal, r.parent.ColorProfile, r.parent.quantCache)
+				r.lastAttr = attr
+			}
 
 			char := buf[idx].Char
 			if char == WideCharFiller {
 				lastX, lastY = x, y
 				continue
 			}
-			r.frameOut.WriteString(CellString(char))
+			if char == 0 {
+				r.frameOut.WriteByte(' ')
+			} else if char < 0x80 {
+				r.frameOut.WriteByte(byte(char))
+			} else if IsCompChar(char) {
+				r.frameOut.WriteString(CellString(char))
+			} else {
+				r.frameOut.WriteRune(rune(char))
+			}
 			lastX, lastY = x, y
 		}
 	}
@@ -748,34 +881,51 @@ func (r *AnsiRenderer) SetCursor(x, y int, vis bool, shape CursorShape) {
 	r.cursorShape = shape
 }
 
-func (r *AnsiRenderer) SetWindowTitle(title string) {
-	r.frameOut.WriteString(fmt.Sprintf("\x1b]0;%s\x07", title))
+// writeCursorPos emits CSI Y;X H without allocating.
+func (r *AnsiRenderer) writeCursorPos(row, col int) {
+	var buf [16]byte
+	b := strconv.AppendInt(append(buf[:0], "\x1b["...), int64(row), 10)
+	b = append(b, ';')
+	b = strconv.AppendInt(b, int64(col), 10)
+	b = append(b, 'H')
+	r.frameOut.Write(b)
 }
 
-// Flush composes the frame and writes it out immediately. ScreenBuf.Flush
-// uses PrepareFlush instead, so that the write happens outside ScreenBuf.mu;
-// this entry point remains for direct callers.
+// writeRelCursor emits CSI n C (right) / CSI n D (left); n is omitted for 1.
+func (r *AnsiRenderer) writeRelCursor(n int, dir byte) {
+	var buf [12]byte
+	b := append(buf[:0], "\x1b["...)
+	if n != 1 {
+		b = strconv.AppendInt(b, int64(n), 10)
+	}
+	b = append(b, dir)
+	r.frameOut.Write(b)
+}
+
+func (r *AnsiRenderer) SetWindowTitle(title string) {
+	// The title is not part of a frame: write it straight out under writeMu
+	// instead of appending to frameOut, so a title update can neither resend
+	// the pending frame nor race the render loop.
+	r.parent.writeMu.Lock()
+	defer r.parent.writeMu.Unlock()
+	r.write(fmt.Sprintf("\x1b]0;%s\x07", title))
+}
+
+// Flush composes the frame and writes it out immediately.
 func (r *AnsiRenderer) Flush() {
 	deliver := r.PrepareFlush()
 	if deliver == nil {
 		return
 	}
-	// Direct callers (SetWindowTitle, for one) bypass ScreenBuf.Flush, so
-	// take writeMu here to keep their output from landing in the middle of
-	// a frame. Safe against self-deadlock: ScreenBuf.Flush reaches this
-	// renderer through PrepareFlush, never through this method.
 	r.parent.writeMu.Lock()
 	defer r.parent.writeMu.Unlock()
 	deliver()
 }
 
-// PrepareFlush appends the cursor state to the pending frame and returns a
-// closure that writes the whole payload to the terminal, or nil if the frame
-// turned out empty. Splitting the two lets the caller release its locks
-// before a write that may block for an unbounded time.
+// PrepareFlush appends the cursor state and mode 2026 termination to the pending frame.
 func (r *AnsiRenderer) PrepareFlush() func() {
 	if !r.firstInit || r.termCursorInvalid || r.cursorX != r.lastSentCursorX || r.cursorY != r.lastSentCursorY || r.cursorVis != r.lastSentCursorVis || r.cursorShape != r.lastSentCursorShape {
-		r.frameOut.WriteString(fmt.Sprintf("\x1b[%d;%dH", r.cursorY+1, r.cursorX+1))
+		r.writeCursorPos(r.cursorY+1, r.cursorX+1)
 		if r.cursorVis {
 			r.frameOut.WriteString("\x1b[?25h")
 			if ManageCursorStyle {
@@ -793,10 +943,11 @@ func (r *AnsiRenderer) PrepareFlush() func() {
 					}
 				}
 			}
-			SetCursorStyleOS(r.cursorVis, r.cursorShape)
 		} else {
 			r.frameOut.WriteString("\x1b[?25l")
-			SetCursorStyleOS(false, r.cursorShape)
+		}
+		if !r.firstInit || r.cursorVis != r.lastSentCursorVis || r.cursorShape != r.lastSentCursorShape {
+			SetCursorStyleOS(r.cursorVis, r.cursorShape)
 		}
 		r.lastSentCursorX = r.cursorX
 		r.lastSentCursorY = r.cursorY
@@ -806,11 +957,17 @@ func (r *AnsiRenderer) PrepareFlush() func() {
 		r.firstInit = true
 	}
 
-	payload := r.frameOut.String()
-	r.frameOut.Reset()
-	if payload == "" {
+	if r.frameOut.Len() > 0 {
+		r.frameOut.WriteString("\x1b[?2026l")
+	}
+
+	payloadLen := r.frameOut.Len()
+	if payloadLen == 0 {
 		return nil
 	}
+
+	payload := r.frameOut.String()
+	r.frameOut.Reset()
 
 	return func() {
 		writeStart := time.Now()
@@ -818,7 +975,7 @@ func (r *AnsiRenderer) PrepareFlush() func() {
 		writeDur := time.Since(writeStart)
 
 		if writeDur > 10*time.Millisecond {
-			DebugLog("PROFILE: Atomic Write Slow! Time:%v Bytes:%d", writeDur, len(payload))
+			DebugLog("PROFILE: Atomic Write Slow! Time:%v Bytes:%d", writeDur, payloadLen)
 		}
 	}
 }
@@ -827,10 +984,22 @@ func (r *AnsiRenderer) write(s string) {
 	if s == "" {
 		return
 	}
+	w := io.Writer(os.Stdout)
 	if r.parent.Writer != nil {
-		io.WriteString(r.parent.Writer, s)
-	} else {
-		os.Stdout.WriteString(s)
+		w = r.parent.Writer
+	}
+	// A frame can be hundreds of kilobytes; hand it over in chunks so a
+	// relay or bridge that reads the tty (WSL, ConPTY) can keep up. A byte
+	// lost mid-frame otherwise lands inside a multibyte character and the
+	// terminal turns it into U+FFFD — a visible "?" in the picture.
+	const writeChunk = 8192
+	for len(s) > 0 {
+		n := len(s)
+		if n > writeChunk {
+			n = writeChunk
+		}
+		io.WriteString(w, s[:n])
+		s = s[n:]
 	}
 }
 
@@ -843,13 +1012,22 @@ func (s *ScreenBuf) GetCursorPos() (int, int) {
 
 // ScreenRow reads a stretch of one row back out of the screen.
 func ScreenRow(scr *ScreenBuf, y, x1, x2 int) string {
-	runes := make([]rune, x2-x1+1)
-	for i := range runes {
-		cell := scr.GetCell(x1+i, y)
-		runes[i] = rune(cell.Char)
-		if runes[i] == 0 {
-			runes[i] = ' '
+	if x1 > x2 {
+		return ""
+	}
+	var sb strings.Builder
+	for x := x1; x <= x2; x++ {
+		cell := scr.GetCell(x, y)
+		if cell.Char == WideCharFiller {
+			continue
+		}
+		if cell.Char == 0 {
+			sb.WriteByte(' ')
+		} else if IsCompChar(cell.Char) {
+			sb.WriteString(CellString(cell.Char))
+		} else {
+			sb.WriteRune(rune(cell.Char))
 		}
 	}
-	return string(runes)
+	return sb.String()
 }
