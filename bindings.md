@@ -1045,7 +1045,7 @@ int main(void) { return vtui_run(ui); }
 | **M1 / A8** | Гарантированное восстановление терминала `Shutdown` | **Готово** |
 | **M2** | Движок раскладки (раздел 7), `LoadDialog`, `vuic`, `vtui-lint`, golden-тест | **Готово** |
 | **M3** | Протокол JSON Lines и бинарник `vtui-host` | **Готово** |
-| **M4** | Биндинги для Python (раздел 10) | *К выполнению* |
+| **M4** | Биндинги для Python (раздел 10) | **Готово** |
 | **M5** | Биндинги для Node и TypeScript | *К выполнению* |
 | **M6** | Биндинги C / C++ и WASM | *К выполнению* |
 | **M7** | Инструменты записи и воспроизведения (`VTUI_RECORD`, `vtui-replay`) | *К выполнению* |
@@ -1097,9 +1097,17 @@ int main(void) { return vtui_run(ui); }
 
 **Готово, когда:** тестовый клиент на Go проходит полный жизненный цикл 8.5; сторож на закрытие канала работает на Linux и macOS; терминал восстанавливается при `kill -9` родителя; `--backend=gogpu` запускается.
 
-## M4 — Python
+## M4 — Python [ГОТОВО]
 
 **Результат:** тонкий и идиоматический уровни, платформенные колёса.
+- [x] Генерация `_props.py` из `vocabulary.json` через `cmd/vtui-gen`.
+- [x] Тонкий клиентский протокол `Session` (`bindings/python/vtui/session.py`) со сторожем и передачей дескриптора.
+- [x] Идиоматический immediate-mode фасад `Ui` (`dialog`, `edit`, `button`, `checkbox`, `message`).
+- [x] Главный модуль `vtui` (`run`, `run_async`, `log`, `VtuiError`).
+- [x] Асинхронная интеграция с `asyncio` (`run_async`, `add_reader`).
+- [x] Пример «Hello vtui» из раздела 10.2 (`bindings/python/examples/hello.py`).
+- [x] Асинхронный пример (`bindings/python/examples/async_demo.py`).
+- [x] Тесты в `bindings/python/tests/test_vtui.py`.
 
 **Готово, когда:** пример 10.2 работает; выполнены все шесть требований 10.4; `pip install` на чистой машине без Go даёт работающий пример; `VTUI_BACKEND=gogpu python hello.py` открывает GPU-окно (цель G6); интеграция с `asyncio` показана отдельным примером.
 
