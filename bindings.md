@@ -1047,7 +1047,7 @@ int main(void) { return vtui_run(ui); }
 | **M3** | Протокол JSON Lines и бинарник `vtui-host` | **Готово** |
 | **M4** | Биндинги для Python (раздел 10) | **Готово** |
 | **M5** | Биндинги для Node и TypeScript | **Готово** |
-| **M6** | Биндинги C / C++ и WASM | *К выполнению* |
+| **M6** | Биндинги C / C++ и WASM | **Готово** |
 | **M7** | Инструменты записи и воспроизведения (`VTUI_RECORD`, `vtui-replay`) | *К выполнению* |
 
 ---
@@ -1123,9 +1123,14 @@ int main(void) { return vtui_run(ui); }
 
 **Готово, когда:** пример 10.2 работает; в пакете нет нативных аддонов и `node-gyp`; типы `.d.ts` сгенерированы, а не написаны руками.
 
-## M6 — C, C++ и wasm
+## M6 — C, C++ и wasm [ГОТОВО]
 
 **Результат:** раздел 9.2, обёртка `vtui.hpp`, сборка wasm по 9.3, универсальное колесо Python.
+- [x] Генерация констант команд `bindings/c/include/vtui_constants.h` через `cmd/vtui-gen`.
+- [x] Заголовок C ABI и фасад `bindings/c/include/vtui.h`.
+- [x] Заголовок C++ `bindings/cpp/include/vtui.hpp`.
+- [x] Примеры на C (`bindings/c/examples/hello.c`) и C++ (`bindings/cpp/examples/hello.cpp`).
+- [x] Сборка WASM-ядра `cmd/vtui-wasm` под `GOOS=wasip1 GOARCH=wasm`.
 
 **Готово, когда:** примеры на C и C++ собираются на Linux, macOS и Windows; заметка о сигналах и `fork()` есть в документации; wasm-путь проходит тот же приёмочный набор, что и путь дочернего процесса, без изменений в клиентском коде.
 
