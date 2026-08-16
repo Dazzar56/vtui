@@ -3,14 +3,12 @@ module github.com/unxed/vtui
 go 1.26.0
 
 require (
-	github.com/BourgeoisBear/rasterm v1.1.2
 	github.com/gogpu/gg v0.52.2
 	github.com/gogpu/gogpu v0.52.1
 	github.com/gogpu/gpucontext v0.27.0
 	github.com/hajimehoshi/ebiten/v2 v2.10.0-alpha.13.0.20260811162617-464c2ddfc34c
 	github.com/jezek/xgb v1.3.1
 	github.com/mattn/go-runewidth v0.0.15
-	github.com/mattn/go-sixel v0.0.12
 	github.com/neurlang/wayland v0.4.2
 	github.com/rivo/uniseg v0.2.0
 	github.com/soniakeys/quant v1.0.0
