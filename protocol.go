@@ -250,7 +250,19 @@ func (ps *ProtocolSession) handleMessage(msg *DownMessage) error {
 			Version:  1,
 			Size:     [2]int{w, h},
 			Backend:  backend,
-			Features: []string{"vui", "patch", "virtual_lists", "autolayout"},
+			Features: []string{"vui", "patch", "virtual_lists", "autolayout", "describe"},
+		})
+
+	case "describe":
+		var vocab any
+		data, err := os.ReadFile("vocabulary.json")
+		if err == nil {
+			_ = json.Unmarshal(data, &vocab)
+		}
+		return ps.send(UpMessage{
+			Op:      "description",
+			ReplyTo: msg.Seq,
+			Value:   vocab,
 		})
 
 	case "mount":
