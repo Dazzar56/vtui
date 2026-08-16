@@ -414,6 +414,9 @@ func RunGogpuHost(cols, rows int, fontName string, fontSize float64, setupApp fu
 				VirtualKeyCode:  vk,
 				ControlKeyState: currMods,
 			}
+			if isGogpuEnhancedNavKey(key) {
+				ev.ControlKeyState |= vtinput.EnhancedKey
+			}
 
 			if isSpecialOrModifiedKey(vk, currMods) {
 				// An Alt chord carries its character too, so that an
@@ -827,6 +830,18 @@ func isGogpuKeypadKey(k gpucontext.Key) bool {
 	return false
 }
 
+// isGogpuEnhancedNavKey is isEbitenEnhancedNavKey for the gogpu key set,
+// except the four arrows stay plain: the picture viewer pans with them, and
+// flagging them would send them down the directory walk instead.
+func isGogpuEnhancedNavKey(k gpucontext.Key) bool {
+	switch k {
+	case gpucontext.KeyHome, gpucontext.KeyEnd, gpucontext.KeyPageUp, gpucontext.KeyPageDown,
+		gpucontext.KeyInsert, gpucontext.KeyDelete:
+		return true
+	}
+	return false
+}
+
 // gogpuNumpadRune returns the character a keypad virtual key stands for, or
 // zero for the navigation codes the same keys produce with NumLock off.
 //
@@ -1101,6 +1116,8 @@ func gogpuKeyToVK(k gpucontext.Key, mods vtinput.ControlKeyState) uint16 {
 		return vtinput.VK_8
 	case gpucontext.Key9:
 		return vtinput.VK_9
+	case gpucontext.KeyGrave:
+		return vtinput.VK_OEM_3
 	case gpucontext.KeyMinus:
 		return vtinput.VK_OEM_MINUS
 	case gpucontext.KeyEqual:

@@ -67,11 +67,10 @@ func TestGogpuTextRun(t *testing.T) {
 	}
 }
 
-// TestGogpuAdvFits covers the drift gate itself: advances of exactly one cell
-// (two for wide cells) join; anything else — the measured emoji/CJK fallback
+// TestGogpuAdvFits covers the drift gate: advances of exactly one cell (two
+// for wide cells) join; everything else — measured emoji/CJK fallback
 // advances (~1.8-2.5 cells), subpixel advances, proportional glyphs — stays
-// per-cell. These are the values measured on real fonts (Consolas 'a' 13px
-// with cellW 13; Segoe UI Emoji '🚂' 33px against a 26px slot).
+// per-cell.
 func TestGogpuAdvFits(t *testing.T) {
 	cases := []struct {
 		name  string

@@ -298,7 +298,7 @@ func TestScreenBufHardResetInvalidatesGraphics(t *testing.T) {
 }
 
 // kittyPayloadBytes decodes the base64 payload of the single transmission in
-// out (small test images fit in one chunk) so tests can check the exact bytes.
+// out (small test images fit in one chunk) so tests can check exact bytes.
 func kittyPayloadBytes(t *testing.T, out string) []byte {
 	t.Helper()
 	body := out

@@ -9,9 +9,10 @@ import (
 	"sync"
 	"time"
 	"unicode/utf8"
+	"unsafe"
 
 	"github.com/gogpu/gg"
-	_ "github.com/gogpu/gg/gpu" // Включаем аппаратное ускорение рендеринга
+	_ "github.com/gogpu/gg/gpu"
 	"github.com/gogpu/gg/integration/ggcanvas"
 	"github.com/gogpu/gg/text"
 	"github.com/gogpu/gogpu"
@@ -97,20 +98,15 @@ func (r *GogpuRenderer) SetFallbackFontChain(chain *fontFallbackChain) {
 	r.glyphMemo = nil
 }
 
-// faceFor resolves the face that actually owns a glyph for ch, memoising the
-// answer. The probe itself is a cmap lookup, but it happens once per distinct
-// rune on screen rather than once per cell per frame, which is what keeps this
-// off the hot path: a panel full of Latin text asks exactly once per letter
-// and then never again.
-//
-// The caller must hold r.mu. DrawToScreen, the only caller, holds it for the
-// whole frame.
+// faceFor resolves the face owning a glyph for ch, memoised per rune: a cmap
+// probe once per distinct rune on screen, not per cell per frame, keeps this
+// off the hot path. The caller must hold r.mu (DrawToScreen, the only caller,
+// holds it for the whole frame).
 // gogpuBatchRune reports whether a cell may join a batched DrawString run.
-// Only plain single-rune cells qualify: no cluster registry entries (their
-// per-cell shaping must stay intact), no wide fillers, no spaces (they draw
-// nothing), no box-drawing runes (they go through drawCustomChar) and never
-// regional indicators — two lone RIs concatenated into one string would shape
-// into a flag, which the per-cell draws keep apart.
+// Only plain single-rune cells qualify: no registry clusters (their per-cell
+// shaping must stay intact), no wide fillers, no spaces (they draw nothing),
+// no box-drawing runes (they go through drawCustomChar) and never regional
+// indicators — two lone RIs in one string would shape into a flag.
 func gogpuBatchRune(ch uint64) bool {
 	if ch == 0 || ch == WideCharFiller || IsCompChar(ch) {
 		return false
@@ -150,16 +146,13 @@ func (r *GogpuRenderer) gogpuAdvMatches(f text.Face, ch rune, cells int) bool {
 	return gogpuAdvFits(f.Advance(cellRuneString(uint64(ch))), r.cellW, cells)
 }
 
-// gogpuTextRun extends a batched DrawString run across the cells of one
-// colour span. buf is the whole render buffer, rowOff+x the first cell of the
-// span and spanW its width; start is the run's first cell (which must pass
-// gogpuBatchRune). It appends the run's runes to run and returns the new
-// buffer, the cell count consumed (each glyph takes its width in cells,
-// fillers included) and the face the whole run resolved to. The run stops at
-// the first cell that cannot join (see gogpuBatchRune), needs another face or
-// has an advance that would drift it off the cell grid. The final bool
-// reports whether the first cell joined the run at all; when false the caller
-// must draw that cell per-cell (the previous behaviour).
+// gogpuTextRun extends a batched DrawString run across one colour span.
+// buf is the render buffer, rowOff+x the span's first cell, start the run's
+// first cell (must pass gogpuBatchRune). It appends the runes and returns the
+// new buffer, the cells consumed, the resolved face, and whether the first
+// cell joined at all — when false the caller draws it per-cell, as before.
+// The run stops at a cell that cannot join, needs another face, or would
+// drift off the cell grid.
 func (r *GogpuRenderer) gogpuTextRun(buf []CharInfo, rowOff, x, start, spanW, drawCols int, curFace text.Face, run []byte) ([]byte, int, text.Face, bool) {
 	pos := x + start
 	first := buf[rowOff+pos]
@@ -219,11 +212,9 @@ func (r *GogpuRenderer) faceFor(ch rune) text.Face {
 
 	f := r.face
 	if !r.face.HasGlyph(ch) {
-		// The chain opens further font files as needed and memoises its own
-		// answer per rune, so this misses at most once per rune: the answer —
-		// including "nobody has it" — goes into faceCache below, and a
-		// negative answer is final because the chain has been walked to its
-		// end by then.
+		// The chain opens font files on demand and memoises per rune, so this
+		// misses at most once per rune; a negative answer is final because the
+		// chain has been walked to its end.
 		if fb, ok := r.chain.faceFor(ch).(text.Face); ok {
 			f = fb
 		}
@@ -421,10 +412,7 @@ func (r *GogpuRenderer) glyphRectsCached(char rune) (glyphMemoEntry, bool) {
 	return e, ok
 }
 
-// drawCustomChar draws one cell of a box/arrow/block rune. ascent is the
-// primary font's ascent; glyphs are placed on that baseline like DrawString
-// does for fallback text. Shapes are independent single-rect fills only:
-// composite paths rasterize as solid boxes on some Windows GPU stacks.
+// drawCustomChar draws one cell of a box/arrow/block rune.
 func (r *GogpuRenderer) drawCustomChar(dc *gg.Context, char rune, x, y, w, h, ascent float64) bool {
 	thick := 1.0
 	fillR := func(rx, ry, rw, rh float64) {
@@ -432,18 +420,9 @@ func (r *GogpuRenderer) drawCustomChar(dc *gg.Context, char rune, x, y, w, h, as
 		dc.Fill()
 	}
 
-	if e, ok := r.glyphRectsCached(char); ok {
-		baseY := y + ascent
-		for _, rc := range e.rects {
-			fillR(x+e.bx+float64(rc.x0), baseY-e.by+float64(rc.y0), float64(rc.x1-rc.x0+1), float64(rc.y1-rc.y0+1))
-		}
-		return true
-	}
-
 	mx := math.Floor(x + w/2 - thick/2)
 	my := math.Floor(y + h/2 - thick/2)
 
-	// Double line offsets
 	ofs := math.Floor(math.Min(w, h) / 4)
 	if ofs < 1 {
 		ofs = 1
@@ -598,10 +577,15 @@ func (r *GogpuRenderer) drawCustomChar(dc *gg.Context, char rune, x, y, w, h, as
 		fillR(mx-ofs, y, thick, h)
 		fillR(mx+ofs, y, thick, h)
 
-	// Fallback for fonts without these runes: the reference-font raster from
-	// gogpu_glyph_table.go (see gogpu_glyphgen_test.go), scaled to the cell.
-	// Fonts that cover the runes never reach this case.
+	// Symbols and arrows: use font-exact glyph if available, fallback to glyphTable.
 	case '↑', '↓', '↕', '←', '→', '↔', '▲', '▼':
+		if e, ok := r.glyphRectsCached(char); ok {
+			baseY := y + ascent
+			for _, rc := range e.rects {
+				fillR(x+e.bx+float64(rc.x0), baseY-e.by+float64(rc.y0), float64(rc.x1-rc.x0+1), float64(rc.y1-rc.y0+1))
+			}
+			return true
+		}
 		if rects, ok := glyphTable[char]; ok {
 			sx := w / glyphCellW
 			sy := h / glyphCellH
@@ -722,9 +706,11 @@ func (r *GogpuRenderer) drawFrame(dc *gg.Context, w, h int) gogpuFrameStats {
 					spanW++
 					continue
 				}
-				nextFg, nextBg := r.getCellColors(nextCell)
-				if nextBg != bg || nextFg != fg {
-					break
+				if nextCell.Attributes != cell.Attributes {
+					nextFg, nextBg := r.getCellColors(nextCell)
+					if nextBg != bg || nextFg != fg {
+						break
+					}
 				}
 				spanW++
 			}
@@ -774,12 +760,6 @@ func (r *GogpuRenderer) drawFrame(dc *gg.Context, w, h int) gogpuFrameStats {
 				}
 
 				if !r.noBatch && gogpuBatchRune(currCell.Char) {
-					// Consecutive plain single-rune cells on the same face go
-					// out in one DrawString. The natural advance equals
-					// per-cell placement only for glyphs the face advances
-					// exactly one cell (two for wide ones), which
-					// gogpuTextRun verifies; emoji, CJK fallbacks and
-					// proportional fonts stay per-cell.
 					tTxt := gogpuProfNow()
 					run, consumed, f, batched := r.gogpuTextRun(r.renderBuf, rowOff, x, sx, spanW, drawCols, curFace, r.textRunBuf[:0])
 					r.textRunBuf = run
@@ -788,15 +768,13 @@ func (r *GogpuRenderer) drawFrame(dc *gg.Context, w, h int) gogpuFrameStats {
 							curFace = f
 							dc.SetFont(f)
 						}
-						dc.DrawString(string(run), lx+float64(sx*r.cellW), ly+ascent)
+						dc.DrawString(unsafe.String(unsafe.SliceData(run), len(run)), lx+float64(sx*r.cellW), ly+ascent)
 						prof.textTime += gogpuProfSince(tTxt)
 						prof.strings++
 						prof.glyphs += utf8.RuneCount(run)
 						sx += consumed
 						continue
 					}
-					// The first cell cannot join a run: fall through and
-					// draw it per-cell, exactly as before batching.
 				}
 
 				str := CellString(currCell.Char)
@@ -884,14 +862,12 @@ func (r *GogpuRenderer) DrawToScreen(ctx *gogpu.Context) {
 	var prof gogpuFrameStats
 
 	// drawCanvas re-rasterizes the whole screen buffer into the canvas. OnDraw
-	// fires on content changes AND on surface-repaint events (WM_PAINT/Expose
-	// on restore from tray/minimize, alt-tab, uncover, focus change). The
-	// canvas must be repainted in both cases: ggcanvas.Render is a no-op on a
-	// clean canvas, so skipping the draw on a clean OnDraw would leave the
-	// window black after a restore until the next content change. The
-	// textured-quad path (canvas.RenderTo) is intentionally not used here —
-	// mixing it with the primary GPU-direct present path makes the screen
-	// flicker while dragging the mouse.
+	// fires on content changes AND on surface repaints (WM_PAINT/Expose after
+	// restore, alt-tab, uncover, focus change); the canvas must repaint in
+	// both cases, since ggcanvas.Render is a no-op on a clean canvas and a
+	// skipped draw would leave the window black until the next change.
+	// RenderTo is not used: mixing it with the primary present path flickers
+	// while dragging the mouse.
 	drawCanvas := func() {
 		tDraw := gogpuProfNow()
 		r.canvas.Draw(func(dc *gg.Context) {
@@ -916,12 +892,7 @@ func (r *GogpuRenderer) SetWindowTitle(title string) {
 	r.host.app.SetTitle(title)
 }
 
-// getCellColors decodes a cell attribute into foreground/background RGBA
-// values. It returns concrete color.RGBA structs: boxing them into the
-// color.Color interface on every one of the ~4000 cells per frame was a
-// third of the renderer's allocations. The palette is read live from the
-// global ThemePalette on every call, so palette changes apply immediately
-// and no invalidation is needed.
+// getCellColors decodes a cell attribute into foreground/background RGBA values.
 func (r *GogpuRenderer) getCellColors(cell CharInfo) (color.RGBA, color.RGBA) {
 	bg := GetRGBBack(cell.Attributes)
 	if cell.Attributes&IsBgRGB == 0 {

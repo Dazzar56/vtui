@@ -104,37 +104,31 @@ func CellString(ch uint64) string {
 	case IsCompChar(ch):
 		idx := int(ch&^CompCharFlag) - 1
 		clusters.mu.RLock()
-		defer clusters.mu.RUnlock()
-		if idx < 0 || idx >= len(clusters.byID) {
-			return string(runeReplacement)
+		if idx >= 0 && idx < len(clusters.byID) {
+			s := clusters.byID[idx]
+			clusters.mu.RUnlock()
+			return s
 		}
-		return clusters.byID[idx]
+		clusters.mu.RUnlock()
+		return string(runeReplacement)
 	default:
 		return cellRuneString(ch)
 	}
 }
 
-// asciiRuneStrings is the single-rune string for each ASCII code point.
-// string(rune(ch)) allocates even for ASCII runes when the value is not a
-// compile-time constant (measured: ~14MB over a 1000-frame profile), so the
-// hot per-cell paths read this table instead. Built once, never mutated.
+// asciiRuneStrings provides single-rune strings for ASCII code points.
 var asciiRuneStrings [128]string
 
 func init() {
 	for i := 0; i < len(asciiRuneStrings); i++ {
 		asciiRuneStrings[i] = string(rune(i))
 	}
+	buildClusterFormingTables()
 }
 
-// cellRuneCache is a fixed-size direct-mapped cache of single-rune strings
-// for plain non-ASCII cell values. string(rune(ch)) allocates for every
-// non-ASCII rune, and the per-cell render paths (gogpu per-cell fallback,
-// CellString in other backends) convert the same runes — file names repeat
-// — frame after frame. The mapping rune -> string is immutable, so the
-// cache can never go stale; the 256-slot array is fixed, so memory never
-// grows.
+// cellRuneCache is a direct-mapped cache of single-rune strings for non-ASCII runes.
 var cellRuneCache = struct {
-	sync.Mutex
+	sync.RWMutex
 	slots [256]struct {
 		ch  uint64
 		str string
@@ -145,15 +139,16 @@ func cellRuneString(ch uint64) string {
 	if ch < 0x80 {
 		return asciiRuneStrings[ch]
 	}
-	idx := int(ch % 256)
-	cellRuneCache.Lock()
-	slot := &cellRuneCache.slots[idx]
+	idx := int(ch & 255)
+	cellRuneCache.RLock()
+	slot := cellRuneCache.slots[idx]
 	if slot.ch == ch {
 		s := slot.str
-		cellRuneCache.Unlock()
+		cellRuneCache.RUnlock()
 		return s
 	}
-	cellRuneCache.Unlock()
+	cellRuneCache.RUnlock()
+
 	s := string(rune(ch))
 	cellRuneCache.Lock()
 	cellRuneCache.slots[idx] = struct {
@@ -318,21 +313,15 @@ type clusterFormingRange struct {
 // clusterFormingBMP is a 65536-bit bitmap of the BMP code points that can
 // join a multi-rune grapheme cluster; clusterFormingSup is the sorted,
 // coalesced range list for the supplementary planes. Both are built once from
-// the Unicode categories Mn (combining marks of every script — Latin
-// diacritics, Cyrillic, Arabic harakat, Devanagari virama, Hiragana dakuten),
-// Me (enclosing marks such as the keycap), Mc (spacing marks) and Cf (format
-// characters such as ZWJ, variation selectors and emoji tag characters), plus
-// the sequence runes those categories do not cover (Hangul jamo in the BMP;
-// emoji modifiers and regional indicators beyond it). A membership test is a
-// single bitmap word load in the BMP and one binary search above it — the
-// same rule for every code point of every script, with no per-language
-// special cases.
+// the Mn/Me/Mc/Cf categories plus the sequence runes they miss (Hangul jamo;
+// emoji modifiers and regional indicators). A membership test is one bitmap
+// word load in the BMP and one binary search above it — a single rule for
+// every script, no per-language cases.
 const bmpClusterWords = 1 << (16 - 6)
 
 var (
-	clusterFormingOnce sync.Once
-	clusterFormingBMP  [bmpClusterWords]uint64
-	clusterFormingSup  []clusterFormingRange
+	clusterFormingBMP [bmpClusterWords]uint64
+	clusterFormingSup []clusterFormingRange
 )
 
 func buildClusterFormingTables() {
@@ -343,7 +332,14 @@ func buildClusterFormingTables() {
 	}
 	addTable := func(rt *unicode.RangeTable) {
 		for _, r := range rt.R16 {
-			setBMPRange(rune(r.Lo), rune(r.Hi))
+			stride := rune(r.Stride)
+			if stride <= 1 {
+				setBMPRange(rune(r.Lo), rune(r.Hi))
+			} else {
+				for cp := rune(r.Lo); cp <= rune(r.Hi); cp += stride {
+					clusterFormingBMP[cp>>6] |= 1 << (cp & 63)
+				}
+			}
 		}
 		for _, r := range rt.R32 {
 			clusterFormingSup = append(clusterFormingSup, clusterFormingRange{lo: rune(r.Lo), hi: rune(r.Hi)})
@@ -377,14 +373,11 @@ func buildClusterFormingTables() {
 }
 
 // isClusterFormingRune reports whether r can join its neighbours into a
-// multi-rune grapheme cluster. Strings containing any such rune must go
-// through the full uniseg segmentation; everything else is one rune per
-// cluster and can be processed rune-by-rune.
+// multi-rune grapheme cluster.
 func isClusterFormingRune(r rune) bool {
 	if r < 0x80 {
 		return false
 	}
-	clusterFormingOnce.Do(buildClusterFormingTables)
 	if r < 0x10000 {
 		return clusterFormingBMP[r>>6]&(1<<(r&63)) != 0
 	}
@@ -519,11 +512,7 @@ func AppendCluster(target []CharInfo, cluster string, width int, attr uint64) []
 // grapheme clusters rather than runes.
 func StringWidth(s string) int {
 	if !scanNeedsFullSegmentation(s) {
-		total := 0
-		forEachClusterSimple(s, func(_ string, w, _, _ int) {
-			total += w
-		})
-		return total
+		return measureWidthSimple(s)
 	}
 	total := 0
 	forEachClusterUniseg(s, func(_ string, w, _, _ int) {
@@ -549,8 +538,6 @@ func measureWidthSimple(s string) int {
 // scanNeedsFullSegmentation(s) is false). It returns the truncated string
 // and its width; the width equals measureWidthSimple of the result.
 func truncateSimple(s string, w int, tail string) (string, int) {
-	// Measure first: the common case (the name fits its column) returns s
-	// unchanged and allocates nothing.
 	total := 0
 	fits := true
 	for offset := 0; offset < len(s); {
@@ -604,38 +591,8 @@ func truncateSimple(s string, w int, tail string) (string, int) {
 // cuts a grapheme cluster in half and never leaves a wide character with only
 // one of its two columns on screen.
 func TruncateString(s string, w int, tail string) string {
-	if w <= 0 {
-		return ""
-	}
-	if !scanNeedsFullSegmentation(s) {
-		text, _ := truncateSimple(s, w, tail)
-		return text
-	}
-	if StringWidth(s) <= w {
-		return s
-	}
-	tailW := StringWidth(tail)
-	budget := w - tailW
-	if budget < 0 {
-		return tail
-	}
-
-	var sb strings.Builder
-	used := 0
-	g := uniseg.NewGraphemes(s)
-	for g.Next() {
-		from, to := g.Positions()
-		text, cw := SanitizeCluster(s[from:to])
-		if cw == 0 {
-			continue
-		}
-		if used+cw > budget {
-			break
-		}
-		sb.WriteString(text)
-		used += cw
-	}
-	return sb.String() + tail
+	res, _ := truncateStringWidth(s, w, tail)
+	return res
 }
 
 // truncateStringWidth is TruncateString plus the display width of the result.

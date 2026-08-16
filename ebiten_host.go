@@ -326,6 +326,9 @@ func (g *ebitenGame) Update() error {
 			Char:            h.charForVK(vk),
 			ControlKeyState: mods,
 		}
+		if isEbitenEnhancedNavKey(k) {
+			ev.ControlKeyState |= vtinput.EnhancedKey
+		}
 		DebugLog("EBITEN_HOST: key vk=%d char=%q mods=%d held=%d", vk, ev.Char, mods, d)
 
 		// Only Ctrl and Alt chords wait. An inherently special key such as an

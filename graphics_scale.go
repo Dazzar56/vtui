@@ -189,8 +189,8 @@ func buildScaleRuns(srcLen, dstLen int) []scaleRun {
 	return runs
 }
 
-// scaleWorkers bounds the box filter's pass parallelism; the passes only pay
-// for goroutines above a few hundred rows or columns.
+// scaleWorkers bounds the box filter's pass parallelism; goroutines only pay
+// above a few hundred rows or columns.
 var scaleWorkers = func() int {
 	n := runtime.GOMAXPROCS(0)
 	if n < 1 {
@@ -207,9 +207,8 @@ const scaleSerialRows = 256
 
 // scaleSurfaceBox downsamples an opaque source with a separable box filter:
 // integer prefix sums per row and a sliding window per column, no per-pixel
-// float math and no premultiply pass. The float path averages with fractional
-// area weights; this averages the same pixel windows, so the sRGB output
-// matches within a few units. Opaque sources only — alpha needs the
+// float math and no premultiply pass. It averages the same pixel windows as
+// the float path (sRGB output matches within a few units); alpha needs the
 // premultiply float path.
 func scaleSurfaceBox(src *ImageSurface, w, h int) *ImageSurface {
 	if !src.Valid() || w <= 0 || h <= 0 {
@@ -223,10 +222,9 @@ func scaleSurfaceBox(src *ImageSurface, w, h int) *ImageSurface {
 	xr := buildScaleRuns(sw, w)
 	yr := buildScaleRuns(sh, h)
 
-	// Horizontal pass: average each source row into w columns. Prefix sums
-	// in uint32 keep the window sums exact; the window averages fit uint16.
-	// Rows are independent, so they split across workers, one prefix bank
-	// each; the vertical pass waits for them below.
+	// Horizontal pass: average each source row into w columns. Prefix sums in
+	// uint32 keep window sums exact; the averages fit uint16. Rows are
+	// independent, so they split across workers, one prefix bank each.
 	tmp := make([]uint16, w*sh*3)
 	workers := scaleWorkers
 	if sh < scaleSerialRows {
@@ -276,11 +274,9 @@ func scaleSurfaceBox(src *ImageSurface, w, h int) *ImageSurface {
 		wg.Wait()
 	}
 
-	// Vertical pass: slide one window over the tmp rows and keep a running
-	// column sum, so every byte of tmp is read sequentially once (the
-	// windows are adjacent, so each row is added once and subtracted once).
-	// Output columns are independent, so each worker takes a band of them
-	// and runs the whole window walk over it.
+	// Vertical pass: slide one window over the tmp rows keeping a running
+	// column sum, so every byte is read once (each row added and subtracted
+	// once). Output columns are independent, so each worker takes a band.
 	if w >= scaleSerialRows && workers > 1 {
 		var wg sync.WaitGroup
 		colBanks := make([]uint32, w*3*workers)

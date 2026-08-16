@@ -6,22 +6,8 @@ import (
 	"image"
 )
 
-// drawBoxGlyph rasterises the box-drawing, arrow and block characters
-// geometrically instead of going through the font.
-//
-// Fonts are the wrong tool for these: a monospace face renders U+2500 and its
-// neighbours as glyphs positioned by metrics, so adjacent cells leave hairline
-// gaps at the joins and a frame comes out dotted. Drawing the segments
-// directly against the cell rectangle makes them meet exactly, which is what a
-// Far Manager style UI is made of.
-//
-// thick is the line width in pixels, normally the display scale factor, so
-// frames stay proportionate on a HiDPI screen. Bounds come from img itself,
-// so the caller does not have to pass a surface size that could disagree with
-// the buffer. rgb is the packed 0xRRGGBB the buffer uses throughout, taken
-// as uint32 rather than color.Color: converting allocates once per glyph.
-// Returns false for characters it does not handle, leaving the caller to
-// fall back to the font.
+// drawBoxGlyph rasterizes box-drawing, arrow, and block characters
+// geometrically to ensure seamless joins against the cell rectangle.
 func drawBoxGlyph(img *image.RGBA, char rune, px, py, cw, ch, thick int, rgb uint32) bool {
 	mx, my := px+cw/2, py+ch/2
 	if thick < 1 {

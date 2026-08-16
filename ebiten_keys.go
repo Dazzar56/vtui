@@ -23,6 +23,19 @@ func isNumLockEffective(mods vtinput.ControlKeyState) bool {
 	return numLock != shift
 }
 
+// isEbitenEnhancedNavKey reports whether k is part of the "enhanced"
+// navigation cluster, so a consumer can tell it from the numpad arrows that
+// reuse the same virtual key codes with NumLock off.
+func isEbitenEnhancedNavKey(k ebiten.Key) bool {
+	switch k {
+	case ebiten.KeyArrowUp, ebiten.KeyArrowDown, ebiten.KeyArrowLeft, ebiten.KeyArrowRight,
+		ebiten.KeyHome, ebiten.KeyEnd, ebiten.KeyPageUp, ebiten.KeyPageDown,
+		ebiten.KeyInsert, ebiten.KeyDelete:
+		return true
+	}
+	return false
+}
+
 func ebitenKeyToVK(k ebiten.Key, mods vtinput.ControlKeyState) uint16 {
 	switch k {
 	// Editing and navigation.

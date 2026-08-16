@@ -155,6 +155,32 @@ func TestIsGogpuKeypadKey(t *testing.T) {
 	}
 }
 
+// TestIsGogpuEnhancedNavKey pins the enhanced-key split: the picture viewer
+// pans with the four arrows on gogpu, so they stay plain, while the rest of
+// the navigation cluster is flagged like the Windows console flags it.
+func TestIsGogpuEnhancedNavKey(t *testing.T) {
+	plain := []gpucontext.Key{
+		gpucontext.KeyUp, gpucontext.KeyDown, gpucontext.KeyLeft, gpucontext.KeyRight,
+		gpucontext.KeyNumpad2, gpucontext.KeyNumpad4, gpucontext.KeyNumpad6, gpucontext.KeyNumpad8,
+		gpucontext.KeyA, gpucontext.KeyEnter,
+	}
+	enhanced := []gpucontext.Key{
+		gpucontext.KeyHome, gpucontext.KeyEnd, gpucontext.KeyPageUp, gpucontext.KeyPageDown,
+		gpucontext.KeyInsert, gpucontext.KeyDelete,
+	}
+
+	for _, k := range plain {
+		if isGogpuEnhancedNavKey(k) {
+			t.Errorf("isGogpuEnhancedNavKey(%v) = true, want false", k)
+		}
+	}
+	for _, k := range enhanced {
+		if !isGogpuEnhancedNavKey(k) {
+			t.Errorf("isGogpuEnhancedNavKey(%v) = false, want true", k)
+		}
+	}
+}
+
 // TestIsSpecialOrModifiedKey_Clear covers keypad 5 with NumLock off: it types
 // nothing, so pairing it with text that never arrives only delays it.
 func TestIsSpecialOrModifiedKey_Clear(t *testing.T) {

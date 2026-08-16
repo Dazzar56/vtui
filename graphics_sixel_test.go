@@ -137,9 +137,8 @@ func TestSixelKeepsTransparentPixels(t *testing.T) {
 
 // TestSixelRoundTrip feeds a two-colour image with interleaved columns through
 // the encoder and decodes the result back to pixels. The old encoder skipped
-// blank columns without advancing the sixel cursor, so every colour's pixels
-// shifted left and the two colours overlapped; this test pins the fixed
-// behaviour.
+// blank columns without advancing the cursor, shifting every colour's pixels
+// left so the colours overlapped; this test pins the fixed behaviour.
 func TestSixelRoundTrip(t *testing.T) {
 	surf := NewImageSurface(6, 6)
 	for y := 0; y < 6; y++ {
@@ -282,9 +281,8 @@ func TestScreenBufFlushEmitsSixel(t *testing.T) {
 }
 
 // TestScreenBufFlushSixelGeometry runs the whole ScreenBuf -> AnsiRenderer ->
-// sixel encoder path with the default cell-size resolution and decodes the
-// emitted stream, so the raster a terminal actually receives is checked
-// against the placement, not just the encoder in isolation.
+// sixel path with default cell-size resolution and decodes the emitted stream,
+// checking the raster a terminal receives, not just the encoder in isolation.
 func TestScreenBufFlushSixelGeometry(t *testing.T) {
 	scr, out := newGraphicsTestScreen(t)
 	scr.Graphics().SetProtocol(GraphicsSixel)
@@ -307,10 +305,9 @@ func TestScreenBufFlushSixelGeometry(t *testing.T) {
 }
 
 // sixelDecode is the test oracle for the encoder: a dependency-free decoder
-// for the subset the encoder emits (DCS 0;1;8q, "1;1;W;H raster attributes,
-// #r;2;R;G;B colour definitions, #r selects, $, -, and !N runs). It returns
-// the raster size, one register per pixel (-1 = transparent) and the register
-// palette as packed RGB.
+// for the emitted subset (DCS 0;1;8q, "1;1;W;H, #r;2;R;G;B definitions, #r
+// selects, $, -, !N runs). It returns the raster size, one register per pixel
+// (-1 = transparent) and the register palette as packed RGB.
 func sixelDecode(t *testing.T, s string) (w, h int, grid []int, pal []uint32) {
 	t.Helper()
 

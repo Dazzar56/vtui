@@ -26,8 +26,7 @@ type kittyEncoder struct {
 	nextID   uint32
 
 	// hasPlaced records that at least one placement is live, so the next
-	// render knows to clear the old placements first. The delete-all refactor
-	// made the placement list itself dead: only the flag matters.
+	// render knows to clear the old placements first; only the flag matters.
 	hasPlaced bool
 }
 
@@ -73,8 +72,7 @@ func (k *kittyEncoder) removePlacements(sb kittyBuffer) {
 		return
 	}
 	// WezTerm composites kitty images per cell, so a stale placement shows
-	// through the next picture. One atomic clear beats per-placement deletes:
-	// every surviving image is re-placed below in the same frame.
+	// through the next picture; one atomic clear beats per-placement deletes.
 	sb.WriteString("\x1b_Ga=d,d=a,q=2\x1b\\")
 	k.hasPlaced = false
 }
@@ -120,10 +118,10 @@ func (k *kittyEncoder) upload(sb kittyBuffer, surf *ImageSurface, id uint32) {
 		return
 	}
 	// Opaque images have a constant alpha byte, so they are sent as RGB
-	// (f=24, three bytes per pixel): a quarter smaller payload at identical
-	// quality. Images with real transparency keep RGBA (f=32). rawChunk is a
-	// multiple of 3 (base64 triples) and of both pixel sizes, so every chunk
-	// base64s to exactly kittyChunkSize characters and never splits a pixel.
+	// (f=24): a quarter smaller payload at identical quality; real
+	// transparency keeps RGBA (f=32). rawChunk is a multiple of 3 (base64
+	// triples) and of both pixel sizes, so every chunk base64s exactly and
+	// never splits a pixel.
 	format, bpp := "f=32", 4
 	if surf.Opaque {
 		format, bpp = "f=24", 3
@@ -275,8 +273,8 @@ func (r *AnsiRenderer) RenderGraphics(layer *GraphicsLayer, buf, shadow []CharIn
 		r.gfxSixel.Render(&r.frameOut, r.gfxList, cw, ch)
 	}
 
-	// Both protocols move the text cursor (kitty places relative to the
-	// cursor, sixel leaves it at the bottom of the image), so the final
-	// cursor report in PrepareFlush must be re-emitted this frame.
+	// Both protocols move the text cursor (kitty places relative to it, sixel
+	// leaves it below the image), so PrepareFlush must re-emit the cursor
+	// report this frame.
 	r.termCursorInvalid = true
 }
