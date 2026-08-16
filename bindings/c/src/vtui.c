@@ -2,8 +2,136 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/wait.h>
 
 #include "../include/vtui.h"
+
+static char g_last_error[256] = "";
+
+static void set_last_error(const char *err) {
+    if (err) {
+        strncpy(g_last_error, err, sizeof(g_last_error) - 1);
+        g_last_error[sizeof(g_last_error) - 1] = '\0';
+    }
+}
+
+const char *vtui_last_error(void) {
+    return g_last_error;
+}
+
+struct vtui_session {
+    pid_t pid;
+    int fd;
+    FILE *stream_in;
+    FILE *stream_out;
+};
+
+vtui_session *vtui_open(const char *config_json) {
+    int sv[2];
+    if (socketpair(AF_UNIX, SOCK_STREAM, 0, sv) < 0) {
+        set_last_error("failed to create socketpair");
+        return NULL;
+    }
+
+    const char *host_bin = getenv("VTUI_HOST_BIN");
+    if (!host_bin) host_bin = "vtui-host";
+
+    const char *backend = getenv("VTUI_BACKEND");
+    if (!backend) backend = "ansi";
+
+    pid_t pid = fork();
+    if (pid < 0) {
+        close(sv[0]);
+        close(sv[1]);
+        set_last_error("fork failed");
+        return NULL;
+    }
+
+    if (pid == 0) {
+        // Child: run vtui-host with protocol fd 3
+        close(sv[0]);
+        if (sv[1] != 3) {
+            dup2(sv[1], 3);
+            close(sv[1]);
+        }
+        char backend_arg[64];
+        snprintf(backend_arg, sizeof(backend_arg), "--backend=%s", backend);
+
+        if (getenv("VTUI_HOST_BIN")) {
+            execl(host_bin, host_bin, "--protocol-fd=3", backend_arg, (char *)NULL);
+        }
+        execl("./vtui-host", "./vtui-host", "--protocol-fd=3", backend_arg, (char *)NULL);
+        execl("../vtui-host", "../vtui-host", "--protocol-fd=3", backend_arg, (char *)NULL);
+        execl("../../vtui-host", "../../vtui-host", "--protocol-fd=3", backend_arg, (char *)NULL);
+        execlp(host_bin, host_bin, "--protocol-fd=3", backend_arg, (char *)NULL);
+        fprintf(stderr, "vtui: failed to execute vtui-host (binary not found)\n");
+        _exit(127);
+    }
+
+    // Parent
+    close(sv[1]);
+    vtui_session *s = (vtui_session *)malloc(sizeof(vtui_session));
+    s->pid = pid;
+    s->fd = sv[0];
+    s->stream_in = fdopen(dup(sv[0]), "r");
+    s->stream_out = fdopen(sv[0], "w");
+
+    // Perform handshake
+    vtui_send(s, "{\"op\":\"hello\",\"version\":1}\n", 28);
+    char buf[1024];
+    size_t out_len = 0;
+    if (vtui_recv(s, buf, sizeof(buf), &out_len) != 0) {
+        vtui_close(s);
+        set_last_error("handshake failed with vtui-host");
+        return NULL;
+    }
+
+    return s;
+}
+
+int vtui_send(vtui_session *s, const char *line, size_t len) {
+    if (!s || s->fd < 0) return -1;
+    ssize_t written = write(s->fd, line, len);
+    if (written < 0) return -1;
+    if (len == 0 || line[len - 1] != '\n') {
+        if (write(s->fd, "\n", 1) < 0) return -1;
+    }
+    return 0;
+}
+
+int vtui_event_fd(vtui_session *s) {
+    if (!s) return -1;
+    return s->fd;
+}
+
+int vtui_recv(vtui_session *s, char *buf, size_t cap, size_t *out_len) {
+    if (!s || !s->stream_in) return -1;
+    if (fgets(buf, (int)cap, s->stream_in) == NULL) {
+        return -1;
+    }
+    if (out_len) {
+        *out_len = strlen(buf);
+    }
+    return 0;
+}
+
+void vtui_close(vtui_session *s) {
+    if (!s) return;
+    vtui_send(s, "{\"op\":\"quit\"}\n", 14);
+    if (s->stream_in) fclose(s->stream_in);
+    if (s->stream_out) fclose(s->stream_out);
+    if (s->fd >= 0) close(s->fd);
+    if (s->pid > 0) {
+        int status;
+        waitpid(s->pid, &status, WNOHANG);
+    }
+    free(s);
+}
+
+/* --- Immediate-Mode Facade --- */
 
 struct vtui_ui {
     vtui_session *session;

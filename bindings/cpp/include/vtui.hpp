@@ -145,8 +145,28 @@ inline int run(std::function<void(Ui&)> ui_fn) {
 
     char buf[4096];
     size_t out_len = 0;
-    while (vtui_recv(s, buf, sizeof(buf), &out_len) == 0) {
+    while (vtui_recv(s, buf, sizeof(buf) - 1, &out_len) == 0) {
         if (out_len > 0) {
+            buf[out_len] = '\0';
+            std::string line(buf);
+            if (line.find("\"op\":\"closed\"") != std::string::npos && line.find("\"frameId\":\"mainDlg\"") != std::string::npos) {
+                break;
+            }
+            std::string op, srcId, val;
+            auto parseField = [&](const std::string& key) -> std::string {
+                auto pos = line.find("\"" + key + "\":\"");
+                if (pos == std::string::npos) return "";
+                pos += key.size() + 4;
+                auto end = line.find("\"", pos);
+                if (end == std::string::npos) return "";
+                return line.substr(pos, end - pos);
+            };
+            op = parseField("op");
+            srcId = parseField("srcId");
+            if (srcId.empty()) srcId = parseField("id");
+            val = parseField("value");
+
+            u.processEvent(op, srcId, val);
             ui_fn(u);
         }
     }

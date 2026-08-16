@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"syscall"
 
+	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
 
@@ -56,18 +57,27 @@ func runSession(in io.Reader, out io.Writer, backend string) {
 		os.Exit(0)
 	}()
 
+	w, h, err := vtui.GetTerminalSize()
+	if err != nil || w <= 0 || h <= 0 {
+		w, h = 80, 25
+	}
+
 	scr := vtui.NewScreenBuf()
-	scr.AllocBuf(80, 25)
+	scr.AllocBuf(w, h)
 	vtui.FrameManager.Init(scr)
+	vtui.FrameManager.SetHostMode(true)
 
 	session := vtui.NewProtocolSession(in, out, vtui.FrameManager)
 
-	if backend != "ansi" && backend != "" {
-		go func() {
-			_ = session.Serve()
-		}()
-		_ = vtui.RunInGUIWindow(80, 25, backend, "", 18.0, func() {})
-	} else {
+	go func() {
 		_ = session.Serve()
+		vtui.FrameManager.Shutdown()
+	}()
+
+	if backend != "ansi" && backend != "" {
+		_ = vtui.RunInGUIWindow(w, h, backend, "", 18.0, func() {})
+	} else {
+		reader := vtinput.NewReader(os.Stdin, false)
+		vtui.FrameManager.Run(reader)
 	}
 }

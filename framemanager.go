@@ -266,6 +266,12 @@ type frameManager struct {
 	lastAnim               time.Time
 	eventSink              func(UIEvent)
 	eventSinkMu            sync.RWMutex
+	hostMode               bool
+}
+
+// SetHostMode configures whether FrameManager keeps running when frames slice is initially empty (used by vtui-host).
+func (fm *frameManager) SetHostMode(enabled bool) {
+	fm.hostMode = enabled
 }
 
 type Toast struct {
@@ -964,7 +970,10 @@ func (fm *frameManager) PostEvent(ev vtinput.InputEvent) {
 // timeout > 0 waits up to the given duration.
 // Returns false when the application should terminate (no frames left or shutdown).
 func (fm *frameManager) Step(timeout time.Duration) bool {
-	if fm.IsShutdown() || len(fm.frames) == 0 {
+	if fm.IsShutdown() {
+		return false
+	}
+	if !fm.hostMode && len(fm.frames) == 0 {
 		return false
 	}
 
@@ -2006,7 +2015,10 @@ func (fm *frameManager) Run(readers ...*vtinput.Reader) {
 		}
 	}()
 
-	for fm.running && !fm.IsShutdown() && len(fm.frames) > 0 {
+	for fm.running && !fm.IsShutdown() {
+		if !fm.hostMode && len(fm.frames) == 0 {
+			break
+		}
 		select {
 		case <-sigChan:
 			fm.handleResize()
@@ -2017,7 +2029,9 @@ func (fm *frameManager) Run(readers ...*vtinput.Reader) {
 		default:
 		}
 		if !fm.Step(10 * time.Millisecond) {
-			break
+			if !fm.hostMode {
+				break
+			}
 		}
 	}
 }
