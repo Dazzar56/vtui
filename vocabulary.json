@@ -1,0 +1,442 @@
+{
+  "version": 1,
+  "widgets": {
+    "Widget": {
+      "summary": "Базовый абстрактный компонент",
+      "properties": {
+        "id": { "type": "string", "default": "", "summary": "Уникальный строковый идентификатор элемента" },
+        "visible": { "type": "bool", "default": true, "summary": "Видимость элемента" },
+        "enabled": { "type": "bool", "default": true, "summary": "Доступность для взаимодействия" },
+        "help": { "type": "string", "default": "", "summary": "Идентификатор контекстной справки F1" },
+        "grow": { "type": "int", "default": 0, "summary": "Флаги GrowMode для абсолютной раскладки" },
+        "align": { "type": "string", "default": "fill", "summary": "Выравнивание внутри ячейки раскладки (fill, start, center, end)" },
+        "stretch": { "type": "int", "default": 1, "summary": "Вес растяжения при распределении свободного места" },
+        "minWidth": { "type": "int", "default": 0, "summary": "Минимальная ширина в ячейках" },
+        "minHeight": { "type": "int", "default": 0, "summary": "Минимальная высота в ячейках" },
+        "maxWidth": { "type": "int", "default": 0, "summary": "Максимальная ширина (0 - без ограничения)" },
+        "maxHeight": { "type": "int", "default": 0, "summary": "Максимальная высота (0 - без ограничения)" }
+      },
+      "signals": ["focus", "blur"]
+    },
+    "Dialog": {
+      "extends": "Widget",
+      "summary": "Модальное диалоговое окно",
+      "properties": {
+        "title": { "type": "string", "default": "", "summary": "Заголовок диалога" },
+        "showClose": { "type": "bool", "default": true, "summary": "Показывать кнопку закрытия [x]" },
+        "showZoom": { "type": "bool", "default": false, "summary": "Показывать кнопку разворачивания" },
+        "isWarning": { "type": "bool", "default": false, "summary": "Использовать предупреждающую (красную) палитру" },
+        "autoSize": { "type": "bool", "default": false, "summary": "Автоматически вычислить размер по содержимому" },
+        "center": { "type": "bool", "default": true, "summary": "Центрировать окно на экране" }
+      },
+      "signals": ["closed"],
+      "localizable": ["title"],
+      "sizeHint": { "w": 40, "h": 10 },
+      "minSize": { "w": 10, "h": 5 },
+      "sizePolicy": { "h": "preferred", "v": "preferred" }
+    },
+    "Window": {
+      "extends": "Widget",
+      "summary": "Немодальное перемещаемое окно",
+      "properties": {
+        "title": { "type": "string", "default": "", "summary": "Заголовок окна" },
+        "showClose": { "type": "bool", "default": true, "summary": "Показывать кнопку закрытия [x]" },
+        "showZoom": { "type": "bool", "default": true, "summary": "Показывать кнопку разворачивания [↕]" }
+      },
+      "signals": ["closed"],
+      "localizable": ["title"],
+      "sizeHint": { "w": 60, "h": 20 },
+      "minSize": { "w": 10, "h": 5 },
+      "sizePolicy": { "h": "preferred", "v": "preferred" }
+    },
+    "BorderedFrame": {
+      "extends": "Widget",
+      "summary": "Одиночная или двойная рамка с заголовком",
+      "properties": {
+        "title": { "type": "string", "default": "", "summary": "Заголовок рамки" },
+        "boxType": { "type": "int", "default": 2, "summary": "Тип рамки: 1 (SingleBox) или 2 (DoubleBox)" },
+        "showClose": { "type": "bool", "default": false, "summary": "Показывать кнопку закрытия" }
+      },
+      "signals": [],
+      "localizable": ["title"],
+      "sizeHint": { "w": 20, "h": 5 },
+      "minSize": { "w": 4, "h": 3 },
+      "sizePolicy": { "h": "preferred", "v": "preferred" }
+    },
+    "GroupBox": {
+      "extends": "Widget",
+      "summary": "Группа элементов в рамке с заголовком",
+      "properties": {
+        "title": { "type": "string", "default": "", "summary": "Заголовок группы" }
+      },
+      "signals": [],
+      "localizable": ["title"],
+      "sizeHint": { "w": 20, "h": 6 },
+      "minSize": { "w": 6, "h": 3 },
+      "sizePolicy": { "h": "expanding", "v": "preferred" }
+    },
+    "Button": {
+      "extends": "Widget",
+      "summary": "Кнопка действия",
+      "properties": {
+        "text": { "type": "string", "default": "&Ok", "summary": "Текст кнопки с мнемоникой (&)" },
+        "default": { "type": "bool", "default": false, "summary": "Кнопка по умолчанию (срабатывает на Enter)" },
+        "command": { "type": "int", "default": 0, "summary": "Команда для отправки при нажатии" }
+      },
+      "signals": ["clicked"],
+      "localizable": ["text"],
+      "sizeHint": { "w": 10, "h": 1 },
+      "minSize": { "w": 6, "h": 1 },
+      "sizePolicy": { "h": "fixed", "v": "fixed" }
+    },
+    "Checkbox": {
+      "extends": "Widget",
+      "summary": "Флажок с 2 или 3 состояниями",
+      "properties": {
+        "text": { "type": "string", "default": "", "summary": "Текст флажка с мнемоникой" },
+        "state": { "type": "int", "default": 0, "summary": "0 - снят, 1 - установлен, 2 - неопределен" },
+        "threeState": { "type": "bool", "default": false, "summary": "Поддержка третьего состояния" }
+      },
+      "signals": ["changed"],
+      "localizable": ["text"],
+      "sizeHint": { "w": 16, "h": 1 },
+      "minSize": { "w": 6, "h": 1 },
+      "sizePolicy": { "h": "preferred", "v": "fixed" }
+    },
+    "RadioButton": {
+      "extends": "Widget",
+      "summary": "Одиночный радио-переключатель",
+      "properties": {
+        "text": { "type": "string", "default": "", "summary": "Текст радиокнопки с мнемоникой" },
+        "selected": { "type": "bool", "default": false, "summary": "Выбрана ли радиокнопка" }
+      },
+      "signals": ["changed"],
+      "localizable": ["text"],
+      "sizeHint": { "w": 16, "h": 1 },
+      "minSize": { "w": 6, "h": 1 },
+      "sizePolicy": { "h": "preferred", "v": "fixed" }
+    },
+    "RadioGroup": {
+      "extends": "Widget",
+      "summary": "Кластер взаимоисключающих радиокнопок",
+      "properties": {
+        "items": { "type": "stringList", "default": [], "summary": "Список вариантов" },
+        "selected": { "type": "int", "default": 0, "summary": "Индекс выбранного элемента" },
+        "columns": { "type": "int", "default": 1, "summary": "Число колонок сетки" }
+      },
+      "signals": ["changed"],
+      "localizable": ["items"],
+      "sizeHint": { "w": 20, "h": 3 },
+      "minSize": { "w": 8, "h": 1 },
+      "sizePolicy": { "h": "preferred", "v": "preferred" }
+    },
+    "CheckGroup": {
+      "extends": "Widget",
+      "summary": "Кластер независимых флажков в сетке",
+      "properties": {
+        "items": { "type": "stringList", "default": [], "summary": "Список названий флажков" },
+        "data": { "type": "int", "default": 0, "summary": "Битовая маска состояний флажков" },
+        "columns": { "type": "int", "default": 1, "summary": "Число колонок сетки" }
+      },
+      "signals": ["changed"],
+      "localizable": ["items"],
+      "sizeHint": { "w": 20, "h": 3 },
+      "minSize": { "w": 8, "h": 1 },
+      "sizePolicy": { "h": "preferred", "v": "preferred" }
+    },
+    "Edit": {
+      "extends": "Widget",
+      "summary": "Однострочное текстовое поле ввода",
+      "properties": {
+        "text": { "type": "string", "default": "", "summary": "Введённый текст" },
+        "password": { "type": "bool", "default": false, "summary": "Маскировать пароль звёздочками" },
+        "historyId": { "type": "string", "default": "", "summary": "Идентификатор списка истории" },
+        "showHistoryButton": { "type": "bool", "default": false, "summary": "Показывать стрелку выпадающей истории [v]" }
+      },
+      "signals": ["changed", "activated"],
+      "localizable": ["text"],
+      "sizeHint": { "w": 20, "h": 1 },
+      "minSize": { "w": 3, "h": 1 },
+      "sizePolicy": { "h": "expanding", "v": "fixed" }
+    },
+    "MultiLineEdit": {
+      "extends": "Widget",
+      "summary": "Многострочное поле ввода текста",
+      "properties": {
+        "text": { "type": "string", "default": "", "summary": "Текст поля с переносами строк" }
+      },
+      "signals": ["changed"],
+      "localizable": ["text"],
+      "sizeHint": { "w": 30, "h": 5 },
+      "minSize": { "w": 10, "h": 2 },
+      "sizePolicy": { "h": "expanding", "v": "expanding" }
+    },
+    "Label": {
+      "extends": "Widget",
+      "summary": "Текстовая метка, связанная с полем ввода",
+      "properties": {
+        "text": { "type": "string", "default": "", "summary": "Текст метки с мнемоникой" },
+        "buddy": { "type": "string", "default": "", "summary": "ID связанного поля ввода" }
+      },
+      "signals": [],
+      "localizable": ["text"],
+      "sizeHint": { "w": 10, "h": 1 },
+      "minSize": { "w": 1, "h": 1 },
+      "sizePolicy": { "h": "preferred", "v": "fixed" }
+    },
+    "Text": {
+      "extends": "Widget",
+      "summary": "Простая статическая текстовая надпись",
+      "properties": {
+        "text": { "type": "string", "default": "", "summary": "Отображаемый текст" }
+      },
+      "signals": [],
+      "localizable": ["text"],
+      "sizeHint": { "w": 10, "h": 1 },
+      "minSize": { "w": 1, "h": 1 },
+      "sizePolicy": { "h": "preferred", "v": "fixed" }
+    },
+    "ListBox": {
+      "extends": "Widget",
+      "summary": "Одноколоночный список строк",
+      "properties": {
+        "items": { "type": "stringList", "default": [], "summary": "Список отображаемых строк" },
+        "selected": { "type": "int", "default": 0, "summary": "Индекс выбранной строки" },
+        "multiSelect": { "type": "bool", "default": false, "summary": "Множественный выбор" }
+      },
+      "signals": ["selected", "activated"],
+      "localizable": ["items"],
+      "sizeHint": { "w": 20, "h": 8 },
+      "minSize": { "w": 5, "h": 3 },
+      "sizePolicy": { "h": "expanding", "v": "expanding" }
+    },
+    "ComboBox": {
+      "extends": "Widget",
+      "summary": "Выпадающий список с возможностью ввода",
+      "properties": {
+        "text": { "type": "string", "default": "", "summary": "Текущий текст в поле" },
+        "items": { "type": "stringList", "default": [], "summary": "Список вариантов выбора" },
+        "dropdownOnly": { "type": "bool", "default": false, "summary": "Запретить ручной ввод (только выбор из списка)" }
+      },
+      "signals": ["changed", "selected"],
+      "localizable": ["items", "text"],
+      "sizeHint": { "w": 20, "h": 1 },
+      "minSize": { "w": 6, "h": 1 },
+      "sizePolicy": { "h": "expanding", "v": "fixed" }
+    },
+    "Table": {
+      "extends": "Widget",
+      "summary": "Многоколоночная таблица",
+      "properties": {
+        "showHeader": { "type": "bool", "default": true, "summary": "Показывать заголовки колонок" },
+        "showSeparators": { "type": "bool", "default": true, "summary": "Показывать вертикальные разделители колонок" },
+        "sortable": { "type": "bool", "default": false, "summary": "Включить сортировку по клику на заголовок" },
+        "quickSearch": { "type": "bool", "default": false, "summary": "Включить быстрый fuzzy-поиск" },
+        "selected": { "type": "int", "default": 0, "summary": "Индекс выбранной строки" }
+      },
+      "signals": ["selected", "activated"],
+      "sizeHint": { "w": 40, "h": 10 },
+      "minSize": { "w": 10, "h": 4 },
+      "sizePolicy": { "h": "expanding", "v": "expanding" }
+    },
+    "VMenu": {
+      "extends": "Widget",
+      "summary": "Вертикальное контекстное или всплывающее меню",
+      "properties": {
+        "title": { "type": "string", "default": "", "summary": "Заголовок меню" },
+        "selected": { "type": "int", "default": 0, "summary": "Индекс выбранного пункта" }
+      },
+      "signals": ["selected", "activated"],
+      "localizable": ["title"],
+      "sizeHint": { "w": 20, "h": 8 },
+      "minSize": { "w": 8, "h": 3 },
+      "sizePolicy": { "h": "preferred", "v": "preferred" }
+    },
+    "MenuBar": {
+      "extends": "Widget",
+      "summary": "Верхняя горизонтальная строка меню",
+      "properties": {},
+      "signals": ["activated"],
+      "sizeHint": { "w": 80, "h": 1 },
+      "minSize": { "w": 10, "h": 1 },
+      "sizePolicy": { "h": "expanding", "v": "fixed" }
+    },
+    "KeyBar": {
+      "extends": "Widget",
+      "summary": "Нижняя строка функциональных клавиш F1-F12",
+      "properties": {},
+      "signals": ["clicked"],
+      "sizeHint": { "w": 80, "h": 1 },
+      "minSize": { "w": 36, "h": 1 },
+      "sizePolicy": { "h": "expanding", "v": "fixed" }
+    },
+    "StatusLine": {
+      "extends": "Widget",
+      "summary": "Контекстная строка состояния и подсказок горячих клавиш",
+      "properties": {},
+      "signals": [],
+      "sizeHint": { "w": 80, "h": 1 },
+      "minSize": { "w": 10, "h": 1 },
+      "sizePolicy": { "h": "expanding", "v": "fixed" }
+    },
+    "ProgressBar": {
+      "extends": "Widget",
+      "summary": "Индикатор прогресса",
+      "properties": {
+        "percent": { "type": "int", "default": 0, "summary": "Процент завершения от 0 до 100" }
+      },
+      "signals": [],
+      "sizeHint": { "w": 20, "h": 1 },
+      "minSize": { "w": 5, "h": 1 },
+      "sizePolicy": { "h": "expanding", "v": "fixed" }
+    },
+    "Separator": {
+      "extends": "Widget",
+      "summary": "Горизонтальная разделительная линия",
+      "properties": {
+        "connectLeft": { "type": "bool", "default": true, "summary": "Присоединять левый край к рамке" },
+        "connectRight": { "type": "bool", "default": true, "summary": "Присоединять правый край к рамке" }
+      },
+      "signals": [],
+      "sizeHint": { "w": 20, "h": 1 },
+      "minSize": { "w": 2, "h": 1 },
+      "sizePolicy": { "h": "expanding", "v": "fixed" }
+    },
+    "Spacer": {
+      "extends": "Widget",
+      "summary": "Пружинящий разделитель свободного места в раскладке",
+      "properties": {},
+      "signals": [],
+      "sizeHint": { "w": 1, "h": 1 },
+      "minSize": { "w": 0, "h": 0 },
+      "sizePolicy": { "h": "expanding", "v": "expanding" }
+    },
+    "Desktop": {
+      "extends": "Widget",
+      "summary": "Фоновый рабочий стол",
+      "properties": {},
+      "signals": [],
+      "sizeHint": { "w": 80, "h": 25 },
+      "minSize": { "w": 10, "h": 5 },
+      "sizePolicy": { "h": "expanding", "v": "expanding" }
+    }
+  },
+  "layouts": {
+    "VBox": {
+      "summary": "Вертикальное последовательное расположение элементов",
+      "properties": {
+        "spacing": { "type": "int", "default": 1, "summary": "Интервал между элементами" },
+        "margins": { "type": "rect", "default": [0, 0, 0, 0], "summary": "Отступы [top, right, bottom, left]" }
+      }
+    },
+    "HBox": {
+      "summary": "Горизонтальное последовательное расположение элементов",
+      "properties": {
+        "spacing": { "type": "int", "default": 1, "summary": "Интервал между элементами" },
+        "margins": { "type": "rect", "default": [0, 0, 0, 0], "summary": "Отступы [top, right, bottom, left]" },
+        "align": { "type": "string", "default": "left", "summary": "Выравнивание всего блока (left, center, right)" }
+      }
+    },
+    "Grid": {
+      "summary": "Двумерная сеточная раскладка",
+      "properties": {
+        "spacing": { "type": "rect", "default": [1, 1], "summary": "Интервалы по горизонтали и вертикали" },
+        "margins": { "type": "rect", "default": [0, 0, 0, 0], "summary": "Отступы сетки" }
+      }
+    },
+    "Form": {
+      "summary": "Двухколоночная раскладка форма (метка + поле)",
+      "properties": {
+        "spacing": { "type": "int", "default": 1, "summary": "Интервал между строками" },
+        "margins": { "type": "rect", "default": [0, 0, 0, 0], "summary": "Отступы" }
+      }
+    },
+    "Stack": {
+      "summary": "Многослойный контейнер (показывает одного потомка)",
+      "properties": {
+        "currentIndex": { "type": "int", "default": 0, "summary": "Индекс активного слоя" }
+      }
+    },
+    "Absolute": {
+      "summary": "Классическое абсолютное позиционирование с GrowMode",
+      "properties": {}
+    }
+  },
+  "commands": {
+    "CmValid": 0,
+    "CmQuit": 1,
+    "CmOK": 2,
+    "CmCancel": 3,
+    "CmYes": 4,
+    "CmNo": 5,
+    "CmDefault": 6,
+    "CmClose": 7,
+    "CmZoom": 8,
+    "CmResize": 9,
+    "CmNext": 10,
+    "CmPrev": 11,
+    "CmHelp": 12,
+    "CmReceivedFocus": 13,
+    "CmReleasedFocus": 14,
+    "CmMenuLeft": 302,
+    "CmMenuRight": 303,
+    "CmMenuClose": 304,
+    "CmApp": 1000
+  },
+  "paletteRoles": [
+    "dialog.bg",
+    "dialog.fg",
+    "dialog.box",
+    "dialog.title",
+    "dialog.highlightTitle",
+    "dialog.edit",
+    "dialog.editSelected",
+    "dialog.editUnchanged",
+    "dialog.button",
+    "dialog.selectedButton",
+    "dialog.highlightButton",
+    "dialog.highlightSelectedButton",
+    "dialog.comboText",
+    "dialog.comboSelectedText",
+    "dialog.comboHighlight",
+    "dialog.comboSelectedHighlight",
+    "dialog.comboBox",
+    "dialog.comboTitle",
+    "dialog.comboScrollbar",
+    "menu.text",
+    "menu.selectedText",
+    "menu.highlight",
+    "menu.selectedHighlight",
+    "menu.box",
+    "menu.title",
+    "table.text",
+    "table.selectedText",
+    "table.title",
+    "table.box",
+    "table.columnTitle",
+    "table.scrollbar",
+    "desktop.bg",
+    "keybar.num",
+    "keybar.text",
+    "menubar.item",
+    "menubar.selected",
+    "menubar.highlight",
+    "menubar.selectedHighlight",
+    "help.text",
+    "help.bold",
+    "help.link",
+    "help.selectedLink",
+    "help.box",
+    "help.title",
+    "warn.text",
+    "warn.highlightText",
+    "warn.box",
+    "warn.title",
+    "warn.highlightTitle",
+    "warn.edit",
+    "warn.button",
+    "warn.selectedButton",
+    "warn.highlightButton",
+    "warn.highlightSelectedButton"
+  ]
+}
