@@ -19,16 +19,9 @@
       "signals": ["focus", "blur"]
     },
     "Dialog": {
-      "extends": "Widget",
+      "extends": "Window",
       "summary": "Модальное диалоговое окно",
-      "properties": {
-        "title": { "type": "string", "default": "", "summary": "Заголовок диалога" },
-        "showClose": { "type": "bool", "default": true, "summary": "Показывать кнопку закрытия [x]" },
-        "showZoom": { "type": "bool", "default": false, "summary": "Показывать кнопку разворачивания" },
-        "isWarning": { "type": "bool", "default": false, "summary": "Использовать предупреждающую (красную) палитру" },
-        "autoSize": { "type": "bool", "default": false, "summary": "Автоматически вычислить размер по содержимому" },
-        "center": { "type": "bool", "default": true, "summary": "Центрировать окно на экране" }
-      },
+      "properties": {},
       "signals": ["closed"],
       "localizable": ["title"],
       "sizeHint": { "w": 40, "h": 10 },
@@ -37,11 +30,14 @@
     },
     "Window": {
       "extends": "Widget",
-      "summary": "Немодальное перемещаемое окно",
+      "summary": "Немодальное перемещаемое окно или диалог",
       "properties": {
         "title": { "type": "string", "default": "", "summary": "Заголовок окна" },
         "showClose": { "type": "bool", "default": true, "summary": "Показывать кнопку закрытия [x]" },
-        "showZoom": { "type": "bool", "default": true, "summary": "Показывать кнопку разворачивания [↕]" }
+        "showZoom": { "type": "bool", "default": true, "summary": "Показывать кнопку разворачивания [↕]" },
+        "isWarning": { "type": "bool", "default": false, "summary": "Использовать предупреждающую (красную) палитру" },
+        "autoSize": { "type": "bool", "default": false, "summary": "Автоматически вычислить размер по содержимому" },
+        "center": { "type": "bool", "default": true, "summary": "Центрировать окно на экране" }
       },
       "signals": ["closed"],
       "localizable": ["title"],

@@ -73,6 +73,9 @@ type UIElement interface {
 	GetOwner() CommandHandler
 	GetHotkey() rune
 	GetId() string
+	SetId(string)
+	ID() string
+	SetID(string)
 	GetHelp() string
 	ProcessKey(e *vtinput.InputEvent) bool
 	ProcessMouse(e *vtinput.InputEvent) bool

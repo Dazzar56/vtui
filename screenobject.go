@@ -31,6 +31,22 @@ type ScreenObject struct {
 	text           string
 	cleanText      string
 	hotkeyPos      int
+	align          string
+	stretch        int
+	minW           int
+	minH           int
+	maxW           int
+	maxH           int
+}
+
+// SetID sets the stable identifier for the element.
+func (so *ScreenObject) SetID(id string) {
+	so.Id = id
+}
+
+// ID returns the stable identifier for the element.
+func (so *ScreenObject) ID() string {
+	return so.Id
 }
 
 // GetHotkey returns the assigned hotkey rune for the object.

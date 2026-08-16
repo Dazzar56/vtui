@@ -1604,6 +1604,65 @@ func (fm *frameManager) GetTopFrame() Frame {
 	return fm.frames[len(fm.frames)-1]
 }
 
+func frameMatchesID(f Frame, id string) bool {
+	if so, ok := f.(interface{ ID() string }); ok && so.ID() == id {
+		return true
+	}
+	if so, ok := f.(interface{ GetId() string }); ok && so.GetId() == id {
+		return true
+	}
+	return false
+}
+
+// Lookup finds an element by its ID within the specified frame (or active frame if frameID is empty).
+func (fm *frameManager) Lookup(frameID, objID string) (UIElement, bool) {
+	fm.SyncCurrentScreen()
+	var targetFrame Frame
+
+	if frameID == "" {
+		targetFrame = fm.GetTopFrame()
+	} else {
+		for _, s := range fm.Screens {
+			for _, f := range s.Frames {
+				if frameMatchesID(f, frameID) {
+					targetFrame = f
+					break
+				}
+			}
+			if targetFrame != nil {
+				break
+			}
+		}
+	}
+
+	if targetFrame == nil {
+		return nil, false
+	}
+
+	el, ok := targetFrame.(UIElement)
+	if !ok {
+		return nil, false
+	}
+
+	if objID == "" || frameMatchesID(targetFrame, objID) {
+		return el, true
+	}
+
+	var found UIElement
+	walk(el, func(child UIElement) bool {
+		if child.GetId() == objID || child.ID() == objID {
+			found = child
+			return false
+		}
+		return true
+	})
+
+	if found != nil {
+		return found, true
+	}
+	return nil, false
+}
+
 func (fm *frameManager) GetScreenSize() int {
 	if fm.scr == nil {
 		return 80
