@@ -1,589 +1,590 @@
-# Справочник виджетов и свойств vtui
+# vtui Widget and Property Reference
 
-Этот файл сгенерирован автоматически из `vocabulary.json` с помощью `cmd/vtui-gen`. **Не редактируйте вручную.**
+This file is generated automatically from `vocabulary.json` by `cmd/vtui-gen`. **DO NOT EDIT.**
 
-## Виджеты
+## Widgets
 
 ### `BorderedFrame`
 
-Одиночная или двойная рамка с заголовком
+Single or double bordered frame with title
 
-*Наследует:* `Widget`
+*Inherits:* `Widget`
 
-**Геометрия по умолчанию:**
-- `sizeHint`: 20 × 5 ячеек
-- `minSize`: 4 × 3 ячеек
+**Default Geometry:**
+- `sizeHint`: 20 × 5 cells
+- `minSize`: 4 × 3 cells
 - `sizePolicy`: h=`preferred`, v=`preferred`
 
-**Свойства:**
+**Properties:**
 
-| Свойство | Тип | По умолчанию | Описание |
+| Property | Type | Default | Description |
 |---|---|---|---|
-| `boxType` | `int` | `2` | Тип рамки: 1 (SingleBox) или 2 (DoubleBox) |
-| `showClose` | `bool` | `false` | Показывать кнопку закрытия |
-| `title` | `string` | `""` | Заголовок рамки |
+| `boxType` | `int` | `2` | Border type: 1 (SingleBox) or 2 (DoubleBox) |
+| `showClose` | `bool` | `false` | Show close button |
+| `title` | `string` | `""` | Frame title |
 
-**Локализуемые свойства:** `title`
+**Localizable Properties:** `title`
 
 ---
 
 ### `Button`
 
-Кнопка действия
+Action push button
 
-*Наследует:* `Widget`
+*Inherits:* `Widget`
 
-**Геометрия по умолчанию:**
-- `sizeHint`: 10 × 1 ячеек
-- `minSize`: 6 × 1 ячеек
+**Default Geometry:**
+- `sizeHint`: 10 × 1 cells
+- `minSize`: 6 × 1 cells
 - `sizePolicy`: h=`fixed`, v=`fixed`
 
-**Свойства:**
+**Properties:**
 
-| Свойство | Тип | По умолчанию | Описание |
+| Property | Type | Default | Description |
 |---|---|---|---|
-| `command` | `int` | `0` | Команда для отправки при нажатии |
-| `default` | `bool` | `false` | Кнопка по умолчанию (срабатывает на Enter) |
-| `text` | `string` | `"&Ok"` | Текст кнопки с мнемоникой (&) |
+| `command` | `int` | `0` | Command ID sent when clicked |
+| `default` | `bool` | `false` | Default button activated on Enter |
+| `text` | `string` | `"&Ok"` | Button caption with mnemonic (&) |
 
-**Сигналы:** `clicked`
+**Signals:** `clicked`
 
-**Локализуемые свойства:** `text`
+**Localizable Properties:** `text`
 
 ---
 
 ### `CheckGroup`
 
-Кластер независимых флажков в сетке
+Independent checkbox cluster in a grid
 
-*Наследует:* `Widget`
+*Inherits:* `Widget`
 
-**Геометрия по умолчанию:**
-- `sizeHint`: 20 × 3 ячеек
-- `minSize`: 8 × 1 ячеек
+**Default Geometry:**
+- `sizeHint`: 20 × 3 cells
+- `minSize`: 8 × 1 cells
 - `sizePolicy`: h=`preferred`, v=`preferred`
 
-**Свойства:**
+**Properties:**
 
-| Свойство | Тип | По умолчанию | Описание |
+| Property | Type | Default | Description |
 |---|---|---|---|
-| `columns` | `int` | `1` | Число колонок сетки |
-| `data` | `int` | `0` | Битовая маска состояний флажков |
-| `items` | `stringList` | `[]` | Список названий флажков |
+| `columns` | `int` | `1` | Number of grid columns |
+| `data` | `int` | `0` | Bitmask of checked states |
+| `items` | `stringList` | `[]` | List of checkbox labels |
 
-**Сигналы:** `changed`
+**Signals:** `changed`
 
-**Локализуемые свойства:** `items`
+**Localizable Properties:** `items`
 
 ---
 
 ### `Checkbox`
 
-Флажок с 2 или 3 состояниями
+Two- or three-state checkbox
 
-*Наследует:* `Widget`
+*Inherits:* `Widget`
 
-**Геометрия по умолчанию:**
-- `sizeHint`: 16 × 1 ячеек
-- `minSize`: 6 × 1 ячеек
+**Default Geometry:**
+- `sizeHint`: 16 × 1 cells
+- `minSize`: 6 × 1 cells
 - `sizePolicy`: h=`preferred`, v=`fixed`
 
-**Свойства:**
+**Properties:**
 
-| Свойство | Тип | По умолчанию | Описание |
+| Property | Type | Default | Description |
 |---|---|---|---|
-| `state` | `int` | `0` | 0 - снят, 1 - установлен, 2 - неопределен |
-| `text` | `string` | `""` | Текст флажка с мнемоникой |
-| `threeState` | `bool` | `false` | Поддержка третьего состояния |
+| `state` | `int` | `0` | 0 = unchecked, 1 = checked, 2 = indeterminate |
+| `text` | `string` | `""` | Checkbox label with mnemonic |
+| `threeState` | `bool` | `false` | Enable third indeterminate state |
 
-**Сигналы:** `changed`
+**Signals:** `changed`
 
-**Локализуемые свойства:** `text`
+**Localizable Properties:** `text`
 
 ---
 
 ### `ComboBox`
 
-Выпадающий список с возможностью ввода
+Dropdown list with optional text entry
 
-*Наследует:* `Widget`
+*Inherits:* `Widget`
 
-**Геометрия по умолчанию:**
-- `sizeHint`: 20 × 1 ячеек
-- `minSize`: 6 × 1 ячеек
+**Default Geometry:**
+- `sizeHint`: 20 × 1 cells
+- `minSize`: 6 × 1 cells
 - `sizePolicy`: h=`expanding`, v=`fixed`
 
-**Свойства:**
+**Properties:**
 
-| Свойство | Тип | По умолчанию | Описание |
+| Property | Type | Default | Description |
 |---|---|---|---|
-| `dropdownOnly` | `bool` | `false` | Запретить ручной ввод (только выбор из списка) |
-| `items` | `stringList` | `[]` | Список вариантов выбора |
-| `text` | `string` | `""` | Текущий текст в поле |
+| `dropdownOnly` | `bool` | `false` | Disable manual text typing |
+| `items` | `stringList` | `[]` | List of dropdown items |
+| `text` | `string` | `""` | Current text in edit field |
 
-**Сигналы:** `changed`, `selected`
+**Signals:** `changed`, `selected`
 
-**Локализуемые свойства:** `items`, `text`
+**Localizable Properties:** `items`, `text`
 
 ---
 
 ### `Desktop`
 
-Фоновый рабочий стол
+Background desktop canvas
 
-*Наследует:* `Widget`
+*Inherits:* `Widget`
 
-**Геометрия по умолчанию:**
-- `sizeHint`: 80 × 25 ячеек
-- `minSize`: 10 × 5 ячеек
+**Default Geometry:**
+- `sizeHint`: 80 × 25 cells
+- `minSize`: 10 × 5 cells
 - `sizePolicy`: h=`expanding`, v=`expanding`
 
 ---
 
 ### `Dialog`
 
-Модальное диалоговое окно
+Modal dialog window
 
-*Наследует:* `Window`
+*Inherits:* `Window`
 
-**Геометрия по умолчанию:**
-- `sizeHint`: 40 × 10 ячеек
-- `minSize`: 10 × 5 ячеек
+**Default Geometry:**
+- `sizeHint`: 40 × 10 cells
+- `minSize`: 10 × 5 cells
 - `sizePolicy`: h=`preferred`, v=`preferred`
 
-**Сигналы:** `closed`
+**Signals:** `closed`
 
-**Локализуемые свойства:** `title`
+**Localizable Properties:** `title`
 
 ---
 
 ### `Edit`
 
-Однострочное текстовое поле ввода
+Single-line text input field
 
-*Наследует:* `Widget`
+*Inherits:* `Widget`
 
-**Геометрия по умолчанию:**
-- `sizeHint`: 20 × 1 ячеек
-- `minSize`: 3 × 1 ячеек
+**Default Geometry:**
+- `sizeHint`: 20 × 1 cells
+- `minSize`: 3 × 1 cells
 - `sizePolicy`: h=`expanding`, v=`fixed`
 
-**Свойства:**
+**Properties:**
 
-| Свойство | Тип | По умолчанию | Описание |
+| Property | Type | Default | Description |
 |---|---|---|---|
-| `historyId` | `string` | `""` | Идентификатор списка истории |
-| `password` | `bool` | `false` | Маскировать пароль звёздочками |
-| `showHistoryButton` | `bool` | `false` | Показывать стрелку выпадающей истории [v] |
-| `text` | `string` | `""` | Введённый текст |
+| `historyId` | `string` | `""` | Input history list identifier |
+| `password` | `bool` | `false` | Mask input characters with asterisks |
+| `showHistoryButton` | `bool` | `false` | Show history dropdown arrow [v] |
+| `text` | `string` | `""` | Entered text content |
 
-**Сигналы:** `changed`, `activated`
+**Signals:** `changed`, `activated`
 
-**Локализуемые свойства:** `text`
+**Localizable Properties:** `text`
 
 ---
 
 ### `GroupBox`
 
-Группа элементов в рамке с заголовком
+Framed group container with header title
 
-*Наследует:* `Widget`
+*Inherits:* `Widget`
 
-**Геометрия по умолчанию:**
-- `sizeHint`: 20 × 6 ячеек
-- `minSize`: 6 × 3 ячеек
+**Default Geometry:**
+- `sizeHint`: 20 × 6 cells
+- `minSize`: 6 × 3 cells
 - `sizePolicy`: h=`expanding`, v=`preferred`
 
-**Свойства:**
+**Properties:**
 
-| Свойство | Тип | По умолчанию | Описание |
+| Property | Type | Default | Description |
 |---|---|---|---|
-| `title` | `string` | `""` | Заголовок группы |
+| `title` | `string` | `""` | Group header title |
 
-**Локализуемые свойства:** `title`
+**Localizable Properties:** `title`
 
 ---
 
 ### `KeyBar`
 
-Нижняя строка функциональных клавиш F1-F12
+Bottom function key bar F1-F12
 
-*Наследует:* `Widget`
+*Inherits:* `Widget`
 
-**Геометрия по умолчанию:**
-- `sizeHint`: 80 × 1 ячеек
-- `minSize`: 36 × 1 ячеек
+**Default Geometry:**
+- `sizeHint`: 80 × 1 cells
+- `minSize`: 36 × 1 cells
 - `sizePolicy`: h=`expanding`, v=`fixed`
 
-**Сигналы:** `clicked`
+**Signals:** `clicked`
 
 ---
 
 ### `Label`
 
-Текстовая метка, связанная с полем ввода
+Text label bound to an input field
 
-*Наследует:* `Widget`
+*Inherits:* `Widget`
 
-**Геометрия по умолчанию:**
-- `sizeHint`: 10 × 1 ячеек
-- `minSize`: 1 × 1 ячеек
+**Default Geometry:**
+- `sizeHint`: 10 × 1 cells
+- `minSize`: 1 × 1 cells
 - `sizePolicy`: h=`preferred`, v=`fixed`
 
-**Свойства:**
+**Properties:**
 
-| Свойство | Тип | По умолчанию | Описание |
+| Property | Type | Default | Description |
 |---|---|---|---|
-| `buddy` | `string` | `""` | ID связанного поля ввода |
-| `text` | `string` | `""` | Текст метки с мнемоникой |
+| `buddy` | `string` | `""` | ID of the associated input widget |
+| `text` | `string` | `""` | Label text with mnemonic |
 
-**Локализуемые свойства:** `text`
+**Localizable Properties:** `text`
 
 ---
 
 ### `ListBox`
 
-Одноколоночный список строк
+Single-column scrollable list
 
-*Наследует:* `Widget`
+*Inherits:* `Widget`
 
-**Геометрия по умолчанию:**
-- `sizeHint`: 20 × 8 ячеек
-- `minSize`: 5 × 3 ячеек
+**Default Geometry:**
+- `sizeHint`: 20 × 8 cells
+- `minSize`: 5 × 3 cells
 - `sizePolicy`: h=`expanding`, v=`expanding`
 
-**Свойства:**
+**Properties:**
 
-| Свойство | Тип | По умолчанию | Описание |
+| Property | Type | Default | Description |
 |---|---|---|---|
-| `items` | `stringList` | `[]` | Список отображаемых строк |
-| `multiSelect` | `bool` | `false` | Множественный выбор |
-| `selected` | `int` | `0` | Индекс выбранной строки |
+| `items` | `stringList` | `[]` | List of displayed string items |
+| `multiSelect` | `bool` | `false` | Enable multi-selection |
+| `selected` | `int` | `0` | Selected item index |
 
-**Сигналы:** `selected`, `activated`
+**Signals:** `selected`, `activated`
 
-**Локализуемые свойства:** `items`
+**Localizable Properties:** `items`
 
 ---
 
 ### `MenuBar`
 
-Верхняя горизонтальная строка меню
+Top horizontal menu bar
 
-*Наследует:* `Widget`
+*Inherits:* `Widget`
 
-**Геометрия по умолчанию:**
-- `sizeHint`: 80 × 1 ячеек
-- `minSize`: 10 × 1 ячеек
+**Default Geometry:**
+- `sizeHint`: 80 × 1 cells
+- `minSize`: 10 × 1 cells
 - `sizePolicy`: h=`expanding`, v=`fixed`
 
-**Сигналы:** `activated`
+**Signals:** `activated`
 
 ---
 
 ### `MultiLineEdit`
 
-Многострочное поле ввода текста
+Multi-line text input field
 
-*Наследует:* `Widget`
+*Inherits:* `Widget`
 
-**Геометрия по умолчанию:**
-- `sizeHint`: 30 × 5 ячеек
-- `minSize`: 10 × 2 ячеек
+**Default Geometry:**
+- `sizeHint`: 30 × 5 cells
+- `minSize`: 10 × 2 cells
 - `sizePolicy`: h=`expanding`, v=`expanding`
 
-**Свойства:**
+**Properties:**
 
-| Свойство | Тип | По умолчанию | Описание |
+| Property | Type | Default | Description |
 |---|---|---|---|
-| `text` | `string` | `""` | Текст поля с переносами строк |
+| `text` | `string` | `""` | Text content with line breaks |
 
-**Сигналы:** `changed`
+**Signals:** `changed`
 
-**Локализуемые свойства:** `text`
+**Localizable Properties:** `text`
 
 ---
 
 ### `ProgressBar`
 
-Индикатор прогресса
+Progress bar indicator
 
-*Наследует:* `Widget`
+*Inherits:* `Widget`
 
-**Геометрия по умолчанию:**
-- `sizeHint`: 20 × 1 ячеек
-- `minSize`: 5 × 1 ячеек
+**Default Geometry:**
+- `sizeHint`: 20 × 1 cells
+- `minSize`: 5 × 1 cells
 - `sizePolicy`: h=`expanding`, v=`fixed`
 
-**Свойства:**
+**Properties:**
 
-| Свойство | Тип | По умолчанию | Описание |
+| Property | Type | Default | Description |
 |---|---|---|---|
-| `percent` | `int` | `0` | Процент завершения от 0 до 100 |
+| `percent` | `int` | `0` | Completion percentage from 0 to 100 |
 
 ---
 
 ### `RadioButton`
 
-Одиночный радио-переключатель
+Individual radio button
 
-*Наследует:* `Widget`
+*Inherits:* `Widget`
 
-**Геометрия по умолчанию:**
-- `sizeHint`: 16 × 1 ячеек
-- `minSize`: 6 × 1 ячеек
+**Default Geometry:**
+- `sizeHint`: 16 × 1 cells
+- `minSize`: 6 × 1 cells
 - `sizePolicy`: h=`preferred`, v=`fixed`
 
-**Свойства:**
+**Properties:**
 
-| Свойство | Тип | По умолчанию | Описание |
+| Property | Type | Default | Description |
 |---|---|---|---|
-| `selected` | `bool` | `false` | Выбрана ли радиокнопка |
-| `text` | `string` | `""` | Текст радиокнопки с мнемоникой |
+| `selected` | `bool` | `false` | Selected state |
+| `text` | `string` | `""` | Radio button label with mnemonic |
 
-**Сигналы:** `changed`
+**Signals:** `changed`
 
-**Локализуемые свойства:** `text`
+**Localizable Properties:** `text`
 
 ---
 
 ### `RadioGroup`
 
-Кластер взаимоисключающих радиокнопок
+Mutually exclusive radio button cluster
 
-*Наследует:* `Widget`
+*Inherits:* `Widget`
 
-**Геометрия по умолчанию:**
-- `sizeHint`: 20 × 3 ячеек
-- `minSize`: 8 × 1 ячеек
+**Default Geometry:**
+- `sizeHint`: 20 × 3 cells
+- `minSize`: 8 × 1 cells
 - `sizePolicy`: h=`preferred`, v=`preferred`
 
-**Свойства:**
+**Properties:**
 
-| Свойство | Тип | По умолчанию | Описание |
+| Property | Type | Default | Description |
 |---|---|---|---|
-| `columns` | `int` | `1` | Число колонок сетки |
-| `items` | `stringList` | `[]` | Список вариантов |
-| `selected` | `int` | `0` | Индекс выбранного элемента |
+| `columns` | `int` | `1` | Number of grid columns |
+| `items` | `stringList` | `[]` | List of option labels |
+| `selected` | `int` | `0` | Index of selected item |
 
-**Сигналы:** `changed`
+**Signals:** `changed`
 
-**Локализуемые свойства:** `items`
+**Localizable Properties:** `items`
 
 ---
 
 ### `Separator`
 
-Горизонтальная разделительная линия
+Horizontal divider line
 
-*Наследует:* `Widget`
+*Inherits:* `Widget`
 
-**Геометрия по умолчанию:**
-- `sizeHint`: 20 × 1 ячеек
-- `minSize`: 2 × 1 ячеек
+**Default Geometry:**
+- `sizeHint`: 20 × 1 cells
+- `minSize`: 2 × 1 cells
 - `sizePolicy`: h=`expanding`, v=`fixed`
 
-**Свойства:**
+**Properties:**
 
-| Свойство | Тип | По умолчанию | Описание |
+| Property | Type | Default | Description |
 |---|---|---|---|
-| `connectLeft` | `bool` | `true` | Присоединять левый край к рамке |
-| `connectRight` | `bool` | `true` | Присоединять правый край к рамке |
+| `connectLeft` | `bool` | `true` | Join left edge with surrounding frame |
+| `connectRight` | `bool` | `true` | Join right edge with surrounding frame |
 
 ---
 
 ### `Spacer`
 
-Пружинящий разделитель свободного места в раскладке
+Flexible layout spacer
 
-*Наследует:* `Widget`
+*Inherits:* `Widget`
 
-**Геометрия по умолчанию:**
-- `sizeHint`: 1 × 1 ячеек
-- `minSize`: 0 × 0 ячеек
+**Default Geometry:**
+- `sizeHint`: 1 × 1 cells
+- `minSize`: 0 × 0 cells
 - `sizePolicy`: h=`expanding`, v=`expanding`
 
 ---
 
 ### `StatusLine`
 
-Контекстная строка состояния и подсказок горячих клавиш
+Contextual status line and hotkey hints
 
-*Наследует:* `Widget`
+*Inherits:* `Widget`
 
-**Геометрия по умолчанию:**
-- `sizeHint`: 80 × 1 ячеек
-- `minSize`: 10 × 1 ячеек
+**Default Geometry:**
+- `sizeHint`: 80 × 1 cells
+- `minSize`: 10 × 1 cells
 - `sizePolicy`: h=`expanding`, v=`fixed`
 
 ---
 
 ### `Table`
 
-Многоколоночная таблица
+Multi-column data table
 
-*Наследует:* `Widget`
+*Inherits:* `Widget`
 
-**Геометрия по умолчанию:**
-- `sizeHint`: 40 × 10 ячеек
-- `minSize`: 10 × 4 ячеек
+**Default Geometry:**
+- `sizeHint`: 40 × 10 cells
+- `minSize`: 10 × 4 cells
 - `sizePolicy`: h=`expanding`, v=`expanding`
 
-**Свойства:**
+**Properties:**
 
-| Свойство | Тип | По умолчанию | Описание |
+| Property | Type | Default | Description |
 |---|---|---|---|
-| `quickSearch` | `bool` | `false` | Включить быстрый fuzzy-поиск |
-| `selected` | `int` | `0` | Индекс выбранной строки |
-| `showHeader` | `bool` | `true` | Показывать заголовки колонок |
-| `showSeparators` | `bool` | `true` | Показывать вертикальные разделители колонок |
-| `sortable` | `bool` | `false` | Включить сортировку по клику на заголовок |
+| `quickSearch` | `bool` | `false` | Enable fuzzy quick search |
+| `selected` | `int` | `0` | Selected row index |
+| `showHeader` | `bool` | `true` | Show column headers |
+| `showSeparators` | `bool` | `true` | Show vertical column separators |
+| `sortable` | `bool` | `false` | Enable column header click sorting |
 
-**Сигналы:** `selected`, `activated`
+**Signals:** `selected`, `activated`
 
 ---
 
 ### `Text`
 
-Простая статическая текстовая надпись
+Static text label
 
-*Наследует:* `Widget`
+*Inherits:* `Widget`
 
-**Геометрия по умолчанию:**
-- `sizeHint`: 10 × 1 ячеек
-- `minSize`: 1 × 1 ячеек
+**Default Geometry:**
+- `sizeHint`: 10 × 1 cells
+- `minSize`: 1 × 1 cells
 - `sizePolicy`: h=`preferred`, v=`fixed`
 
-**Свойства:**
+**Properties:**
 
-| Свойство | Тип | По умолчанию | Описание |
+| Property | Type | Default | Description |
 |---|---|---|---|
-| `text` | `string` | `""` | Отображаемый текст |
+| `text` | `string` | `""` | Displayed text |
 
-**Локализуемые свойства:** `text`
+**Localizable Properties:** `text`
 
 ---
 
 ### `VMenu`
 
-Вертикальное контекстное или всплывающее меню
+Vertical context or popup menu
 
-*Наследует:* `Widget`
+*Inherits:* `Widget`
 
-**Геометрия по умолчанию:**
-- `sizeHint`: 20 × 8 ячеек
-- `minSize`: 8 × 3 ячеек
+**Default Geometry:**
+- `sizeHint`: 20 × 8 cells
+- `minSize`: 8 × 3 cells
 - `sizePolicy`: h=`preferred`, v=`preferred`
 
-**Свойства:**
+**Properties:**
 
-| Свойство | Тип | По умолчанию | Описание |
+| Property | Type | Default | Description |
 |---|---|---|---|
-| `selected` | `int` | `0` | Индекс выбранного пункта |
-| `title` | `string` | `""` | Заголовок меню |
+| `selected` | `int` | `0` | Selected menu item index |
+| `title` | `string` | `""` | Menu title |
 
-**Сигналы:** `selected`, `activated`
+**Signals:** `selected`, `activated`
 
-**Локализуемые свойства:** `title`
+**Localizable Properties:** `title`
 
 ---
 
 ### `Widget`
 
-Базовый абстрактный компонент
+Base abstract UI element
 
-**Свойства:**
+**Properties:**
 
-| Свойство | Тип | По умолчанию | Описание |
+| Property | Type | Default | Description |
 |---|---|---|---|
-| `align` | `string` | `"fill"` | Выравнивание внутри ячейки раскладки (fill, start, center, end) |
-| `enabled` | `bool` | `true` | Доступность для взаимодействия |
-| `grow` | `int` | `0` | Флаги GrowMode для абсолютной раскладки |
-| `help` | `string` | `""` | Идентификатор контекстной справки F1 |
-| `id` | `string` | `""` | Уникальный строковый идентификатор элемента |
-| `maxHeight` | `int` | `0` | Максимальная высота (0 - без ограничения) |
-| `maxWidth` | `int` | `0` | Максимальная ширина (0 - без ограничения) |
-| `minHeight` | `int` | `0` | Минимальная высота в ячейках |
-| `minWidth` | `int` | `0` | Минимальная ширина в ячейках |
-| `stretch` | `int` | `1` | Вес растяжения при распределении свободного места |
-| `visible` | `bool` | `true` | Видимость элемента |
+| `align` | `string` | `"fill"` | Alignment within the layout cell (fill, start, center, end) |
+| `enabled` | `bool` | `true` | Interactive availability state |
+| `grow` | `int` | `0` | GrowMode anchor flags for absolute layout |
+| `help` | `string` | `""` | Contextual F1 help topic identifier |
+| `id` | `string` | `""` | Unique string identifier of the element |
+| `maxHeight` | `int` | `0` | Maximum height (0 = unconstrained) |
+| `maxWidth` | `int` | `0` | Maximum width (0 = unconstrained) |
+| `minHeight` | `int` | `0` | Minimum height in character cells |
+| `minWidth` | `int` | `0` | Minimum width in character cells |
+| `stretch` | `int` | `1` | Stretch weight for extra space distribution |
+| `visible` | `bool` | `true` | Visibility state of the element |
 
-**Сигналы:** `focus`, `blur`
+**Signals:** `focus`, `blur`
 
 ---
 
 ### `Window`
 
-Немодальное перемещаемое окно или диалог
+Non-modal movable window or dialog
 
-*Наследует:* `Widget`
+*Inherits:* `Widget`
 
-**Геометрия по умолчанию:**
-- `sizeHint`: 60 × 20 ячеек
-- `minSize`: 10 × 5 ячеек
+**Default Geometry:**
+- `sizeHint`: 60 × 20 cells
+- `minSize`: 10 × 5 cells
 - `sizePolicy`: h=`preferred`, v=`preferred`
 
-**Свойства:**
+**Properties:**
 
-| Свойство | Тип | По умолчанию | Описание |
+| Property | Type | Default | Description |
 |---|---|---|---|
-| `autoSize` | `bool` | `false` | Автоматически вычислить размер по содержимому |
-| `center` | `bool` | `true` | Центрировать окно на экране |
-| `isWarning` | `bool` | `false` | Использовать предупреждающую (красную) палитру |
-| `showClose` | `bool` | `true` | Показывать кнопку закрытия [x] |
-| `showZoom` | `bool` | `true` | Показывать кнопку разворачивания [↕] |
-| `title` | `string` | `""` | Заголовок окна |
+| `autoSize` | `bool` | `false` | Automatically compute window size from contents |
+| `center` | `bool` | `true` | Center window on screen |
+| `isWarning` | `bool` | `false` | Use warning (red) color palette |
+| `showClose` | `bool` | `true` | Show close button [x] |
+| `showZoom` | `bool` | `true` | Show zoom/maximize button [↕] |
+| `title` | `string` | `""` | Window title |
 
-**Сигналы:** `closed`
+**Signals:** `closed`
 
 ---
-## Контейнеры раскладки
+
+## Layout Containers
 
 ### `Absolute`
 
-Классическое абсолютное позиционирование с GrowMode
+Classic absolute positioning with GrowMode anchors
 
 ### `Form`
 
-Двухколоночная раскладка форма (метка + поле)
+Two-column form layout (label + field)
 
-| Свойство | Тип | По умолчанию | Описание |
+| Property | Type | Default | Description |
 |---|---|---|---|
-| `margins` | `rect` | `[0 0 0 0]` | Отступы |
-| `spacing` | `int` | `1` | Интервал между строками |
+| `margins` | `rect` | `[0 0 0 0]` | Form margins |
+| `spacing` | `int` | `1` | Row spacing |
 
 ### `Grid`
 
-Двумерная сеточная раскладка
+Two-dimensional grid layout
 
-| Свойство | Тип | По умолчанию | Описание |
+| Property | Type | Default | Description |
 |---|---|---|---|
-| `margins` | `rect` | `[0 0 0 0]` | Отступы сетки |
-| `spacing` | `rect` | `[1 1]` | Интервалы по горизонтали и вертикали |
+| `margins` | `rect` | `[0 0 0 0]` | Grid margins |
+| `spacing` | `rect` | `[1 1]` | Horizontal and vertical spacing |
 
 ### `HBox`
 
-Горизонтальное последовательное расположение элементов
+Horizontal sequential layout
 
-| Свойство | Тип | По умолчанию | Описание |
+| Property | Type | Default | Description |
 |---|---|---|---|
-| `align` | `string` | `left` | Выравнивание всего блока (left, center, right) |
-| `margins` | `rect` | `[0 0 0 0]` | Отступы [top, right, bottom, left] |
-| `spacing` | `int` | `1` | Интервал между элементами |
+| `align` | `string` | `left` | Block alignment (left, center, right) |
+| `margins` | `rect` | `[0 0 0 0]` | Margins [top, right, bottom, left] |
+| `spacing` | `int` | `1` | Spacing between elements |
 
 ### `Stack`
 
-Многослойный контейнер (показывает одного потомка)
+Multi-layer stacked container (displays one child at a time)
 
-| Свойство | Тип | По умолчанию | Описание |
+| Property | Type | Default | Description |
 |---|---|---|---|
-| `currentIndex` | `int` | `0` | Индекс активного слоя |
+| `currentIndex` | `int` | `0` | Active layer index |
 
 ### `VBox`
 
-Вертикальное последовательное расположение элементов
+Vertical sequential layout
 
-| Свойство | Тип | По умолчанию | Описание |
+| Property | Type | Default | Description |
 |---|---|---|---|
-| `margins` | `rect` | `[0 0 0 0]` | Отступы [top, right, bottom, left] |
-| `spacing` | `int` | `1` | Интервал между элементами |
+| `margins` | `rect` | `[0 0 0 0]` | Margins [top, right, bottom, left] |
+| `spacing` | `int` | `1` | Spacing between elements |

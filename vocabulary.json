@@ -2,25 +2,25 @@
   "version": 1,
   "widgets": {
     "Widget": {
-      "summary": "Базовый абстрактный компонент",
+      "summary": "Base abstract UI element",
       "properties": {
-        "id": { "type": "string", "default": "", "summary": "Уникальный строковый идентификатор элемента" },
-        "visible": { "type": "bool", "default": true, "summary": "Видимость элемента" },
-        "enabled": { "type": "bool", "default": true, "summary": "Доступность для взаимодействия" },
-        "help": { "type": "string", "default": "", "summary": "Идентификатор контекстной справки F1" },
-        "grow": { "type": "int", "default": 0, "summary": "Флаги GrowMode для абсолютной раскладки" },
-        "align": { "type": "string", "default": "fill", "summary": "Выравнивание внутри ячейки раскладки (fill, start, center, end)" },
-        "stretch": { "type": "int", "default": 1, "summary": "Вес растяжения при распределении свободного места" },
-        "minWidth": { "type": "int", "default": 0, "summary": "Минимальная ширина в ячейках" },
-        "minHeight": { "type": "int", "default": 0, "summary": "Минимальная высота в ячейках" },
-        "maxWidth": { "type": "int", "default": 0, "summary": "Максимальная ширина (0 - без ограничения)" },
-        "maxHeight": { "type": "int", "default": 0, "summary": "Максимальная высота (0 - без ограничения)" }
+        "id": { "type": "string", "default": "", "summary": "Unique string identifier of the element" },
+        "visible": { "type": "bool", "default": true, "summary": "Visibility state of the element" },
+        "enabled": { "type": "bool", "default": true, "summary": "Interactive availability state" },
+        "help": { "type": "string", "default": "", "summary": "Contextual F1 help topic identifier" },
+        "grow": { "type": "int", "default": 0, "summary": "GrowMode anchor flags for absolute layout" },
+        "align": { "type": "string", "default": "fill", "summary": "Alignment within the layout cell (fill, start, center, end)" },
+        "stretch": { "type": "int", "default": 1, "summary": "Stretch weight for extra space distribution" },
+        "minWidth": { "type": "int", "default": 0, "summary": "Minimum width in character cells" },
+        "minHeight": { "type": "int", "default": 0, "summary": "Minimum height in character cells" },
+        "maxWidth": { "type": "int", "default": 0, "summary": "Maximum width (0 = unconstrained)" },
+        "maxHeight": { "type": "int", "default": 0, "summary": "Maximum height (0 = unconstrained)" }
       },
       "signals": ["focus", "blur"]
     },
     "Dialog": {
       "extends": "Window",
-      "summary": "Модальное диалоговое окно",
+      "summary": "Modal dialog window",
       "properties": {},
       "signals": ["closed"],
       "localizable": ["title"],
@@ -30,14 +30,14 @@
     },
     "Window": {
       "extends": "Widget",
-      "summary": "Немодальное перемещаемое окно или диалог",
+      "summary": "Non-modal movable window or dialog",
       "properties": {
-        "title": { "type": "string", "default": "", "summary": "Заголовок окна" },
-        "showClose": { "type": "bool", "default": true, "summary": "Показывать кнопку закрытия [x]" },
-        "showZoom": { "type": "bool", "default": true, "summary": "Показывать кнопку разворачивания [↕]" },
-        "isWarning": { "type": "bool", "default": false, "summary": "Использовать предупреждающую (красную) палитру" },
-        "autoSize": { "type": "bool", "default": false, "summary": "Автоматически вычислить размер по содержимому" },
-        "center": { "type": "bool", "default": true, "summary": "Центрировать окно на экране" }
+        "title": { "type": "string", "default": "", "summary": "Window title" },
+        "showClose": { "type": "bool", "default": true, "summary": "Show close button [x]" },
+        "showZoom": { "type": "bool", "default": true, "summary": "Show zoom/maximize button [↕]" },
+        "isWarning": { "type": "bool", "default": false, "summary": "Use warning (red) color palette" },
+        "autoSize": { "type": "bool", "default": false, "summary": "Automatically compute window size from contents" },
+        "center": { "type": "bool", "default": true, "summary": "Center window on screen" }
       },
       "signals": ["closed"],
       "localizable": ["title"],
@@ -47,11 +47,11 @@
     },
     "BorderedFrame": {
       "extends": "Widget",
-      "summary": "Одиночная или двойная рамка с заголовком",
+      "summary": "Single or double bordered frame with title",
       "properties": {
-        "title": { "type": "string", "default": "", "summary": "Заголовок рамки" },
-        "boxType": { "type": "int", "default": 2, "summary": "Тип рамки: 1 (SingleBox) или 2 (DoubleBox)" },
-        "showClose": { "type": "bool", "default": false, "summary": "Показывать кнопку закрытия" }
+        "title": { "type": "string", "default": "", "summary": "Frame title" },
+        "boxType": { "type": "int", "default": 2, "summary": "Border type: 1 (SingleBox) or 2 (DoubleBox)" },
+        "showClose": { "type": "bool", "default": false, "summary": "Show close button" }
       },
       "signals": [],
       "localizable": ["title"],
@@ -61,9 +61,9 @@
     },
     "GroupBox": {
       "extends": "Widget",
-      "summary": "Группа элементов в рамке с заголовком",
+      "summary": "Framed group container with header title",
       "properties": {
-        "title": { "type": "string", "default": "", "summary": "Заголовок группы" }
+        "title": { "type": "string", "default": "", "summary": "Group header title" }
       },
       "signals": [],
       "localizable": ["title"],
@@ -73,11 +73,11 @@
     },
     "Button": {
       "extends": "Widget",
-      "summary": "Кнопка действия",
+      "summary": "Action push button",
       "properties": {
-        "text": { "type": "string", "default": "&Ok", "summary": "Текст кнопки с мнемоникой (&)" },
-        "default": { "type": "bool", "default": false, "summary": "Кнопка по умолчанию (срабатывает на Enter)" },
-        "command": { "type": "int", "default": 0, "summary": "Команда для отправки при нажатии" }
+        "text": { "type": "string", "default": "&Ok", "summary": "Button caption with mnemonic (&)" },
+        "default": { "type": "bool", "default": false, "summary": "Default button activated on Enter" },
+        "command": { "type": "int", "default": 0, "summary": "Command ID sent when clicked" }
       },
       "signals": ["clicked"],
       "localizable": ["text"],
@@ -87,11 +87,11 @@
     },
     "Checkbox": {
       "extends": "Widget",
-      "summary": "Флажок с 2 или 3 состояниями",
+      "summary": "Two- or three-state checkbox",
       "properties": {
-        "text": { "type": "string", "default": "", "summary": "Текст флажка с мнемоникой" },
-        "state": { "type": "int", "default": 0, "summary": "0 - снят, 1 - установлен, 2 - неопределен" },
-        "threeState": { "type": "bool", "default": false, "summary": "Поддержка третьего состояния" }
+        "state": { "type": "int", "default": 0, "summary": "0 = unchecked, 1 = checked, 2 = indeterminate" },
+        "text": { "type": "string", "default": "", "summary": "Checkbox label with mnemonic" },
+        "threeState": { "type": "bool", "default": false, "summary": "Enable third indeterminate state" }
       },
       "signals": ["changed"],
       "localizable": ["text"],
@@ -101,10 +101,10 @@
     },
     "RadioButton": {
       "extends": "Widget",
-      "summary": "Одиночный радио-переключатель",
+      "summary": "Individual radio button",
       "properties": {
-        "text": { "type": "string", "default": "", "summary": "Текст радиокнопки с мнемоникой" },
-        "selected": { "type": "bool", "default": false, "summary": "Выбрана ли радиокнопка" }
+        "text": { "type": "string", "default": "", "summary": "Radio button label with mnemonic" },
+        "selected": { "type": "bool", "default": false, "summary": "Selected state" }
       },
       "signals": ["changed"],
       "localizable": ["text"],
@@ -114,11 +114,11 @@
     },
     "RadioGroup": {
       "extends": "Widget",
-      "summary": "Кластер взаимоисключающих радиокнопок",
+      "summary": "Mutually exclusive radio button cluster",
       "properties": {
-        "items": { "type": "stringList", "default": [], "summary": "Список вариантов" },
-        "selected": { "type": "int", "default": 0, "summary": "Индекс выбранного элемента" },
-        "columns": { "type": "int", "default": 1, "summary": "Число колонок сетки" }
+        "items": { "type": "stringList", "default": [], "summary": "List of option labels" },
+        "selected": { "type": "int", "default": 0, "summary": "Index of selected item" },
+        "columns": { "type": "int", "default": 1, "summary": "Number of grid columns" }
       },
       "signals": ["changed"],
       "localizable": ["items"],
@@ -128,11 +128,11 @@
     },
     "CheckGroup": {
       "extends": "Widget",
-      "summary": "Кластер независимых флажков в сетке",
+      "summary": "Independent checkbox cluster in a grid",
       "properties": {
-        "items": { "type": "stringList", "default": [], "summary": "Список названий флажков" },
-        "data": { "type": "int", "default": 0, "summary": "Битовая маска состояний флажков" },
-        "columns": { "type": "int", "default": 1, "summary": "Число колонок сетки" }
+        "items": { "type": "stringList", "default": [], "summary": "List of checkbox labels" },
+        "data": { "type": "int", "default": 0, "summary": "Bitmask of checked states" },
+        "columns": { "type": "int", "default": 1, "summary": "Number of grid columns" }
       },
       "signals": ["changed"],
       "localizable": ["items"],
@@ -142,12 +142,12 @@
     },
     "Edit": {
       "extends": "Widget",
-      "summary": "Однострочное текстовое поле ввода",
+      "summary": "Single-line text input field",
       "properties": {
-        "text": { "type": "string", "default": "", "summary": "Введённый текст" },
-        "password": { "type": "bool", "default": false, "summary": "Маскировать пароль звёздочками" },
-        "historyId": { "type": "string", "default": "", "summary": "Идентификатор списка истории" },
-        "showHistoryButton": { "type": "bool", "default": false, "summary": "Показывать стрелку выпадающей истории [v]" }
+        "text": { "type": "string", "default": "", "summary": "Entered text content" },
+        "password": { "type": "bool", "default": false, "summary": "Mask input characters with asterisks" },
+        "historyId": { "type": "string", "default": "", "summary": "Input history list identifier" },
+        "showHistoryButton": { "type": "bool", "default": false, "summary": "Show history dropdown arrow [v]" }
       },
       "signals": ["changed", "activated"],
       "localizable": ["text"],
@@ -157,9 +157,9 @@
     },
     "MultiLineEdit": {
       "extends": "Widget",
-      "summary": "Многострочное поле ввода текста",
+      "summary": "Multi-line text input field",
       "properties": {
-        "text": { "type": "string", "default": "", "summary": "Текст поля с переносами строк" }
+        "text": { "type": "string", "default": "", "summary": "Text content with line breaks" }
       },
       "signals": ["changed"],
       "localizable": ["text"],
@@ -169,10 +169,10 @@
     },
     "Label": {
       "extends": "Widget",
-      "summary": "Текстовая метка, связанная с полем ввода",
+      "summary": "Text label bound to an input field",
       "properties": {
-        "text": { "type": "string", "default": "", "summary": "Текст метки с мнемоникой" },
-        "buddy": { "type": "string", "default": "", "summary": "ID связанного поля ввода" }
+        "text": { "type": "string", "default": "", "summary": "Label text with mnemonic" },
+        "buddy": { "type": "string", "default": "", "summary": "ID of the associated input widget" }
       },
       "signals": [],
       "localizable": ["text"],
@@ -182,9 +182,9 @@
     },
     "Text": {
       "extends": "Widget",
-      "summary": "Простая статическая текстовая надпись",
+      "summary": "Static text label",
       "properties": {
-        "text": { "type": "string", "default": "", "summary": "Отображаемый текст" }
+        "text": { "type": "string", "default": "", "summary": "Displayed text" }
       },
       "signals": [],
       "localizable": ["text"],
@@ -194,11 +194,11 @@
     },
     "ListBox": {
       "extends": "Widget",
-      "summary": "Одноколоночный список строк",
+      "summary": "Single-column scrollable list",
       "properties": {
-        "items": { "type": "stringList", "default": [], "summary": "Список отображаемых строк" },
-        "selected": { "type": "int", "default": 0, "summary": "Индекс выбранной строки" },
-        "multiSelect": { "type": "bool", "default": false, "summary": "Множественный выбор" }
+        "items": { "type": "stringList", "default": [], "summary": "List of displayed string items" },
+        "selected": { "type": "int", "default": 0, "summary": "Selected item index" },
+        "multiSelect": { "type": "bool", "default": false, "summary": "Enable multi-selection" }
       },
       "signals": ["selected", "activated"],
       "localizable": ["items"],
@@ -208,11 +208,11 @@
     },
     "ComboBox": {
       "extends": "Widget",
-      "summary": "Выпадающий список с возможностью ввода",
+      "summary": "Dropdown list with optional text entry",
       "properties": {
-        "text": { "type": "string", "default": "", "summary": "Текущий текст в поле" },
-        "items": { "type": "stringList", "default": [], "summary": "Список вариантов выбора" },
-        "dropdownOnly": { "type": "bool", "default": false, "summary": "Запретить ручной ввод (только выбор из списка)" }
+        "text": { "type": "string", "default": "", "summary": "Current text in edit field" },
+        "items": { "type": "stringList", "default": [], "summary": "List of dropdown items" },
+        "dropdownOnly": { "type": "bool", "default": false, "summary": "Disable manual text typing" }
       },
       "signals": ["changed", "selected"],
       "localizable": ["items", "text"],
@@ -222,13 +222,13 @@
     },
     "Table": {
       "extends": "Widget",
-      "summary": "Многоколоночная таблица",
+      "summary": "Multi-column data table",
       "properties": {
-        "showHeader": { "type": "bool", "default": true, "summary": "Показывать заголовки колонок" },
-        "showSeparators": { "type": "bool", "default": true, "summary": "Показывать вертикальные разделители колонок" },
-        "sortable": { "type": "bool", "default": false, "summary": "Включить сортировку по клику на заголовок" },
-        "quickSearch": { "type": "bool", "default": false, "summary": "Включить быстрый fuzzy-поиск" },
-        "selected": { "type": "int", "default": 0, "summary": "Индекс выбранной строки" }
+        "showHeader": { "type": "bool", "default": true, "summary": "Show column headers" },
+        "showSeparators": { "type": "bool", "default": true, "summary": "Show vertical column separators" },
+        "sortable": { "type": "bool", "default": false, "summary": "Enable column header click sorting" },
+        "quickSearch": { "type": "bool", "default": false, "summary": "Enable fuzzy quick search" },
+        "selected": { "type": "int", "default": 0, "summary": "Selected row index" }
       },
       "signals": ["selected", "activated"],
       "sizeHint": { "w": 40, "h": 10 },
@@ -237,10 +237,10 @@
     },
     "VMenu": {
       "extends": "Widget",
-      "summary": "Вертикальное контекстное или всплывающее меню",
+      "summary": "Vertical context or popup menu",
       "properties": {
-        "title": { "type": "string", "default": "", "summary": "Заголовок меню" },
-        "selected": { "type": "int", "default": 0, "summary": "Индекс выбранного пункта" }
+        "title": { "type": "string", "default": "", "summary": "Menu title" },
+        "selected": { "type": "int", "default": 0, "summary": "Selected menu item index" }
       },
       "signals": ["selected", "activated"],
       "localizable": ["title"],
@@ -250,7 +250,7 @@
     },
     "MenuBar": {
       "extends": "Widget",
-      "summary": "Верхняя горизонтальная строка меню",
+      "summary": "Top horizontal menu bar",
       "properties": {},
       "signals": ["activated"],
       "sizeHint": { "w": 80, "h": 1 },
@@ -259,7 +259,7 @@
     },
     "KeyBar": {
       "extends": "Widget",
-      "summary": "Нижняя строка функциональных клавиш F1-F12",
+      "summary": "Bottom function key bar F1-F12",
       "properties": {},
       "signals": ["clicked"],
       "sizeHint": { "w": 80, "h": 1 },
@@ -268,7 +268,7 @@
     },
     "StatusLine": {
       "extends": "Widget",
-      "summary": "Контекстная строка состояния и подсказок горячих клавиш",
+      "summary": "Contextual status line and hotkey hints",
       "properties": {},
       "signals": [],
       "sizeHint": { "w": 80, "h": 1 },
@@ -277,9 +277,9 @@
     },
     "ProgressBar": {
       "extends": "Widget",
-      "summary": "Индикатор прогресса",
+      "summary": "Progress bar indicator",
       "properties": {
-        "percent": { "type": "int", "default": 0, "summary": "Процент завершения от 0 до 100" }
+        "percent": { "type": "int", "default": 0, "summary": "Completion percentage from 0 to 100" }
       },
       "signals": [],
       "sizeHint": { "w": 20, "h": 1 },
@@ -288,10 +288,10 @@
     },
     "Separator": {
       "extends": "Widget",
-      "summary": "Горизонтальная разделительная линия",
+      "summary": "Horizontal divider line",
       "properties": {
-        "connectLeft": { "type": "bool", "default": true, "summary": "Присоединять левый край к рамке" },
-        "connectRight": { "type": "bool", "default": true, "summary": "Присоединять правый край к рамке" }
+        "connectLeft": { "type": "bool", "default": true, "summary": "Join left edge with surrounding frame" },
+        "connectRight": { "type": "bool", "default": true, "summary": "Join right edge with surrounding frame" }
       },
       "signals": [],
       "sizeHint": { "w": 20, "h": 1 },
@@ -300,7 +300,7 @@
     },
     "Spacer": {
       "extends": "Widget",
-      "summary": "Пружинящий разделитель свободного места в раскладке",
+      "summary": "Flexible layout spacer",
       "properties": {},
       "signals": [],
       "sizeHint": { "w": 1, "h": 1 },
@@ -309,7 +309,7 @@
     },
     "Desktop": {
       "extends": "Widget",
-      "summary": "Фоновый рабочий стол",
+      "summary": "Background desktop canvas",
       "properties": {},
       "signals": [],
       "sizeHint": { "w": 80, "h": 25 },
@@ -319,42 +319,42 @@
   },
   "layouts": {
     "VBox": {
-      "summary": "Вертикальное последовательное расположение элементов",
+      "summary": "Vertical sequential layout",
       "properties": {
-        "spacing": { "type": "int", "default": 1, "summary": "Интервал между элементами" },
-        "margins": { "type": "rect", "default": [0, 0, 0, 0], "summary": "Отступы [top, right, bottom, left]" }
+        "spacing": { "type": "int", "default": 1, "summary": "Spacing between elements" },
+        "margins": { "type": "rect", "default": [0, 0, 0, 0], "summary": "Margins [top, right, bottom, left]" }
       }
     },
     "HBox": {
-      "summary": "Горизонтальное последовательное расположение элементов",
+      "summary": "Horizontal sequential layout",
       "properties": {
-        "spacing": { "type": "int", "default": 1, "summary": "Интервал между элементами" },
-        "margins": { "type": "rect", "default": [0, 0, 0, 0], "summary": "Отступы [top, right, bottom, left]" },
-        "align": { "type": "string", "default": "left", "summary": "Выравнивание всего блока (left, center, right)" }
+        "spacing": { "type": "int", "default": 1, "summary": "Spacing between elements" },
+        "margins": { "type": "rect", "default": [0, 0, 0, 0], "summary": "Margins [top, right, bottom, left]" },
+        "align": { "type": "string", "default": "left", "summary": "Block alignment (left, center, right)" }
       }
     },
     "Grid": {
-      "summary": "Двумерная сеточная раскладка",
+      "summary": "Two-dimensional grid layout",
       "properties": {
-        "spacing": { "type": "rect", "default": [1, 1], "summary": "Интервалы по горизонтали и вертикали" },
-        "margins": { "type": "rect", "default": [0, 0, 0, 0], "summary": "Отступы сетки" }
+        "spacing": { "type": "rect", "default": [1, 1], "summary": "Horizontal and vertical spacing" },
+        "margins": { "type": "rect", "default": [0, 0, 0, 0], "summary": "Grid margins" }
       }
     },
     "Form": {
-      "summary": "Двухколоночная раскладка форма (метка + поле)",
+      "summary": "Two-column form layout (label + field)",
       "properties": {
-        "spacing": { "type": "int", "default": 1, "summary": "Интервал между строками" },
-        "margins": { "type": "rect", "default": [0, 0, 0, 0], "summary": "Отступы" }
+        "spacing": { "type": "int", "default": 1, "summary": "Row spacing" },
+        "margins": { "type": "rect", "default": [0, 0, 0, 0], "summary": "Form margins" }
       }
     },
     "Stack": {
-      "summary": "Многослойный контейнер (показывает одного потомка)",
+      "summary": "Multi-layer stacked container (displays one child at a time)",
       "properties": {
-        "currentIndex": { "type": "int", "default": 0, "summary": "Индекс активного слоя" }
+        "currentIndex": { "type": "int", "default": 0, "summary": "Active layer index" }
       }
     },
     "Absolute": {
-      "summary": "Классическое абсолютное позиционирование с GrowMode",
+      "summary": "Classic absolute positioning with GrowMode anchors",
       "properties": {}
     }
   },

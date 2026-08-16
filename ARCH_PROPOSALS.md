@@ -1,79 +1,79 @@
-# Архитектурные предложения и современные практики для vtui
+# Architectural Proposals and Modern Best Practices for vtui
 
-В этом документе собраны проверенные, индустриально зрелые архитектурные подходы (из экосистем Flutter, Qt/QML, React, SolidJS, Language Server Protocol и Wayland), которые сделают архитектуру `vtui` ещё более стройной, расширяемой и удобной как для людей, так и для LLM-агентов.
-
----
-
-## 1. Реактивность тонкого среза (Fine-Grained Signal Reactivity)
-
-### Контекст
-В проекте уже реализован пакет `vreactive` (`Property[T]`, `Computed[T]`, `Effect`, `StateMachine`).
-
-### Предложение
-Интегрировать `vreactive` с сгенерированным кодом `properties_gen.go` и фасадами:
-- Виджеты могут опционально привязывать свои свойства к сигналам: `edit.BindText(prop)`.
-- Мутации сигналов батчатся в конце тика кадра (Microtask Queue) и обновляют только грязные узлы дерева.
-- **Плюс:** Исключаются лишние вызовы `Redraw()` и устраняются гонки при параллельном обновлении разных частей UI из фоновых воркеров.
+This document compiles battle-tested, industry-standard architectural approaches (inspired by Flutter, Qt/QML, React, SolidJS, Language Server Protocol, and Wayland) that enhance `vtui`'s modularity, performance, and multi-language ergonomics.
 
 ---
 
-## 2. Декларативный Virtual-Tree Diffing в Immediate-Mode фасадах
+## 1. Fine-Grained Signal Reactivity
 
-### Контекст
-Сейчас `Ui`-фасад в Python и Node.js строит первичное дерево при монтировании и отслеживает клики.
+### Context
+The project already features the `vreactive` package (`Property[T]`, `Computed[T]`, `Effect`, `StateMachine`).
 
-### Предложение
-Добавить легковесный diffing виртуального дерева (алгоритм React/Flutter, упрощенный для плоских TUI-деревьев):
-- Функция `ui(u)` исполняется на каждом событии и генерирует виртуальное дерево узлов в памяти языка.
-- Фасад сравнивает предыдущее дерево узлов с новым по ключу `(type, id, key)`.
-- Разница автоматически превращается в компактный массив операций `patch`:
+### Proposal
+Integrate `vreactive` with generated property access and UI facades:
+- Widgets can optionally bind properties directly to signals: `edit.BindText(prop)`.
+- Signal mutations batch at the end of each frame tick (Microtask Queue) and update only dirty nodes.
+- **Benefits:** Eliminates unnecessary `Redraw()` passes and avoids race conditions when updating UI from concurrent background workers.
+
+---
+
+## 2. Declarative Virtual-Tree Diffing in Immediate-Mode Facades
+
+### Context
+Currently, the `Ui` facade in Python and Node.js constructs the initial tree on mount and tracks user interactions.
+
+### Proposal
+Add lightweight virtual tree diffing in language client libraries:
+- The `ui(u)` function executes on each event step and generates an in-memory virtual tree.
+- The facade diffs the previous virtual tree with the new one by `(type, id, key)`.
+- The diff produces a minimal JSON Lines patch:
   `[{"kind": "set", "id": "statusLabel", "props": {"text": "Updated"}}]`.
-- **Плюс:** Пользователь пишет абсолютно линейный, чистый declarative код в 5 строк, а по проводу улетают только точечные дельты.
+- **Benefits:** Users write completely linear declarative code while only lightweight property deltas cross the IPC boundary.
 
 ---
 
-## 3. Runtime Introspection & Protocol Schema Discovery (LSP / OpenAPI стиль)
+## 3. Runtime Introspection & Protocol Schema Discovery (LSP / OpenAPI Style)
 
-### Контекст
-Биндинги на динамических языках (Python, Ruby, Lua, Elixir) могут работать с разными версиями `vtui-host`.
+### Context
+Dynamic language bindings (Python, Node.js, Ruby, Lua) can interact with different versions of `vtui-host`.
 
-### Предложение
-- Команда `{"op": "describe"}` возвращает активный `vocabulary.json` прямо из работающего ядра.
-- Клиентские библиотеки могут генерировать или валидировать свои вызовы динамически без необходимости жесткой перекомпиляции под минорные обновления ядра.
-
----
-
-## 4. Разделяемая память (Shared Memory) для Canvas Escape-Hatch
-
-### Контекст
-Раздел 8.4 спецификации предоставляет `Canvas` для кастомной отрисовки (графики, просмотр картинок, hex-редакторы).
-
-### Предложение
-- Для локального транспорта `vtui-host` (через Unix Domain Socket или SHM):
-  - Пиксели/символы для `Canvas` пишутся напрямую в `mmap`-сегмент (по аналогии с Wayland SHM / X11 MIT-SHM).
-  - По протоколу передается только уведомление `{"op": "damage", "rect": [x, y, w, h]}`.
-- **Плюс:** 60+ FPS для тяжелых кастомных виджетов с нулевыми аллокациями и без оверхеда на JSON-сериализацию миллионов байт.
+### Proposal
+- The `{"op": "describe"}` operation returns the active `vocabulary.json` directly from the running kernel.
+- Client libraries can dynamically validate or generate methods in memory without requiring binary recompilation for minor kernel updates.
 
 ---
 
-## 5. Иерархическое сохранение состояния при Hot Reload (State Preservation)
+## 4. Shared Memory (SHM) for High-Frequency Canvas Escape-Hatch
 
-### Контекст
-В `vui_loader.go` реализован `VTUI_WATCH=1` с сохранением данных по ID.
+### Context
+Section 8.4 provides the `Canvas` element for custom pixel/cell rendering (graphs, image viewers, hex editors).
 
-### Предложение
-- Расширить путь идентификации с плоского `id` на структурный путь `(ParentID / ChildType / Index)` для безымянных элементов:
-  - Если у элемента нет явного `id`, его состояние при перезагрузке файла привязывается к позиции в структуре дерева.
-- **Плюс:** Разработчик может править `.vui` на лету, не теряя фокус, позицию курсора в `Edit` и прокрутку в `Table`, даже если не проставил явные `id` всем полям.
+### Proposal
+- For local IPC transports (`vtui-host` over Unix Domain Socket or SHM):
+  - Canvas cell/pixel buffers write directly to an `mmap` shared memory segment (similar to Wayland SHM / X11 MIT-SHM).
+  - The protocol only transmits damage notifications: `{"op": "damage", "rect": [x, y, w, h]}`.
+- **Benefits:** 60+ FPS performance for heavy custom canvas widgets with zero memory copying and no JSON serialization overhead.
 
 ---
 
-## 6. Декларативные макросы и автотестирование сессий
+## 5. Hierarchical State Preservation during Hot Reload
 
-### Контекст
-Утилиты `vtui-record` и `vtui-replay` записывают и проигрывают поток JSON Lines.
+### Context
+`vui_loader.go` provides `VTUI_WATCH=1` hot reload with state preservation by element ID.
 
-### Предложение
-- Использовать `session.jsonl` как стандартный формат UI-тестов (Golden Session Tests):
-  - Тест запускает хост, проигрывает сценарий и за 5 миллисекунд сравнивает состояние экрана с эталоном.
-- **Плюс:** 100% покрытие UI регрессионными тестами без UI-драйверов типа Selenium/Playwright и без реального TTY.
+### Proposal
+- Extend state identification from flat `id`s to hierarchical structural paths `(ParentID / ChildType / Index)` for unnamed controls:
+  - If a control lacks an explicit `id`, its state maps to its tree structural position.
+- **Benefits:** Developers can edit `.vui` templates live without losing focus, input text, or scroll offsets, even without explicitly naming every element.
+
+---
+
+## 6. Declarative Session Recordings and Golden Headless Testing
+
+### Context
+`vtui-record` and `vtui-replay` capture and replay JSON Lines protocol sessions.
+
+### Proposal
+- Use recorded `.jsonl` files as standard UI regression tests:
+  - Tests spawn the host, replay event scripts, and verify deterministic screen state within milliseconds in headless mode.
+- **Benefits:** 100% end-to-end UI regression testing without browser drivers or physical TTY requirements.
