@@ -47,3 +47,48 @@ func TestIntegration_NodeBindings(t *testing.T) {
 		t.Fatalf("Node.js bindings test failed: %v\nOutput:\n%s", err, string(out))
 	}
 }
+func TestIntegration_CBindingsCompilation(t *testing.T) {
+	cc, err := exec.LookPath("gcc")
+	if err != nil {
+		cc, err = exec.LookPath("clang")
+	}
+	if err != nil {
+		t.Skip("C compiler (gcc/clang) not found on this system. Install: 'sudo apt install gcc' or 'xcode-select --install'")
+	}
+
+	tmpDir := t.TempDir()
+	objPath := filepath.Join(tmpDir, "vtui.o")
+
+	cmdCC := exec.Command(cc,
+		"-c",
+		"-I"+filepath.Join("bindings", "c", "include"),
+		filepath.Join("bindings", "c", "src", "vtui.c"),
+		"-o", objPath,
+	)
+	out, err := cmdCC.CombinedOutput()
+	if err != nil {
+		t.Fatalf("C compilation failed: %v\nOutput:\n%s", err, string(out))
+	}
+}
+
+func TestIntegration_CppBindingsCompilation(t *testing.T) {
+	cxx, err := exec.LookPath("g++")
+	if err != nil {
+		cxx, err = exec.LookPath("clang++")
+	}
+	if err != nil {
+		t.Skip("C++ compiler (g++/clang++) not found on this system. Install: 'sudo apt install g++' or 'xcode-select --install'")
+	}
+
+	cmdCXX := exec.Command(cxx,
+		"-fsyntax-only",
+		"-std=c++17",
+		"-I"+filepath.Join("bindings", "c", "include"),
+		"-I"+filepath.Join("bindings", "cpp", "include"),
+		filepath.Join("bindings", "cpp", "examples", "hello.cpp"),
+	)
+	out, err := cmdCXX.CombinedOutput()
+	if err != nil {
+		t.Fatalf("C++ syntax check failed: %v\nOutput:\n%s", err, string(out))
+	}
+}
