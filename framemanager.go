@@ -1067,13 +1067,18 @@ func (fm *frameManager) handleResize() {
 	fm.Resize(width, height)
 }
 
-// Shutdown clears all frames, effectively stopping the application loop.
+// Shutdown clears all frames, stops the event loop, and cleanly restores the terminal state. Safe and idempotent.
 func (fm *frameManager) Shutdown() {
+	fm.running = false
 	fm.Screens = nil
 	fm.frames = nil
 	fm.capturedFrame = nil
-	// In tests we don't actually want to close the channel because
-	// other tests might still have pending background goroutines.
+	if fm.scr != nil {
+		fm.scr.SetCursorVisible(true)
+		fm.scr.Flush()
+	}
+	Suspend()
+	CleanupStderrLog()
 }
 
 // IsShutdown returns true if the FrameManager has been shut down explicitly.

@@ -27,6 +27,38 @@ type ScrollView struct {
 
 	OnSelect func(int)
 	OnAction func(int)
+
+	rowProvider RowProvider
+}
+
+// RowProvider supplies row data on demand for virtualized list controls.
+type RowProvider interface {
+	RowCount() int
+	Row(index int) []string
+}
+
+// SetRowProvider configures the on-demand data source for the scroll view.
+func (sv *ScrollView) SetRowProvider(p RowProvider) {
+	sv.rowProvider = p
+	if p != nil {
+		sv.ItemCount = p.RowCount()
+	} else {
+		sv.ItemCount = 0
+	}
+	sv.SetSelectPos(sv.SelectPos)
+}
+
+// InvalidateRows informs the scroll view that row data or count has changed.
+func (sv *ScrollView) InvalidateRows(from, to int) {
+	if sv.rowProvider != nil {
+		sv.ItemCount = sv.rowProvider.RowCount()
+		sv.SetSelectPos(sv.SelectPos)
+	}
+}
+
+// GetRowProvider returns the active RowProvider, if any.
+func (sv *ScrollView) GetRowProvider() RowProvider {
+	return sv.rowProvider
 }
 
 // ScrollBy shifts the view and the selection by the same amount, keeping the cursor vertically stable.

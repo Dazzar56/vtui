@@ -195,6 +195,7 @@ func (c *TableColumn) minWidth() int {
 }
 
 func (t *Table) SetRows(rows []TableRow) {
+	t.rowProvider = nil
 	t.Rows = rows
 	t.ItemCount = len(rows)
 	t.resort()
@@ -205,6 +206,14 @@ func (t *Table) SetRows(rows []TableRow) {
 	} else if t.SelectPos < 0 {
 		t.SelectPos = 0
 	}
+	t.EnsureVisible()
+}
+
+// SetRowProvider configures an on-demand data source for virtualized table display.
+func (t *Table) SetRowProvider(p RowProvider) {
+	t.Rows = nil
+	t.ScrollView.SetRowProvider(p)
+	t.resort()
 	t.EnsureVisible()
 }
 
@@ -226,37 +235,63 @@ func (t *Table) ClearSort() {
 // is the identity mapping; the Rows slice itself is never reordered.
 func (t *Table) resort() {
 	n := len(t.Rows)
-	if cap(t.order) < n {
-		t.order = make([]int, n)
-	} else {
-		t.order = t.order[:n]
+	if t.rowProvider != nil {
+		n = t.rowProvider.RowCount()
 	}
-	for i := range t.order {
-		t.order[i] = i
-	}
+	t.ItemCount = n
 
 	if len(t.searchRunes) > 0 {
-		// While searching, the column sort gives way to match ranking.
 		t.applySearchFilter()
 	} else if col := t.SortColumn; col >= 0 && col < len(t.Columns) && n >= 2 {
+		if cap(t.order) < n {
+			t.order = make([]int, n)
+		} else {
+			t.order = t.order[:n]
+		}
+		for i := range t.order {
+			t.order[i] = i
+		}
 		ascending := t.SortAscending
 		cmp := t.SortCompare
 		sort.SliceStable(t.order, func(i, j int) bool {
-			a, b := t.Rows[t.order[i]], t.Rows[t.order[j]]
-			c := 0
-			if cmp != nil {
-				c = cmp(a, b, col)
-			} else {
-				c = strings.Compare(a.GetCellText(col), b.GetCellText(col))
+			aIdx, bIdx := t.order[i], t.order[j]
+			if cmp != nil && len(t.Rows) == n {
+				c := cmp(t.Rows[aIdx], t.Rows[bIdx], col)
+				if !ascending {
+					c = -c
+				}
+				return c < 0
 			}
+			var aText, bText string
+			if t.rowProvider != nil {
+				aCells := t.rowProvider.Row(aIdx)
+				bCells := t.rowProvider.Row(bIdx)
+				if col < len(aCells) {
+					aText = aCells[col]
+				}
+				if col < len(bCells) {
+					bText = bCells[col]
+				}
+			} else {
+				aText = t.Rows[aIdx].GetCellText(col)
+				bText = t.Rows[bIdx].GetCellText(col)
+			}
+			c := strings.Compare(aText, bText)
 			if !ascending {
 				c = -c
 			}
 			return c < 0
 		})
+	} else {
+		t.order = t.order[:0]
 	}
 
-	t.ItemCount = len(t.order)
+	if len(t.searchRunes) > 0 {
+		t.ItemCount = len(t.order)
+	} else {
+		t.ItemCount = n
+	}
+
 	if t.SelectPos >= t.ItemCount {
 		t.SelectPos = t.ItemCount - 1
 	}
@@ -279,11 +314,24 @@ func (t *Table) applySearchFilter() {
 	for i := range t.matchSpans {
 		t.matchSpans[i].col = -1
 	}
-	for i, row := range t.Rows {
+	rowCount := len(t.Rows)
+	if t.rowProvider != nil {
+		rowCount = t.rowProvider.RowCount()
+	}
+	for i := 0; i < rowCount; i++ {
 		bestScore := -1
 		bestStart, bestEnd, bestCol := 0, 0, 0
 		for col := range t.Columns {
-			score, start, end, ok := matcher.match(row.GetCellText(col))
+			cellText := ""
+			if t.rowProvider != nil {
+				cells := t.rowProvider.Row(i)
+				if col < len(cells) {
+					cellText = cells[col]
+				}
+			} else {
+				cellText = t.Rows[i].GetCellText(col)
+			}
+			score, start, end, ok := matcher.match(cellText)
 			if ok && (bestScore < 0 || score < bestScore || (score == bestScore && start < bestStart)) {
 				bestScore, bestStart, bestEnd, bestCol = score, start, end, col
 			}
@@ -303,7 +351,11 @@ func (t *Table) applySearchFilter() {
 		}
 		return ma.idx < mb.idx
 	})
-	t.order = t.order[:len(t.matchBuf)]
+	if cap(t.order) < len(t.matchBuf) {
+		t.order = make([]int, len(t.matchBuf))
+	} else {
+		t.order = t.order[:len(t.matchBuf)]
+	}
 	for i, m := range t.matchBuf {
 		t.order[i] = m.idx
 	}
@@ -345,7 +397,7 @@ func (t *Table) fireSearchChange() {
 // rowAt maps a display position to the index in Rows, accounting for the
 // active sorting. Out-of-range positions are returned unchanged.
 func (t *Table) rowAt(pos int) int {
-	if pos >= 0 && pos < len(t.order) {
+	if len(t.order) > 0 && pos >= 0 && pos < len(t.order) {
 		return t.order[pos]
 	}
 	return pos
@@ -437,7 +489,12 @@ func (t *Table) drawRow(scr *ScreenBuf, y int, rowIdx int, attr uint64, widths [
 		text := ""
 		if rowIdx == -1 {
 			text = col.Title
-		} else {
+		} else if t.rowProvider != nil {
+			cells := t.rowProvider.Row(rowIdx)
+			if colIdx < len(cells) {
+				text = cells[colIdx]
+			}
+		} else if rowIdx < len(t.Rows) {
 			text = t.Rows[rowIdx].GetCellText(colIdx)
 		}
 
@@ -472,8 +529,10 @@ func (t *Table) drawRow(scr *ScreenBuf, y int, rowIdx int, attr uint64, widths [
 				stateAttr = Palette[t.ColorItemSelectTextIdx]
 			}
 
-			if cr, ok := t.Rows[rowIdx].(CellColorableRow); ok {
-				stateAttr = cr.GetCellAttr(colIdx, stateAttr)
+			if rowIdx < len(t.Rows) {
+				if cr, ok := t.Rows[rowIdx].(CellColorableRow); ok {
+					stateAttr = cr.GetCellAttr(colIdx, stateAttr)
+				}
 			}
 		}
 
