@@ -943,12 +943,37 @@ func (fm *frameManager) EmitCommand(cmd int, args any) bool {
 	if s, ok := args.(string); ok {
 		srcID = s
 	}
+	forwarded := fm.hasEventSink()
 	fm.emitEventSink(UIEvent{
 		Kind:  "command",
 		Cmd:   cmd,
 		SrcID: srcID,
 	})
+	// When running under a bindings host (vtui-host), an unhandled command is
+	// still "handled" in the sense that it was forwarded to the client over
+	// the protocol. Reporting it as unhandled here made the fallback Enter
+	// key path in BaseWindow.ProcessKey (case vtinput.VK_RETURN ->
+	// TriggerDefaultAction) fire a *second* synthetic Enter at the very same
+	// button, because Button.ProcessKey -> FireAction -> EmitCommand had
+	// already forwarded the "Ok" click once. That produced two "command"
+	// events per real keypress/click, which is why Python/Node bindings
+	// callbacks such as u.message(...) fired twice (see
+	// bindings/KNOWN_BUGS.md: double Enter/Esc on the Result dialog, "два
+	// окна вместо одного"). Plain in-process Go apps never registered an
+	// event sink, so this only changes behavior for the hosted/bindings
+	// case where it actually fixes the double dispatch.
+	if forwarded {
+		return true
+	}
 	return false
+}
+
+// hasEventSink reports whether a host event sink (e.g. the bindings
+// protocol session) is currently registered.
+func (fm *frameManager) hasEventSink() bool {
+	fm.eventSinkMu.RLock()
+	defer fm.eventSinkMu.RUnlock()
+	return fm.eventSink != nil
 }
 
 // InjectEvents adds simulated input events to the front of the queue.
