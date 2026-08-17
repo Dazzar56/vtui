@@ -118,6 +118,38 @@ func (s *ScreenBuf) SetOutput(w io.Writer) {
 	s.Writer = w
 }
 
+// WritePassthrough writes bytes straight to the terminal output, bypassing the
+// shadow buffer. Takes writeMu so it can never interleave with a frame.
+func (s *ScreenBuf) WritePassthrough(p []byte) {
+	if s == nil || len(p) == 0 {
+		return
+	}
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+
+	w := io.Writer(os.Stdout)
+	if s.Writer != nil {
+		w = s.Writer
+	}
+	const writeChunk = 8192
+	for len(p) > 0 {
+		n := len(p)
+		if n > writeChunk {
+			n = writeChunk
+		}
+		w.Write(p[:n])
+		p = p[n:]
+	}
+}
+
+// WritePassthrough writes raw bytes directly to the active ScreenBuf's output,
+// bypassing the shadow buffer and serializing with frame rendering.
+func WritePassthrough(p []byte) {
+	if FrameManager != nil && FrameManager.scr != nil {
+		FrameManager.scr.WritePassthrough(p)
+	}
+}
+
 // NewScreenBuf creates a new ScreenBuf instance.
 func NewScreenBuf() *ScreenBuf {
 	s := &ScreenBuf{

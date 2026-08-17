@@ -563,3 +563,61 @@ func TestAnsiRenderer_UnicodeOverwriteClearsTrailingGarbage(t *testing.T) {
 		t.Errorf("Expected trailing spaces to overwrite previous content, got %q", got)
 	}
 }
+func TestScreenBuf_WritePassthrough(t *testing.T) {
+	scr := NewSilentScreenBuf()
+	var buf bytes.Buffer
+	scr.Writer = &buf
+	scr.AllocBuf(10, 5)
+
+	payload := []byte("hello passthrough output\x1b[0m")
+	scr.WritePassthrough(payload)
+
+	if !bytes.Equal(buf.Bytes(), payload) {
+		t.Fatalf("WritePassthrough = %q, want %q", buf.String(), string(payload))
+	}
+}
+
+func TestWritePassthrough_Global(t *testing.T) {
+	scr := NewSilentScreenBuf()
+	var buf bytes.Buffer
+	scr.Writer = &buf
+	scr.AllocBuf(10, 5)
+
+	oldFM := FrameManager
+	fm := &frameManager{}
+	fm.Init(scr)
+	FrameManager = fm
+	defer func() { FrameManager = oldFM }()
+
+	payload := []byte("global passthrough test")
+	WritePassthrough(payload)
+
+	if !bytes.Equal(buf.Bytes(), payload) {
+		t.Fatalf("global WritePassthrough = %q, want %q", buf.String(), string(payload))
+	}
+}
+
+func TestScreenBuf_WritePassthrough_Concurrency(t *testing.T) {
+	scr := NewSilentScreenBuf()
+	var buf bytes.Buffer
+	scr.Writer = &buf
+	scr.AllocBuf(20, 5)
+
+	var wg sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 50; j++ {
+				scr.WritePassthrough([]byte("pt"))
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 50; j++ {
+				scr.Flush()
+			}
+		}()
+	}
+	wg.Wait()
+}
