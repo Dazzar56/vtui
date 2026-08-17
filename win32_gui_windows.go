@@ -14,6 +14,8 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+const logPixelsX = 88
+
 var (
 	procGetModuleHandleW   = kernel32.NewProc("GetModuleHandleW")
 	procRegisterClassExW   = user32.NewProc("RegisterClassExW")
@@ -38,9 +40,12 @@ var (
 	procReleaseCapture     = user32.NewProc("ReleaseCapture")
 	procGetKeyState        = user32.NewProc("GetKeyState")
 	procScreenToClient     = user32.NewProc("ScreenToClient")
+	procGetDC              = user32.NewProc("GetDC")
+	procReleaseDC          = user32.NewProc("ReleaseDC")
 
 	gdi32DLL              = syscall.NewLazyDLL("gdi32.dll")
 	procSetDIBitsToDevice = gdi32DLL.NewProc("SetDIBitsToDevice")
+	procGetDeviceCaps     = gdi32DLL.NewProc("GetDeviceCaps")
 
 	shell32DLL          = syscall.NewLazyDLL("shell32.dll")
 	procDragAcceptFiles = shell32DLL.NewProc("DragAcceptFiles")
@@ -48,6 +53,20 @@ var (
 	procDragQueryPoint  = shell32DLL.NewProc("DragQueryPoint")
 	procDragFinish      = shell32DLL.NewProc("DragFinish")
 )
+
+func getWin32DPI() float64 {
+	hdc, _, _ := procGetDC.Call(0)
+	if hdc == 0 {
+		return 96.0
+	}
+	defer procReleaseDC.Call(0, hdc)
+	r, _, _ := procGetDeviceCaps.Call(hdc, logPixelsX)
+	dpi := float64(r)
+	if dpi <= 0 {
+		return 96.0
+	}
+	return dpi
+}
 
 var (
 	win32GuiClassRegistered bool
@@ -105,6 +124,8 @@ type Win32GuiHost struct {
 	scale        int
 	winW, winH   int
 	mouseBtn     uint32
+	closeChan    chan struct{}
+	closed       bool
 }
 
 func (h *Win32GuiHost) AcceptsDrops() bool { return true }
@@ -142,6 +163,10 @@ func (h *Win32GuiHost) Invalidate() {
 
 func (h *Win32GuiHost) PostQuit() {
 	h.mu.Lock()
+	if !h.closed {
+		h.closed = true
+		close(h.closeChan)
+	}
 	hwnd := h.hwnd
 	h.mu.Unlock()
 	if hwnd != 0 {
@@ -150,17 +175,27 @@ func (h *Win32GuiHost) PostQuit() {
 }
 
 func (h *Win32GuiHost) sendEvent(ev *vtinput.InputEvent) {
-	if h.reader == nil || h.reader.EventChan == nil {
+	h.mu.Lock()
+	closed := h.closed || h.reader == nil || h.reader.EventChan == nil
+	h.mu.Unlock()
+	if closed {
 		return
 	}
+
+	defer func() {
+		recover()
+	}()
+
 	select {
 	case h.reader.EventChan <- ev:
+	case <-h.closeChan:
 	default:
 		if ev.Type == vtinput.MouseEventType && (ev.MouseEventFlags&vtinput.MouseMoved) != 0 {
 			return
 		}
 		select {
 		case h.reader.EventChan <- ev:
+		case <-h.closeChan:
 		default:
 		}
 	}
@@ -482,6 +517,10 @@ func (h *Win32GuiHost) handleMessage(hwnd syscall.Handle, msg uint32, wParam, lP
 
 func (h *Win32GuiHost) Close() {
 	h.mu.Lock()
+	if !h.closed {
+		h.closed = true
+		close(h.closeChan)
+	}
 	hwnd := h.hwnd
 	h.hwnd = 0
 	h.reader = nil
@@ -499,19 +538,32 @@ func RunWin32GuiHost(cols, rows int, fontName string, fontSize float64, setupApp
 	if fontSize <= 0 {
 		fontSize = 18.0
 	}
-	face, cellW, cellH := loadBestFont(fontName, fontSize, 72.0)
+
+	win32DPI := getWin32DPI()
+	scaleFactor := win32DPI / 96.0
+	if scaleFactor < 1.0 {
+		scaleFactor = 1.0
+	}
+	fontDPI := 72.0 * scaleFactor
+	face, cellW, cellH := loadBestFont(fontName, fontSize, fontDPI)
 	if cellW <= 0 || cellH <= 0 {
-		cellW, cellH = 8, 16
+		cellW, cellH = int(8*scaleFactor+0.5), int(16*scaleFactor+0.5)
+	}
+
+	scale := int(scaleFactor + 0.5)
+	if scale < 1 {
+		scale = 1
 	}
 
 	host := &Win32GuiHost{
-		cols:  cols,
-		rows:  rows,
-		cellW: cellW,
-		cellH: cellH,
-		scale: 1,
-		winW:  cols * cellW,
-		winH:  rows * cellH,
+		cols:      cols,
+		rows:      rows,
+		cellW:     cellW,
+		cellH:     cellH,
+		scale:     scale,
+		winW:      cols * cellW,
+		winH:      rows * cellH,
+		closeChan: make(chan struct{}),
 	}
 
 	className, err := syscall.UTF16PtrFromString("VTUI_WIN32_GUI")

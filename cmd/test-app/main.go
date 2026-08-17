@@ -625,7 +625,21 @@ func main() {
 
 	tryRunDefaultGui := func() error {
 		var errs []string
+		if vtui.IsWine() {
+			if err := runGuiWithBackend("win32"); err == nil {
+				return nil
+			} else {
+				errs = append(errs, fmt.Sprintf("win32: %v", err))
+			}
+		}
 		if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
+			if runtime.GOOS == "windows" {
+				if err := runGuiWithBackend("win32"); err == nil {
+					return nil
+				} else {
+					errs = append(errs, fmt.Sprintf("win32: %v", err))
+				}
+			}
 			if err := runGuiWithBackend("gogpu"); err == nil {
 				return nil
 			} else {
@@ -693,11 +707,8 @@ func main() {
 	}
 
 	// Default auto-detect mode (neither --gui nor --tty specified)
-	// Under Wine, default to TTY console mode because GPU/GUI backends are not yet functional.
-	if !vtui.IsWine() {
-		if err := tryRunDefaultGui(); err == nil {
-			return
-		}
+	if err := tryRunDefaultGui(); err == nil {
+		return
 	}
 	runConsole(ttyBackend)
 }
