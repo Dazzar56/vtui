@@ -12,7 +12,6 @@ import (
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 	"github.com/unxed/vtui/vreactive"
-	"golang.org/x/term"
 )
 
 // localVFS is a minimal stub to satisfy vtui dialogs without relying on external VFS.
