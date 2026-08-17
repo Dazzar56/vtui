@@ -8,7 +8,8 @@ import (
 	"syscall"
 )
 
-func initTerminalOS() {}
+func initTerminalOS()            {}
+func setAltScreenOS(enable bool) {}
 
 func watchResizeSignal(c chan os.Signal) {
 	signal.Notify(c, syscall.SIGWINCH)

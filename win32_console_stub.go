@@ -11,6 +11,8 @@ func isWineOS() bool {
 func hasConsoleBufferOS() bool {
 	return false
 }
+func setAltScreenWin32(enable bool)   {}
+func getActiveConsoleHandle() uintptr { return 0 }
 
 // Win32ConsoleRenderer is a fallback stub for non-Windows platforms.
 type Win32ConsoleRenderer struct {

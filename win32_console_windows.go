@@ -12,11 +12,42 @@ var (
 	ntdllDLL           = syscall.NewLazyDLL("ntdll.dll")
 	procWineGetVersion = ntdllDLL.NewProc("wine_get_version")
 
-	procWriteConsoleOutputW        = kernel32.NewProc("WriteConsoleOutputW")
-	procSetConsoleCursorPosition   = kernel32.NewProc("SetConsoleCursorPosition")
-	procSetConsoleTitleW           = kernel32.NewProc("SetConsoleTitleW")
-	procGetConsoleScreenBufferInfo = kernel32.NewProc("GetConsoleScreenBufferInfo")
+	procWriteConsoleOutputW          = kernel32.NewProc("WriteConsoleOutputW")
+	procSetConsoleCursorPosition     = kernel32.NewProc("SetConsoleCursorPosition")
+	procSetConsoleTitleW             = kernel32.NewProc("SetConsoleTitleW")
+	procGetConsoleScreenBufferInfo   = kernel32.NewProc("GetConsoleScreenBufferInfo")
+	procCreateConsoleScreenBuffer    = kernel32.NewProc("CreateConsoleScreenBuffer")
+	procSetConsoleActiveScreenBuffer = kernel32.NewProc("SetConsoleActiveScreenBuffer")
+	procSetConsoleScreenBufferSize   = kernel32.NewProc("SetConsoleScreenBufferSize")
 )
+
+var (
+	activeWin32ConsoleRenderer *Win32ConsoleRenderer
+	activeWin32ConsoleMu       sync.Mutex
+)
+
+func setAltScreenWin32(enable bool) {
+	activeWin32ConsoleMu.Lock()
+	r := activeWin32ConsoleRenderer
+	activeWin32ConsoleMu.Unlock()
+	if r != nil && r.hFarOut != 0 && r.hFarOut != r.hStdOut {
+		if enable {
+			procSetConsoleActiveScreenBuffer.Call(uintptr(r.hFarOut))
+		} else {
+			procSetConsoleActiveScreenBuffer.Call(uintptr(r.hStdOut))
+		}
+	}
+}
+
+func getActiveConsoleHandle() uintptr {
+	activeWin32ConsoleMu.Lock()
+	r := activeWin32ConsoleRenderer
+	activeWin32ConsoleMu.Unlock()
+	if r != nil && r.hFarOut != 0 {
+		return uintptr(r.hFarOut)
+	}
+	return 0
+}
 
 type consoleScreenBufferInfo struct {
 	dwSize              Coord
@@ -44,7 +75,8 @@ func hasConsoleBufferOS() bool {
 type Win32ConsoleRenderer struct {
 	mu          sync.Mutex
 	parent      *ScreenBuf
-	hOut        syscall.Handle
+	hStdOut     syscall.Handle
+	hFarOut     syscall.Handle
 	consoleBuf  []win32CharInfo
 	lastCols    int
 	lastRows    int
@@ -57,13 +89,48 @@ type Win32ConsoleRenderer struct {
 	forceRedraw bool
 }
 
-// NewWin32ConsoleRenderer creates a renderer using classic Win32 Console API.
+// NewWin32ConsoleRenderer creates a renderer using classic Win32 Console API with a dedicated screen buffer.
 func NewWin32ConsoleRenderer(parent *ScreenBuf) *Win32ConsoleRenderer {
-	hOut, _ := syscall.GetStdHandle(syscall.STD_OUTPUT_HANDLE)
-	return &Win32ConsoleRenderer{
-		parent: parent,
-		hOut:   hOut,
+	hStdOut, _ := syscall.GetStdHandle(syscall.STD_OUTPUT_HANDLE)
+	hFarOut := hStdOut
+
+	r1, _, _ := procCreateConsoleScreenBuffer.Call(
+		uintptr(0xC0000000), // GENERIC_READ | GENERIC_WRITE
+		uintptr(3),          // FILE_SHARE_READ | FILE_SHARE_WRITE
+		0,
+		uintptr(1), // CONSOLE_TEXTMODE_BUFFER
+		0,
+	)
+	if r1 != 0 && syscall.Handle(r1) != syscall.InvalidHandle {
+		hFarOut = syscall.Handle(r1)
+		procSetConsoleActiveScreenBuffer.Call(uintptr(hFarOut))
 	}
+
+	r := &Win32ConsoleRenderer{
+		parent:  parent,
+		hStdOut: hStdOut,
+		hFarOut: hFarOut,
+	}
+
+	activeWin32ConsoleMu.Lock()
+	activeWin32ConsoleRenderer = r
+	activeWin32ConsoleMu.Unlock()
+
+	return r
+}
+
+func (r *Win32ConsoleRenderer) Close() error {
+	activeWin32ConsoleMu.Lock()
+	defer activeWin32ConsoleMu.Unlock()
+	if r.hFarOut != 0 && r.hFarOut != r.hStdOut {
+		procSetConsoleActiveScreenBuffer.Call(uintptr(r.hStdOut))
+		syscall.CloseHandle(r.hFarOut)
+		r.hFarOut = r.hStdOut
+	}
+	if activeWin32ConsoleRenderer == r {
+		activeWin32ConsoleRenderer = nil
+	}
+	return nil
 }
 
 func (r *Win32ConsoleRenderer) SetPalette(pal *[256]uint32) {
@@ -138,6 +205,11 @@ func (r *Win32ConsoleRenderer) Flush() {
 	w := int16(r.lastCols)
 	h := int16(r.lastRows)
 
+	targetHandle := r.hFarOut
+	if targetHandle == 0 {
+		targetHandle = r.hStdOut
+	}
+
 	bufSize := uintptr(uint32(uint16(w)) | (uint32(uint16(h)) << 16))
 	bufCoord := uintptr(0)
 	writeRegion := SmallRect{
@@ -148,7 +220,7 @@ func (r *Win32ConsoleRenderer) Flush() {
 	}
 
 	procWriteConsoleOutputW.Call(
-		uintptr(r.hOut),
+		uintptr(targetHandle),
 		uintptr(unsafe.Pointer(&r.consoleBuf[0])),
 		bufSize,
 		bufCoord,
@@ -158,7 +230,7 @@ func (r *Win32ConsoleRenderer) Flush() {
 	// Update cursor position and shape
 	if r.cursorVis && r.cursorX >= 0 && r.cursorX < int(w) && r.cursorY >= 0 && r.cursorY < int(h) {
 		cursorCoord := uintptr(uint32(uint16(r.cursorX)) | (uint32(uint16(r.cursorY)) << 16))
-		procSetConsoleCursorPosition.Call(uintptr(r.hOut), cursorCoord)
+		procSetConsoleCursorPosition.Call(uintptr(targetHandle), cursorCoord)
 		SetCursorStyleOS(true, r.cursorShape)
 	} else {
 		SetCursorStyleOS(false, r.cursorShape)

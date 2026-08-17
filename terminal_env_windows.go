@@ -76,6 +76,10 @@ func initTerminalOS() {
 	}
 }
 
+func setAltScreenOS(enable bool) {
+	setAltScreenWin32(enable)
+}
+
 type consoleCursorInfo struct {
 	size    uint32
 	visible int32

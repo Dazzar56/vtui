@@ -55,6 +55,7 @@ func Suspend() {
 			out.WriteString(seqAltScreenOff)
 			inAltScreen = false
 		}
+		setAltScreenOS(false)
 		if ManageCursorStyle {
 			out.WriteString(seqDefaultCursor)
 		}
@@ -88,6 +89,7 @@ func Resume() error {
 			out.WriteString(seqAltScreenOn)
 			inAltScreen = true
 		}
+		setAltScreenOS(true)
 		out.WriteString(seqAutoWrapOff) // Disable auto-wrap for exact rendering
 		out.Sync()
 
@@ -128,6 +130,7 @@ func SetAltScreen(enable bool) {
 		out := getTermOut()
 		if enable {
 			out.WriteString(seqAltScreenOn)
+			setAltScreenOS(true)
 			// When returning to alt screen, it's usually empty, so force a redraw
 			if FrameManager != nil && FrameManager.scr != nil {
 				FrameManager.scr.HardReset()
@@ -135,6 +138,7 @@ func SetAltScreen(enable bool) {
 			}
 		} else {
 			out.WriteString(seqAltScreenOff)
+			setAltScreenOS(false)
 		}
 		out.Sync()
 	}
