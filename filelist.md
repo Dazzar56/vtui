@@ -22,66 +22,6 @@
     ├── bidi_test.go
     ├── bindings
     │   ├── c
-    │   │   ├── build
-    │   │   │   ├── CMakeCache.txt
-    │   │   │   ├── CMakeFiles
-    │   │   │   │   ├── 3.28.3
-    │   │   │   │   │   ├── CMakeCCompiler.cmake
-    │   │   │   │   │   ├── CMakeDetermineCompilerABI_C.bin
-    │   │   │   │   │   ├── CMakeSystem.cmake
-    │   │   │   │   │   └── CompilerIdC
-    │   │   │   │   │       ├── a.out
-    │   │   │   │   │       ├── CMakeCCompilerId.c
-    │   │   │   │   │       └── tmp
-    │   │   │   │   ├── cmake.check_cache
-    │   │   │   │   ├── CMakeConfigureLog.yaml
-    │   │   │   │   ├── CMakeDirectoryInformation.cmake
-    │   │   │   │   ├── CMakeRuleHashes.txt
-    │   │   │   │   ├── CMakeScratch
-    │   │   │   │   ├── hello_c.dir
-    │   │   │   │   │   ├── build.make
-    │   │   │   │   │   ├── cmake_clean.cmake
-    │   │   │   │   │   ├── compiler_depend.make
-    │   │   │   │   │   ├── compiler_depend.ts
-    │   │   │   │   │   ├── DependInfo.cmake
-    │   │   │   │   │   ├── depend.make
-    │   │   │   │   │   ├── examples
-    │   │   │   │   │   │   ├── hello.c.o
-    │   │   │   │   │   │   └── hello.c.o.d
-    │   │   │   │   │   ├── flags.make
-    │   │   │   │   │   ├── link.txt
-    │   │   │   │   │   └── progress.make
-    │   │   │   │   ├── Makefile2
-    │   │   │   │   ├── Makefile.cmake
-    │   │   │   │   ├── pkgRedirects
-    │   │   │   │   ├── progress.marks
-    │   │   │   │   ├── TargetDirectories.txt
-    │   │   │   │   ├── vtui_c.dir
-    │   │   │   │   │   ├── build.make
-    │   │   │   │   │   ├── cmake_clean.cmake
-    │   │   │   │   │   ├── cmake_clean_target.cmake
-    │   │   │   │   │   ├── compiler_depend.make
-    │   │   │   │   │   ├── compiler_depend.ts
-    │   │   │   │   │   ├── DependInfo.cmake
-    │   │   │   │   │   ├── depend.make
-    │   │   │   │   │   ├── flags.make
-    │   │   │   │   │   ├── link.txt
-    │   │   │   │   │   ├── progress.make
-    │   │   │   │   │   └── src
-    │   │   │   │   │       ├── vtui.c.o
-    │   │   │   │   │       └── vtui.c.o.d
-    │   │   │   │   └── vtui_host_target.dir
-    │   │   │   │       ├── build.make
-    │   │   │   │       ├── cmake_clean.cmake
-    │   │   │   │       ├── compiler_depend.make
-    │   │   │   │       ├── compiler_depend.ts
-    │   │   │   │       ├── DependInfo.cmake
-    │   │   │   │       └── progress.make
-    │   │   │   ├── cmake_install.cmake
-    │   │   │   ├── hello_c
-    │   │   │   ├── libvtui_c.a
-    │   │   │   ├── Makefile
-    │   │   │   └── vtui-host
     │   │   ├── cabi
     │   │   │   └── main.go
     │   │   ├── CMakeLists.txt
@@ -95,78 +35,6 @@
     │   │       └── vtui.c
     │   ├── CMakeLists.txt
     │   ├── cpp
-    │   │   ├── build
-    │   │   │   ├── CMakeCache.txt
-    │   │   │   ├── CMakeFiles
-    │   │   │   │   ├── 3.28.3
-    │   │   │   │   │   ├── CMakeCCompiler.cmake
-    │   │   │   │   │   ├── CMakeCXXCompiler.cmake
-    │   │   │   │   │   ├── CMakeDetermineCompilerABI_C.bin
-    │   │   │   │   │   ├── CMakeDetermineCompilerABI_CXX.bin
-    │   │   │   │   │   ├── CMakeSystem.cmake
-    │   │   │   │   │   ├── CompilerIdC
-    │   │   │   │   │   │   ├── a.out
-    │   │   │   │   │   │   ├── CMakeCCompilerId.c
-    │   │   │   │   │   │   └── tmp
-    │   │   │   │   │   └── CompilerIdCXX
-    │   │   │   │   │       ├── a.out
-    │   │   │   │   │       ├── CMakeCXXCompilerId.cpp
-    │   │   │   │   │       └── tmp
-    │   │   │   │   ├── cmake.check_cache
-    │   │   │   │   ├── CMakeConfigureLog.yaml
-    │   │   │   │   ├── CMakeDirectoryInformation.cmake
-    │   │   │   │   ├── CMakeRuleHashes.txt
-    │   │   │   │   ├── CMakeScratch
-    │   │   │   │   ├── hello_cpp.dir
-    │   │   │   │   │   ├── build.make
-    │   │   │   │   │   ├── cmake_clean.cmake
-    │   │   │   │   │   ├── compiler_depend.make
-    │   │   │   │   │   ├── compiler_depend.ts
-    │   │   │   │   │   ├── DependInfo.cmake
-    │   │   │   │   │   ├── depend.make
-    │   │   │   │   │   ├── examples
-    │   │   │   │   │   │   ├── hello.cpp.o
-    │   │   │   │   │   │   └── hello.cpp.o.d
-    │   │   │   │   │   ├── flags.make
-    │   │   │   │   │   ├── link.txt
-    │   │   │   │   │   └── progress.make
-    │   │   │   │   ├── Makefile2
-    │   │   │   │   ├── Makefile.cmake
-    │   │   │   │   ├── pkgRedirects
-    │   │   │   │   ├── progress.marks
-    │   │   │   │   ├── TargetDirectories.txt
-    │   │   │   │   ├── vtui_c.dir
-    │   │   │   │   │   ├── build.make
-    │   │   │   │   │   ├── cmake_clean.cmake
-    │   │   │   │   │   ├── cmake_clean_target.cmake
-    │   │   │   │   │   ├── compiler_depend.make
-    │   │   │   │   │   ├── compiler_depend.ts
-    │   │   │   │   │   ├── DependInfo.cmake
-    │   │   │   │   │   ├── depend.make
-    │   │   │   │   │   ├── flags.make
-    │   │   │   │   │   ├── home
-    │   │   │   │   │   │   └── unxed
-    │   │   │   │   │   │       └── dev
-    │   │   │   │   │   │           └── vtui
-    │   │   │   │   │   │               └── bindings
-    │   │   │   │   │   │                   └── c
-    │   │   │   │   │   │                       └── src
-    │   │   │   │   │   │                           ├── vtui.c.o
-    │   │   │   │   │   │                           └── vtui.c.o.d
-    │   │   │   │   │   ├── link.txt
-    │   │   │   │   │   └── progress.make
-    │   │   │   │   └── vtui_host_target.dir
-    │   │   │   │       ├── build.make
-    │   │   │   │       ├── cmake_clean.cmake
-    │   │   │   │       ├── compiler_depend.make
-    │   │   │   │       ├── compiler_depend.ts
-    │   │   │   │       ├── DependInfo.cmake
-    │   │   │   │       └── progress.make
-    │   │   │   ├── cmake_install.cmake
-    │   │   │   ├── hello_cpp
-    │   │   │   ├── libvtui_c.a
-    │   │   │   ├── Makefile
-    │   │   │   └── vtui-host
     │   │   ├── CMakeLists.txt
     │   │   ├── examples
     │   │   │   └── hello.cpp
@@ -247,7 +115,8 @@
     │   │   └── main.go
     │   ├── test-app
     │   │   ├── main.go
-    │   │   └── main_test.go
+    │   │   ├── main_test.go
+    │   │   └── test-app.exe
     │   ├── vtui-cast
     │   │   ├── main.go
     │   │   └── main_test.go
@@ -511,6 +380,15 @@
     ├── wheel_scroll.go
     ├── wheel_scroll_test.go
     ├── WIDTH_NEGOTIATION.md
+    ├── win32_console_common.go
+    ├── win32_console_stub.go
+    ├── win32_console_test.go
+    ├── win32_console_windows.go
+    ├── win32_gui_common.go
+    ├── win32_gui_renderer.go
+    ├── win32_gui_stub.go
+    ├── win32_gui_test.go
+    ├── win32_gui_windows.go
     ├── window.go
     ├── word_nav.go
     ├── WORDNAV.md
@@ -530,4 +408,4 @@
     ├── xlat_tables.go
     └── xlat_test.go
     
-    80 directories, 449 files
+    48 directories, 359 files
