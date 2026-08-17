@@ -99,7 +99,8 @@ func parseFlags() dialogConfig {
 	flag.StringVar(&cfg.okLabel, "ok-label", "&Ok", "Custom label for OK button")
 	flag.StringVar(&cfg.cancelLabel, "cancel-label", "Cancel", "Custom label for Cancel button")
 	flag.StringVar(&cfg.extraLabel, "extra-button", "", "Add an extra action button with label")
-	flag.StringVar(&cfg.backend, "backend", "ansi", "Rendering backend: ansi, gogpu, x11, wayland, ebiten")
+	flag.StringVar(&cfg.backend, "backend", "", "Rendering backend: ansi, winapi, gogpu, x11, wayland, ebiten")
+	flag.StringVar(&cfg.backend, "tty", "", "TTY rendering mode: ansi, winapi (default: ansi, or winapi under Wine)")
 	flag.BoolVar(&cfg.jsonOut, "json", false, "Output result formatted as JSON")
 
 	flag.StringVar(&cfg.msgbox, "msgbox", "", "Display a message box with text")
@@ -146,6 +147,10 @@ func runDialog(cfg dialogConfig) dialogResult {
 	var result dialogResult
 	result.ExitCode = 1 // Default to cancel/escape
 
+	if cfg.backend == "" {
+		cfg.backend = vtui.DefaultConsoleBackend()
+	}
+
 	runUI := func() {
 		width, height, _ := term.GetSize(int(os.Stdin.Fd()))
 		if width <= 0 || height <= 0 {
@@ -153,6 +158,9 @@ func runDialog(cfg dialogConfig) dialogResult {
 		}
 
 		scr := vtui.NewScreenBuf()
+		if cfg.backend == "winapi" || cfg.backend == "win32" {
+			scr.Renderer = vtui.NewWin32ConsoleRenderer(scr)
+		}
 		scr.AllocBuf(width, height)
 		vtui.FrameManager.Init(scr)
 		vtui.FrameManager.Push(vtui.NewDesktop())
@@ -169,7 +177,7 @@ func runDialog(cfg dialogConfig) dialogResult {
 		vtui.FrameManager.Push(dlg)
 	}
 
-	if cfg.backend != "ansi" && cfg.backend != "" {
+	if cfg.backend != "ansi" && cfg.backend != "winapi" && cfg.backend != "win32" && cfg.backend != "" {
 		_ = vtui.RunInGUIWindow(80, 25, cfg.backend, "", 18.0, runUI)
 	} else {
 		restore, err := vtui.PrepareTerminal()

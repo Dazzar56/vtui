@@ -55,3 +55,15 @@ func TestWorkspaceTabControlDemo(t *testing.T) {
 		t.Fatalf("workspace menu info = %#v", info)
 	}
 }
+func TestTestApp_ConsoleRendererSelection(t *testing.T) {
+	scrWinAPI := vtui.NewScreenBuf()
+	scrWinAPI.Renderer = vtui.NewWin32ConsoleRenderer(scrWinAPI)
+	if _, ok := scrWinAPI.Renderer.(*vtui.Win32ConsoleRenderer); !ok {
+		t.Errorf("Expected Win32ConsoleRenderer, got %T", scrWinAPI.Renderer)
+	}
+
+	scrANSI := vtui.NewScreenBuf()
+	if _, ok := scrANSI.Renderer.(*vtui.AnsiRenderer); !ok {
+		t.Errorf("Expected AnsiRenderer by default, got %T", scrANSI.Renderer)
+	}
+}

@@ -365,6 +365,7 @@ func main() {
 	ttyMode := false
 	fontName := ""
 	fontSize := 18.0
+	ttyBackend := ""
 
 	for i := 1; i < len(os.Args); i++ {
 		arg := os.Args[i]
@@ -404,6 +405,12 @@ func main() {
 			}
 		case "--tty":
 			ttyMode = true
+			if flagVal != "" {
+				ttyBackend = flagVal
+			} else if i+1 < len(os.Args) && !strings.HasPrefix(os.Args[i+1], "-") {
+				ttyBackend = os.Args[i+1]
+				i++
+			}
 		case "--debug":
 			os.Setenv("VTUI_DEBUG", "1")
 		}
@@ -588,7 +595,7 @@ func main() {
 		vtui.FrameManager.SwitchScreen(0)
 	}
 
-	runConsole := func() {
+	runConsole := func(backend string) {
 		restore, err := vtui.PrepareTerminal()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -598,6 +605,9 @@ func main() {
 
 		width, height, _ := term.GetSize(int(os.Stdin.Fd()))
 		scr := vtui.NewScreenBuf()
+		if backend == "winapi" || backend == "win32" {
+			scr.Renderer = vtui.NewWin32ConsoleRenderer(scr)
+		}
 		scr.AllocBuf(width, height)
 		vtui.FrameManager.Init(scr)
 
@@ -656,8 +666,12 @@ func main() {
 		return fmt.Errorf("no suitable GUI environment detected")
 	}
 
+	if ttyBackend == "" {
+		ttyBackend = vtui.DefaultConsoleBackend()
+	}
+
 	if ttyMode {
-		runConsole()
+		runConsole(ttyBackend)
 		return
 	}
 
@@ -678,7 +692,7 @@ func main() {
 
 	// Default auto-detect mode (neither --gui nor --tty specified)
 	if err := tryRunDefaultGui(); err != nil {
-		runConsole()
+		runConsole(ttyBackend)
 	}
 }
 

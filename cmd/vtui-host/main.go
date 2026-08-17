@@ -20,7 +20,7 @@ func main() {
 	protoOutFDFlag := flag.String("protocol-out-fd", "", "File descriptor number for protocol output")
 	socketFlag := flag.String("socket", "", "Unix domain socket path for protocol communication")
 	socketListenFlag := flag.String("socket-listen", "", "Unix domain socket path to listen on for protocol communication")
-	backendFlag := flag.String("backend", "ansi", "Rendering backend (ansi, gogpu, x11, wayland, ebiten)")
+	backendFlag := flag.String("backend", "", "Rendering backend (ansi, winapi, gogpu, x11, wayland, ebiten)")
 	flag.Parse()
 
 	if *protoInFDFlag != "" && *protoOutFDFlag != "" {
@@ -98,6 +98,12 @@ func runSession(in io.Reader, out io.Writer, backend string) {
 	}
 
 	scr := vtui.NewScreenBuf()
+	if backend == "" {
+		backend = vtui.DefaultConsoleBackend()
+	}
+	if backend == "winapi" || backend == "win32" {
+		scr.Renderer = vtui.NewWin32ConsoleRenderer(scr)
+	}
 	scr.AllocBuf(w, h)
 	vtui.FrameManager.Init(scr)
 	vtui.FrameManager.Push(vtui.NewDesktop())
@@ -110,7 +116,7 @@ func runSession(in io.Reader, out io.Writer, backend string) {
 		vtui.FrameManager.Shutdown()
 	}()
 
-	if backend != "ansi" && backend != "" {
+	if backend != "ansi" && backend != "winapi" && backend != "win32" && backend != "" {
 		_ = vtui.RunInGUIWindow(w, h, backend, "", 18.0, func() {})
 	} else {
 		restore, err := vtinput.Enable()

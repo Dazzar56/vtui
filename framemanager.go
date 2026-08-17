@@ -1911,6 +1911,12 @@ func (fm *frameManager) GetBackendName() string {
 		return "Console"
 	}
 	rName := fmt.Sprintf("%T", fm.scr.Renderer)
+	if strings.Contains(rName, "Win32Console") {
+		return "Console (WinAPI)"
+	}
+	if strings.Contains(rName, "Ansi") {
+		return "Console (ANSI)"
+	}
 	if strings.Contains(rName, "Gogpu") {
 		return "GUI (GoGPU)"
 	}

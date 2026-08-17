@@ -98,3 +98,49 @@ func TestCharInfoToWin32(t *testing.T) {
 func TestWin32ConsoleRenderer_ImplementsSurfaceRenderer(t *testing.T) {
 	var _ SurfaceRenderer = (*Win32ConsoleRenderer)(nil)
 }
+func TestDefaultConsoleBackend(t *testing.T) {
+	backend := DefaultConsoleBackend()
+	if IsWine() {
+		if backend != "winapi" {
+			t.Errorf("Expected 'winapi' backend under Wine, got %q", backend)
+		}
+	} else {
+		if backend != "ansi" {
+			t.Errorf("Expected 'ansi' backend on non-Wine environment, got %q", backend)
+		}
+	}
+}
+
+func TestWin32ConsoleRenderer_ScreenBufIntegration(t *testing.T) {
+	SetDefaultPalette()
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(20, 5)
+
+	renderer := NewWin32ConsoleRenderer(scr)
+	scr.Renderer = renderer
+
+	scr.Write(0, 0, StringToCharInfo("WinAPI Test", Palette[ColDialogText]))
+	scr.SetCursorPos(5, 0)
+	scr.SetCursorVisible(true)
+	scr.SetCursorShape(CursorShapeUnderline)
+
+	// Flush should safely execute without panicking on any platform
+	scr.Flush()
+}
+
+func TestFrameManager_GetBackendName_Win32(t *testing.T) {
+	fm := &frameManager{}
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	fm.Init(scr)
+
+	scr.Renderer = NewWin32ConsoleRenderer(scr)
+	if name := fm.GetBackendName(); name != "Console (WinAPI)" {
+		t.Errorf("GetBackendName() = %q, want 'Console (WinAPI)'", name)
+	}
+
+	scr.Renderer = &AnsiRenderer{parent: scr}
+	if name := fm.GetBackendName(); name != "Console (ANSI)" {
+		t.Errorf("GetBackendName() = %q, want 'Console (ANSI)'", name)
+	}
+}

@@ -117,3 +117,12 @@ func charInfoToWin32(ci CharInfo, activePal *[256]uint32) win32CharInfo {
 func IsWine() bool {
 	return isWineOS()
 }
+
+// DefaultConsoleBackend returns the default console backend name ("winapi" or "ansi").
+// Under Wine on Windows, it defaults to "winapi" as Wine console lacks full VT/ANSI support.
+func DefaultConsoleBackend() string {
+	if isWineOS() {
+		return "winapi"
+	}
+	return "ansi"
+}
