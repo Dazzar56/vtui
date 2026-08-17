@@ -306,8 +306,11 @@ func (s *ScreenBuf) ApplyShadow(x1, y1, x2, y2 int) {
 				}
 			}
 
-			bg = ((bg>>16&0xFF)/2)<<16 | ((bg>>8&0xFF)/2)<<8 | ((bg & 0xFF) / 2)
-			fg = ((fg>>16&0xFF)/2)<<16 | ((fg>>8&0xFF)/2)<<8 | ((fg & 0xFF) / 2)
+			// Use 3/8 (0.375) factor: in 16-color quantization (Win32 console / DOS),
+			// dark blue desktop (0x0000A0) drops to Black (0) creating crisp Far-style shadows,
+			// while light gray dialogs (0xC0C0C0) drop to DarkGray (8).
+			bg = (((bg>>16&0xFF)*3)/8)<<16 | (((bg>>8&0xFF)*3)/8)<<8 | (((bg & 0xFF) * 3) / 8)
+			fg = (((fg>>16&0xFF)*3)/8)<<16 | (((fg>>8&0xFF)*3)/8)<<8 | (((fg & 0xFF) * 3) / 8)
 
 			s.buf[offset+x].Attributes = SetRGBBoth(attr, fg, bg)
 		}

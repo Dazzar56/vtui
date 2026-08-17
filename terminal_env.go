@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	seqAltScreenOn       = "\x1b[?1049h"
+	seqAltScreenOn       = "\x1b[?1049h\x1b[2J\x1b[H"
 	seqAltScreenOff      = "\x1b[?1049l"
 	seqAutoWrapOff       = "\x1b[?7l"
 	seqAutoWrapOn        = "\x1b[?7h"

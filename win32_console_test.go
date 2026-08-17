@@ -144,6 +144,45 @@ func TestWin32CoordAndSmallRectTypes(t *testing.T) {
 		t.Errorf("win32SmallRect values mismatch: got right=%d, bottom=%d", sr.Right, sr.Bottom)
 	}
 }
+func TestScreenBuf_ApplyShadow_16ColorQuantization(t *testing.T) {
+	SetDefaultPalette()
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(10, 5)
+
+	// 1. Shadow over classic blue desktop (0x0000A0)
+	desktopAttr := Palette[ColDesktopBackground]
+	scr.FillRect(0, 0, 9, 4, ' ', desktopAttr)
+
+	// Apply shadow on cell (2, 2)
+	scr.ApplyShadow(2, 2, 2, 2)
+
+	shadowCell := scr.GetCell(2, 2)
+	win32Desktop := attrToWin32Attr(desktopAttr, &XTerm256Palette)
+	win32Shadow := attrToWin32Attr(shadowCell.Attributes, &XTerm256Palette)
+
+	// The shadow must produce a different Win32 attribute (Black background vs Blue background)
+	if win32Desktop == win32Shadow {
+		t.Errorf("Shadow on blue desktop must be distinguishable in Win32 16-color mode: desktop=%#04x shadow=%#04x",
+			win32Desktop, win32Shadow)
+	}
+	if (win32Shadow & 0x00F0) != 0 {
+		t.Errorf("Expected black background (0x00) for shadow on blue desktop in 16-color mode, got %#04x", win32Shadow&0x00F0)
+	}
+
+	// 2. Shadow over light gray dialog (0xC0C0C0)
+	dialogAttr := Palette[ColDialogText]
+	scr.FillRect(0, 0, 9, 4, ' ', dialogAttr)
+	scr.ApplyShadow(2, 2, 2, 2)
+
+	dlgShadowCell := scr.GetCell(2, 2)
+	win32DlgShadow := attrToWin32Attr(dlgShadowCell.Attributes, &XTerm256Palette)
+
+	// Expected Dark Gray background (0x80)
+	if (win32DlgShadow & 0x00F0) != (Win32BgIntensity) {
+		t.Errorf("Expected DarkGray background (%#04x) for shadow on dialog in 16-color mode, got %#04x",
+			Win32BgIntensity, win32DlgShadow&0x00F0)
+	}
+}
 
 func TestWin32ConsoleRenderer_ScreenBufIntegration(t *testing.T) {
 	SetDefaultPalette()
