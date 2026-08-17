@@ -12,6 +12,7 @@ var (
 	ntdllDLL           = syscall.NewLazyDLL("ntdll.dll")
 	procWineGetVersion = ntdllDLL.NewProc("wine_get_version")
 
+	procReadConsoleOutputW           = kernel32.NewProc("ReadConsoleOutputW")
 	procWriteConsoleOutputW          = kernel32.NewProc("WriteConsoleOutputW")
 	procSetConsoleCursorPosition     = kernel32.NewProc("SetConsoleCursorPosition")
 	procSetConsoleTitleW             = kernel32.NewProc("SetConsoleTitleW")
@@ -19,7 +20,25 @@ var (
 	procCreateConsoleScreenBuffer    = kernel32.NewProc("CreateConsoleScreenBuffer")
 	procSetConsoleActiveScreenBuffer = kernel32.NewProc("SetConsoleActiveScreenBuffer")
 	procSetConsoleScreenBufferSize   = kernel32.NewProc("SetConsoleScreenBufferSize")
+	procSetConsoleWindowInfo         = kernel32.NewProc("SetConsoleWindowInfo")
 )
+
+func resetConsoleWindowPos(hConsole syscall.Handle, w, h int16) {
+	if hConsole == 0 || hConsole == syscall.InvalidHandle {
+		return
+	}
+	rect := SmallRect{
+		Left:   0,
+		Top:    0,
+		Right:  w - 1,
+		Bottom: h - 1,
+	}
+	procSetConsoleWindowInfo.Call(
+		uintptr(hConsole),
+		uintptr(1), // TRUE = absolute
+		uintptr(unsafe.Pointer(&rect)),
+	)
+}
 
 var (
 	activeWin32ConsoleRenderer *Win32ConsoleRenderer
@@ -209,6 +228,8 @@ func (r *Win32ConsoleRenderer) Flush() {
 	if targetHandle == 0 {
 		targetHandle = r.hStdOut
 	}
+
+	resetConsoleWindowPos(targetHandle, w, h)
 
 	bufSize := uintptr(uint32(uint16(w)) | (uint32(uint16(h)) << 16))
 	bufCoord := uintptr(0)
