@@ -603,7 +603,10 @@ func main() {
 		}
 		defer restore()
 
-		width, height, _ := term.GetSize(int(os.Stdin.Fd()))
+		width, height, _ := vtui.GetTerminalSize()
+		if width <= 0 || height <= 0 {
+			width, height = 80, 25
+		}
 		scr := vtui.NewScreenBuf()
 		if backend == "winapi" || backend == "win32" {
 			scr.Renderer = vtui.NewWin32ConsoleRenderer(scr)
@@ -690,11 +693,15 @@ func main() {
 		return
 	}
 
-	// Default auto-detect mode (neither --gui nor --tty specified)
-	if err := tryRunDefaultGui(); err != nil {
+		// Default auto-detect mode (neither --gui nor --tty specified)
+		// Under Wine, default to TTY console mode because GPU/GUI backends are not yet functional.
+		if !vtui.IsWine() {
+			if err := tryRunDefaultGui(); err == nil {
+				return
+			}
+		}
 		runConsole(ttyBackend)
 	}
-}
 
 func showReactiveDemoDialog() {
 	dlg := buildReactiveDemoDialog()

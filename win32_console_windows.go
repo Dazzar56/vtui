@@ -12,14 +12,33 @@ var (
 	ntdllDLL           = syscall.NewLazyDLL("ntdll.dll")
 	procWineGetVersion = ntdllDLL.NewProc("wine_get_version")
 
-	procWriteConsoleOutputW      = kernel32.NewProc("WriteConsoleOutputW")
-	procSetConsoleCursorPosition = kernel32.NewProc("SetConsoleCursorPosition")
-	procSetConsoleTitleW         = kernel32.NewProc("SetConsoleTitleW")
-)
+		procWriteConsoleOutputW         = kernel32.NewProc("WriteConsoleOutputW")
+		procSetConsoleCursorPosition    = kernel32.NewProc("SetConsoleCursorPosition")
+		procSetConsoleTitleW            = kernel32.NewProc("SetConsoleTitleW")
+		procGetConsoleScreenBufferInfo = kernel32.NewProc("GetConsoleScreenBufferInfo")
+	)
 
-func isWineOS() bool {
-	return procWineGetVersion.Find() == nil
-}
+	type consoleScreenBufferInfo struct {
+		dwSize              win32Coord
+		dwCursorPosition    win32Coord
+		wAttributes         uint16
+		srWindow            win32SmallRect
+		dwMaximumWindowSize win32Coord
+	}
+
+	func isWineOS() bool {
+		return procWineGetVersion.Find() == nil
+	}
+
+	func hasConsoleBufferOS() bool {
+		hOut, err := syscall.GetStdHandle(syscall.STD_OUTPUT_HANDLE)
+		if err != nil || hOut == syscall.InvalidHandle || hOut == 0 {
+			return false
+		}
+		var csbi consoleScreenBufferInfo
+		r1, _, _ := procGetConsoleScreenBufferInfo.Call(uintptr(hOut), uintptr(unsafe.Pointer(&csbi)))
+		return r1 != 0 && csbi.dwSize.X > 0 && csbi.dwSize.Y > 0
+	}
 
 // Win32ConsoleRenderer implements SurfaceRenderer using the classic Windows Console API (WriteConsoleOutputW).
 type Win32ConsoleRenderer struct {

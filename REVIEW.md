@@ -236,5 +236,6 @@ Proposals for future architecture evolution (signals integration, virtual-tree d
 ## Classic Win32 Console API Renderer (`--tty=winapi`)
 
 We added a dedicated Win32 Console API backend using `WriteConsoleOutputW`, `SetConsoleCursorPosition`, and `SetConsoleCursorInfo` without requiring VT/ANSI escape sequences.
-1. **Wine Detection:** Under Wine, the console often lacks full VT100/ANSI emulation. We detect Wine via `wine_get_version` in `ntdll.dll` and default to `winapi`.
-2. **Color Quantization:** 24-bit RGB and 256-indexed palettes are dynamically quantized to the classic 16-color IRGB DOS/Win32 attribute space (`FOREGROUND_*` / `BACKGROUND_*`).
+1. **Wine Detection & Probing:** Under Wine, gogpu windowing is not supported yet, so we default to TTY mode automatically. When running in `wineconsole` (where a Win32 console buffer is present), it defaults to `winapi`; when running from a raw Unix terminal via Wine, it uses `ansi`.
+2. **Console Dimensions Fallback:** To avoid 0x0 buffer allocations in virtualized or non-standard TTY environments (e.g. Wine without a mapped conhost), `GetTerminalSize` falls back to `$COLUMNS`/`$LINES` or `80x25`.
+3. **Color Quantization:** 24-bit RGB and 256-indexed palettes are dynamically quantized to the classic 16-color IRGB DOS/Win32 attribute space (`FOREGROUND_*` / `BACKGROUND_*`).

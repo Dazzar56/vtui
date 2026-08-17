@@ -110,6 +110,23 @@ func TestDefaultConsoleBackend(t *testing.T) {
 		}
 	}
 }
+func TestGetTerminalSize_FallbackSafety(t *testing.T) {
+	oldGet := GetTerminalSize
+	defer func() { GetTerminalSize = oldGet }()
+
+	w, h, err := GetTerminalSize()
+	if err != nil {
+		t.Fatalf("GetTerminalSize returned error: %v", err)
+	}
+	if w <= 0 || h <= 0 {
+		t.Errorf("GetTerminalSize returned invalid dimensions: %dx%d", w, h)
+	}
+}
+
+func TestHasConsoleBuffer_Safety(t *testing.T) {
+	// Calling hasConsoleBufferOS should never panic on any platform
+	_ = hasConsoleBufferOS()
+}
 
 func TestWin32ConsoleRenderer_ScreenBufIntegration(t *testing.T) {
 	SetDefaultPalette()

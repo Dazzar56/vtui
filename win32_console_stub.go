@@ -8,6 +8,10 @@ func isWineOS() bool {
 	return false
 }
 
+func hasConsoleBufferOS() bool {
+	return false
+}
+
 // Win32ConsoleRenderer is a fallback stub for non-Windows platforms.
 type Win32ConsoleRenderer struct {
 	mu sync.Mutex

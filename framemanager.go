@@ -1945,11 +1945,22 @@ func (fm *frameManager) GetSyncStats() string {
 
 // GetTerminalSize is a variable to allow mocking terminal size in tests.
 var GetTerminalSize = func() (int, int, error) {
-	w, h, err := term.GetSize(int(os.Stdout.Fd()))
-	if err != nil {
-		w, h, err = term.GetSize(int(os.Stdin.Fd()))
+	w, h, _ := term.GetSize(int(os.Stdout.Fd()))
+	if w <= 0 || h <= 0 {
+		w, h, _ = term.GetSize(int(os.Stdin.Fd()))
 	}
-	return w, h, err
+	if w <= 0 || h <= 0 {
+		if cols, errC := strconv.Atoi(os.Getenv("COLUMNS")); errC == nil && cols > 0 {
+			w = cols
+		}
+		if lines, errL := strconv.Atoi(os.Getenv("LINES")); errL == nil && lines > 0 {
+			h = lines
+		}
+	}
+	if w <= 0 || h <= 0 {
+		w, h = 80, 25
+	}
+	return w, h, nil
 }
 
 func (fm *frameManager) ResizeWindow(cols, rows int) {
