@@ -233,3 +233,8 @@ observed on Windows while touching unrelated code.
 ## Declarative Bindings Architecture Proposals
 
 Proposals for future architecture evolution (signals integration, virtual-tree diffing, zero-copy shm canvas, runtime introspection) are documented in `ARCH_PROPOSALS.md`.
+## Classic Win32 Console API Renderer (`--tty=winapi`)
+
+We added a dedicated Win32 Console API backend using `WriteConsoleOutputW`, `SetConsoleCursorPosition`, and `SetConsoleCursorInfo` without requiring VT/ANSI escape sequences.
+1. **Wine Detection:** Under Wine, the console often lacks full VT100/ANSI emulation. We detect Wine via `wine_get_version` in `ntdll.dll` and default to `winapi`.
+2. **Color Quantization:** 24-bit RGB and 256-indexed palettes are dynamically quantized to the classic 16-color IRGB DOS/Win32 attribute space (`FOREGROUND_*` / `BACKGROUND_*`).

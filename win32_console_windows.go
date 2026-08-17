@@ -1,0 +1,147 @@
+//go:build windows
+
+package vtui
+
+import (
+	"sync"
+	"syscall"
+	"unsafe"
+)
+
+var (
+	ntdllDLL           = syscall.NewLazyDLL("ntdll.dll")
+	procWineGetVersion = ntdllDLL.NewProc("wine_get_version")
+
+	procWriteConsoleOutputW      = kernel32.NewProc("WriteConsoleOutputW")
+	procSetConsoleCursorPosition = kernel32.NewProc("SetConsoleCursorPosition")
+	procSetConsoleTitleW         = kernel32.NewProc("SetConsoleTitleW")
+)
+
+func isWineOS() bool {
+	return procWineGetVersion.Find() == nil
+}
+
+// Win32ConsoleRenderer implements SurfaceRenderer using the classic Windows Console API (WriteConsoleOutputW).
+type Win32ConsoleRenderer struct {
+	mu          sync.Mutex
+	parent      *ScreenBuf
+	hOut        syscall.Handle
+	consoleBuf  []win32CharInfo
+	lastCols    int
+	lastRows    int
+	lastTitle   string
+	cursorX     int
+	cursorY     int
+	cursorVis   bool
+	cursorShape CursorShape
+	activePal   *[256]uint32
+	forceRedraw bool
+}
+
+// NewWin32ConsoleRenderer creates a renderer using classic Win32 Console API.
+func NewWin32ConsoleRenderer(parent *ScreenBuf) *Win32ConsoleRenderer {
+	hOut, _ := syscall.GetStdHandle(syscall.STD_OUTPUT_HANDLE)
+	return &Win32ConsoleRenderer{
+		parent: parent,
+		hOut:   hOut,
+	}
+}
+
+func (r *Win32ConsoleRenderer) SetPalette(pal *[256]uint32) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.activePal = pal
+}
+
+func (r *Win32ConsoleRenderer) SetCursor(x, y int, visible bool, shape CursorShape) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.cursorX = x
+	r.cursorY = y
+	r.cursorVis = visible
+	r.cursorShape = shape
+}
+
+func (r *Win32ConsoleRenderer) SetWindowTitle(title string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if title == r.lastTitle {
+		return
+	}
+	r.lastTitle = title
+	u16, err := syscall.UTF16PtrFromString(title)
+	if err == nil {
+		procSetConsoleTitleW.Call(uintptr(unsafe.Pointer(u16)))
+	}
+}
+
+func (r *Win32ConsoleRenderer) Render(buf, shadow []CharInfo, w, h int, forceRedraw bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if w <= 0 || h <= 0 {
+		return
+	}
+
+	size := w * h
+	if len(r.consoleBuf) != size || r.lastCols != w || r.lastRows != h {
+		r.consoleBuf = make([]win32CharInfo, size)
+		r.lastCols = w
+		r.lastRows = h
+		forceRedraw = true
+	}
+
+	r.forceRedraw = forceRedraw
+	pal := r.activePal
+	if pal == nil && r.parent != nil {
+		if r.parent.ActivePalette != nil {
+			pal = r.parent.ActivePalette
+		} else {
+			pal = r.parent.ThemePalette
+		}
+	}
+
+	for i := 0; i < size; i++ {
+		if forceRedraw || buf[i] != shadow[i] {
+			r.consoleBuf[i] = charInfoToWin32(buf[i], pal)
+		}
+	}
+}
+
+func (r *Win32ConsoleRenderer) Flush() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if len(r.consoleBuf) == 0 || r.lastCols <= 0 || r.lastRows <= 0 {
+		return
+	}
+
+	w := int16(r.lastCols)
+	h := int16(r.lastRows)
+
+	bufSize := uintptr(uint32(uint16(w)) | (uint32(uint16(h)) << 16))
+	bufCoord := uintptr(0)
+	writeRegion := SmallRect{
+		Left:   0,
+		Top:    0,
+		Right:  w - 1,
+		Bottom: h - 1,
+	}
+
+	procWriteConsoleOutputW.Call(
+		uintptr(r.hOut),
+		uintptr(unsafe.Pointer(&r.consoleBuf[0])),
+		bufSize,
+		bufCoord,
+		uintptr(unsafe.Pointer(&writeRegion)),
+	)
+
+	// Update cursor position and shape
+	if r.cursorVis && r.cursorX >= 0 && r.cursorX < int(w) && r.cursorY >= 0 && r.cursorY < int(h) {
+		cursorCoord := uintptr(uint32(uint16(r.cursorX)) | (uint32(uint16(r.cursorY)) << 16))
+		procSetConsoleCursorPosition.Call(uintptr(r.hOut), cursorCoord)
+		SetCursorStyleOS(true, r.cursorShape)
+	} else {
+		SetCursorStyleOS(false, r.cursorShape)
+	}
+}
