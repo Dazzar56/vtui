@@ -11,6 +11,9 @@ import (
 // RunInGUIWindow launches the TUI within a native graphical window.
 // On platforms without X11/Wayland (like Windows), it defaults to gogpu.
 func RunInGUIWindow(cols, rows int, backend string, fontName string, fontSize float64, setupApp func()) error {
+	if backend == "win32" || backend == "winapi" || backend == "gdi" || backend == "win32gui" {
+		return runInWin32Window(cols, rows, fontName, fontSize, setupApp)
+	}
 	if backend == "x11" {
 		return runInX11Window(cols, rows, fontName, fontSize, setupApp)
 	}
@@ -18,6 +21,11 @@ func RunInGUIWindow(cols, rows int, backend string, fontName string, fontSize fl
 		return runInEbitenWindow(cols, rows, fontName, fontSize, setupApp)
 	}
 	if backend == "gogpu" || backend == "" {
+		if IsWine() && backend == "" {
+			if err := runInWin32Window(cols, rows, fontName, fontSize, setupApp); err == nil {
+				return nil
+			}
+		}
 		if os.Getenv("DISPLAY") != "" && backend == "" {
 			return runInX11Window(cols, rows, fontName, fontSize, setupApp)
 		}

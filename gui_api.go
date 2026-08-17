@@ -10,6 +10,9 @@ import (
 // RunInGUIWindow detects the available display server (Wayland or X11)
 // and launches the TUI within a native graphical window.
 func RunInGUIWindow(cols, rows int, backend string, fontName string, fontSize float64, setupApp func()) error {
+	if backend == "win32" || backend == "winapi" || backend == "gdi" || backend == "win32gui" {
+		return runInWin32Window(cols, rows, fontName, fontSize, setupApp)
+	}
 	if backend == "wayland" {
 		return runInWaylandWindow(cols, rows, fontName, fontSize, setupApp)
 	}

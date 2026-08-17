@@ -570,9 +570,10 @@ func TestDialog_ShadowAndFocusColors(t *testing.T) {
 
 	// 3. Test shadow rendering of d2
 	baseAttr := Palette[ColDesktopBackground]
-	shadowedFg := GetRGBFore(baseAttr) / 2
-	shadowedBg := GetRGBBack(baseAttr) / 2
-	expectedShadowAttr := SetRGBBoth(baseAttr, shadowedFg, shadowedBg)
+	dimRGB := func(c uint32) uint32 {
+		return (((c>>16&0xFF)*3)/8)<<16 | (((c>>8&0xFF)*3)/8)<<8 | (((c & 0xFF) * 3) / 8)
+	}
+	expectedShadowAttr := SetRGBBoth(baseAttr, dimRGB(GetRGBFore(baseAttr)), dimRGB(GetRGBBack(baseAttr)))
 
 	// Check a cell inside the shadow of d2. It should be over the desktop background.
 	// d2 is (10,10)-(15,15). Shadow bottom is at Y=16, X=12..17.

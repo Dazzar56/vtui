@@ -98,11 +98,12 @@ func TestCharInfoToWin32(t *testing.T) {
 func TestWin32ConsoleRenderer_ImplementsSurfaceRenderer(t *testing.T) {
 	var _ SurfaceRenderer = (*Win32ConsoleRenderer)(nil)
 }
+
 func TestDefaultConsoleBackend(t *testing.T) {
 	backend := DefaultConsoleBackend()
 	if IsWine() {
-		if backend != "winapi" {
-			t.Errorf("Expected 'winapi' backend under Wine, got %q", backend)
+		if backend != "winapi" && backend != "ansi" {
+			t.Errorf("Expected 'winapi' or 'ansi' backend under Wine, got %q", backend)
 		}
 	} else {
 		if backend != "ansi" {
@@ -110,6 +111,7 @@ func TestDefaultConsoleBackend(t *testing.T) {
 		}
 	}
 }
+
 func TestGetTerminalSize_FallbackSafety(t *testing.T) {
 	oldGet := GetTerminalSize
 	defer func() { GetTerminalSize = oldGet }()

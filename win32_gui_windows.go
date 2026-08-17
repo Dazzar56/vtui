@@ -1,0 +1,630 @@
+//go:build windows
+
+package vtui
+
+import (
+	"fmt"
+	"image"
+	"io"
+	"runtime"
+	"sync"
+	"syscall"
+	"time"
+	"unsafe"
+
+	"github.com/unxed/vtinput"
+	"golang.org/x/image/font"
+	"golang.org/x/sys/windows"
+)
+
+var (
+	procRegisterClassExW   = user32.NewProc("RegisterClassExW")
+	procCreateWindowExW    = user32.NewProc("CreateWindowExW")
+	procDefWindowProcW     = user32.NewProc("DefWindowProcW")
+	procDestroyWindow      = user32.NewProc("DestroyWindow")
+	procShowWindow         = user32.NewProc("ShowWindow")
+	procUpdateWindow       = user32.NewProc("UpdateWindow")
+	procGetMessageW        = user32.NewProc("GetMessageW")
+	procTranslateMessage   = user32.NewProc("TranslateMessage")
+	procDispatchMessageW   = user32.NewProc("DispatchMessageW")
+	procPostQuitMessage    = user32.NewProc("PostQuitMessage")
+	procPostMessageW       = user32.NewProc("PostMessageW")
+	procBeginPaint         = user32.NewProc("BeginPaint")
+	procEndPaint           = user32.NewProc("EndPaint")
+	procInvalidateRect     = user32.NewProc("InvalidateRect")
+	procGetClientRect      = user32.NewProc("GetClientRect")
+	procAdjustWindowRectEx = user32.NewProc("AdjustWindowRectEx")
+	procLoadCursorW        = user32.NewProc("LoadCursorW")
+	procSetCursor          = user32.NewProc("SetCursor")
+	procSetCapture         = user32.NewProc("SetCapture")
+	procReleaseCapture     = user32.NewProc("ReleaseCapture")
+	procGetKeyState        = user32.NewProc("GetKeyState")
+	procScreenToClient     = user32.NewProc("ScreenToClient")
+
+	gdi32DLL              = syscall.NewLazyDLL("gdi32.dll")
+	procSetDIBitsToDevice = gdi32DLL.NewProc("SetDIBitsToDevice")
+
+	shell32DLL          = syscall.NewLazyDLL("shell32.dll")
+	procDragAcceptFiles = shell32DLL.NewProc("DragAcceptFiles")
+	procDragQueryFileW  = shell32DLL.NewProc("DragQueryFileW")
+	procDragQueryPoint  = shell32DLL.NewProc("DragQueryPoint")
+	procDragFinish      = shell32DLL.NewProc("DragFinish")
+)
+
+var (
+	win32GuiClassRegistered bool
+	win32GuiClassMu         sync.Mutex
+	win32GuiActiveHosts     sync.Map
+)
+
+type win32WndClassExW struct {
+	cbSize        uint32
+	style         uint32
+	lpfnWndProc   uintptr
+	cbClsExtra    int32
+	cbWndExtra    int32
+	hInstance     syscall.Handle
+	hIcon         syscall.Handle
+	hCursor       syscall.Handle
+	hbrBackground syscall.Handle
+	lpszMenuName  *uint16
+	lpszClassName *uint16
+	hIconSm       syscall.Handle
+}
+
+type win32Msg struct {
+	hwnd    syscall.Handle
+	message uint32
+	wParam  uintptr
+	lParam  uintptr
+	time    uint32
+	pt      struct{ x, y int32 }
+}
+
+type win32PaintStruct struct {
+	hdc         syscall.Handle
+	fErase      int32
+	rcPaint     struct{ left, top, right, bottom int32 }
+	fRestore    int32
+	fIncUpdate  int32
+	rgbReserved [32]byte
+}
+
+type win32Point struct {
+	x int32
+	y int32
+}
+
+type Win32GuiHost struct {
+	mu           sync.Mutex
+	hwnd         syscall.Handle
+	hCursor      syscall.Handle
+	renderer     *Win32GuiRenderer
+	reader       *vtinput.Reader
+	scr          *ScreenBuf
+	cols, rows   int
+	cellW, cellH int
+	scale        int
+	winW, winH   int
+	mouseBtn     uint32
+}
+
+func (h *Win32GuiHost) AcceptsDrops() bool { return true }
+func (h *Win32GuiHost) StartDrag(payload DragPayload, allowed DropAction) (DropAction, error) {
+	return DropNone, ErrDragUnsupported
+}
+
+func (h *Win32GuiHost) SetTitle(title string) {
+	h.mu.Lock()
+	hwnd := h.hwnd
+	h.mu.Unlock()
+	if hwnd != 0 {
+		u16, err := syscall.UTF16PtrFromString(WindowTitleWithBackend(title))
+		if err == nil {
+			procSetConsoleTitleW.Call(uintptr(unsafe.Pointer(u16)))
+		}
+	}
+}
+
+func (h *Win32GuiHost) ResizeGrid(cols, rows int) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.cols = cols
+	h.rows = rows
+}
+
+func (h *Win32GuiHost) Invalidate() {
+	h.mu.Lock()
+	hwnd := h.hwnd
+	h.mu.Unlock()
+	if hwnd != 0 {
+		procInvalidateRect.Call(uintptr(hwnd), 0, 0)
+	}
+}
+
+func (h *Win32GuiHost) PostQuit() {
+	h.mu.Lock()
+	hwnd := h.hwnd
+	h.mu.Unlock()
+	if hwnd != 0 {
+		procPostMessageW.Call(uintptr(hwnd), wmClose, 0, 0)
+	}
+}
+
+func (h *Win32GuiHost) sendEvent(ev *vtinput.InputEvent) {
+	if h.reader == nil || h.reader.EventChan == nil {
+		return
+	}
+	select {
+	case h.reader.EventChan <- ev:
+	default:
+		if ev.Type == vtinput.MouseEventType && (ev.MouseEventFlags&vtinput.MouseMoved) != 0 {
+			return
+		}
+		select {
+		case h.reader.EventChan <- ev:
+		default:
+		}
+	}
+}
+
+func (h *Win32GuiHost) getModifiers() vtinput.ControlKeyState {
+	var mods vtinput.ControlKeyState
+	if isWin32KeyDown(0x10) { // VK_SHIFT
+		mods |= vtinput.ShiftPressed
+	}
+	if isWin32KeyDown(0x11) { // VK_CONTROL
+		if isWin32KeyDown(0xA3) { // VK_RCONTROL
+			mods |= vtinput.RightCtrlPressed
+		} else {
+			mods |= vtinput.LeftCtrlPressed
+		}
+	}
+	if isWin32KeyDown(0x12) { // VK_MENU (ALT)
+		if isWin32KeyDown(0xA5) { // VK_RMENU
+			mods |= vtinput.RightAltPressed
+		} else {
+			mods |= vtinput.LeftAltPressed
+		}
+	}
+	if isWin32KeyToggled(0x14) { // VK_CAPITAL
+		mods |= vtinput.CapsLockOn
+	}
+	if isWin32KeyToggled(0x90) { // VK_NUMLOCK
+		mods |= vtinput.NumLockOn
+	}
+	if isWin32KeyToggled(0x91) { // VK_SCROLL
+		mods |= vtinput.ScrollLockOn
+	}
+	return mods
+}
+
+func isWin32KeyDown(vk int) bool {
+	r, _, _ := procGetKeyState.Call(uintptr(vk))
+	return int16(r) < 0
+}
+
+func isWin32KeyToggled(vk int) bool {
+	r, _, _ := procGetKeyState.Call(uintptr(vk))
+	return (r & 1) != 0
+}
+
+func win32GuiWndProc(hwnd syscall.Handle, msg uint32, wParam, lParam uintptr) uintptr {
+	val, ok := win32GuiActiveHosts.Load(hwnd)
+	if !ok {
+		r, _, _ := procDefWindowProcW.Call(uintptr(hwnd), uintptr(msg), wParam, lParam)
+		return r
+	}
+	host := val.(*Win32GuiHost)
+	return host.handleMessage(hwnd, msg, wParam, lParam)
+}
+
+func (h *Win32GuiHost) handleMessage(hwnd syscall.Handle, msg uint32, wParam, lParam uintptr) uintptr {
+	switch msg {
+	case wmEraseBkgnd:
+		return 1 // Suppress GDI background erasure to eliminate flicker
+
+	case wmPaint:
+		var ps win32PaintStruct
+		hdc, _, _ := procBeginPaint.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&ps)))
+		if hdc != 0 {
+			if h.renderer != nil {
+				w, ht, ok := h.renderer.syncBGRA()
+				if ok && w > 0 && ht > 0 {
+					bmi := makeTopDownDIBInfo(w, ht)
+					procSetDIBitsToDevice.Call(
+						hdc,
+						0, 0,
+						uintptr(w), uintptr(ht),
+						0, 0,
+						0, uintptr(ht),
+						uintptr(unsafe.Pointer(&h.renderer.bgraBuf[0])),
+						uintptr(unsafe.Pointer(&bmi)),
+						dibRGBColors,
+					)
+				}
+			}
+			procEndPaint.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&ps)))
+		}
+		return 0
+
+	case wmSize:
+		newW := int(lParam & 0xFFFF)
+		newH := int(lParam >> 16)
+		if wParam != 1 && newW > 0 && newH > 0 {
+			h.mu.Lock()
+			newCols := newW / h.cellW
+			newRows := newH / h.cellH
+			if newCols < 1 {
+				newCols = 1
+			}
+			if newRows < 1 {
+				newRows = 1
+			}
+			sizeChanged := newCols != h.cols || newRows != h.rows
+			h.cols, h.rows = newCols, newRows
+			h.winW, h.winH = newW, newH
+			h.mu.Unlock()
+
+			if sizeChanged && h.reader != nil && h.reader.EventChan != nil {
+				h.sendEvent(&vtinput.InputEvent{Type: vtinput.ResizeEventType})
+			}
+		}
+		return 0
+
+	case wmKeyDown, wmSysKeyDown:
+		vk := uint16(wParam)
+		mods := h.getModifiers()
+		if isSpecialOrModifiedKey(vk, mods) {
+			h.sendEvent(&vtinput.InputEvent{
+				Type:            vtinput.KeyEventType,
+				KeyDown:         true,
+				VirtualKeyCode:  vk,
+				Char:            defaultRuneForVK(vk),
+				ControlKeyState: mods,
+			})
+			if msg == wmSysKeyDown && vk != vtinput.VK_LMENU && vk != vtinput.VK_RMENU {
+				return 0
+			}
+		}
+		r, _, _ := procDefWindowProcW.Call(uintptr(hwnd), uintptr(msg), wParam, lParam)
+		return r
+
+	case wmKeyUp, wmSysKeyUp:
+		vk := uint16(wParam)
+		mods := h.getModifiers()
+		h.sendEvent(&vtinput.InputEvent{
+			Type:            vtinput.KeyEventType,
+			KeyDown:         false,
+			VirtualKeyCode:  vk,
+			ControlKeyState: mods,
+		})
+		r, _, _ := procDefWindowProcW.Call(uintptr(hwnd), uintptr(msg), wParam, lParam)
+		return r
+
+	case wmChar, wmSysChar:
+		r := rune(wParam)
+		mods := h.getModifiers()
+		if r >= ' ' && r != 0x7F {
+			h.sendEvent(&vtinput.InputEvent{
+				Type:            vtinput.KeyEventType,
+				KeyDown:         true,
+				Char:            r,
+				ControlKeyState: mods,
+			})
+			return 0
+		}
+		res, _, _ := procDefWindowProcW.Call(uintptr(hwnd), uintptr(msg), wParam, lParam)
+		return res
+
+	case wmLButtonDown, wmRButtonDown, wmMButtonDown:
+		procSetCapture.Call(uintptr(hwnd))
+		x := int16(int32(int16(lParam & 0xFFFF)))
+		y := int16(int32(int16(lParam >> 16)))
+		cellX := int16(int(x) / h.cellW)
+		cellY := int16(int(y) / h.cellH)
+		var btn uint32
+		switch msg {
+		case wmLButtonDown:
+			btn = uint32(vtinput.FromLeft1stButtonPressed)
+		case wmRButtonDown:
+			btn = uint32(vtinput.RightmostButtonPressed)
+		case wmMButtonDown:
+			btn = uint32(vtinput.FromLeft2ndButtonPressed)
+		}
+		h.mu.Lock()
+		h.mouseBtn |= btn
+		currBtn := h.mouseBtn
+		h.mu.Unlock()
+		h.sendEvent(&vtinput.InputEvent{
+			Type:            vtinput.MouseEventType,
+			MouseX:          cellX,
+			MouseY:          cellY,
+			KeyDown:         true,
+			ButtonState:     currBtn,
+			ControlKeyState: h.getModifiers(),
+		})
+		return 0
+
+	case wmLButtonUp, wmRButtonUp, wmMButtonUp:
+		x := int16(int32(int16(lParam & 0xFFFF)))
+		y := int16(int32(int16(lParam >> 16)))
+		cellX := int16(int(x) / h.cellW)
+		cellY := int16(int(y) / h.cellH)
+		var btn uint32
+		switch msg {
+		case wmLButtonUp:
+			btn = uint32(vtinput.FromLeft1stButtonPressed)
+		case wmRButtonUp:
+			btn = uint32(vtinput.RightmostButtonPressed)
+		case wmMButtonUp:
+			btn = uint32(vtinput.FromLeft2ndButtonPressed)
+		}
+		h.mu.Lock()
+		h.mouseBtn &^= btn
+		currBtn := h.mouseBtn
+		h.mu.Unlock()
+		if currBtn == 0 {
+			procReleaseCapture.Call()
+		}
+		h.sendEvent(&vtinput.InputEvent{
+			Type:            vtinput.MouseEventType,
+			MouseX:          cellX,
+			MouseY:          cellY,
+			KeyDown:         false,
+			ButtonState:     currBtn,
+			ControlKeyState: h.getModifiers(),
+		})
+		return 0
+
+	case wmMouseMove:
+		x := int16(int32(int16(lParam & 0xFFFF)))
+		y := int16(int32(int16(lParam >> 16)))
+		cellX := int16(int(x) / h.cellW)
+		cellY := int16(int(y) / h.cellH)
+		h.mu.Lock()
+		btn := h.mouseBtn
+		h.mu.Unlock()
+		if btn != 0 {
+			h.sendEvent(&vtinput.InputEvent{
+				Type:            vtinput.MouseEventType,
+				MouseX:          cellX,
+				MouseY:          cellY,
+				MouseEventFlags: vtinput.MouseMoved,
+				ButtonState:     btn,
+				ControlKeyState: h.getModifiers(),
+			})
+		}
+		return 0
+
+	case wmMouseWheel:
+		zDelta := int16(wParam >> 16)
+		dir := 1
+		if zDelta < 0 {
+			dir = -1
+		}
+		var pt win32Point
+		pt.x = int32(int16(lParam & 0xFFFF))
+		pt.y = int32(int16(lParam >> 16))
+		procScreenToClient.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&pt)))
+		cellX := int16(int(pt.x) / h.cellW)
+		cellY := int16(int(pt.y) / h.cellH)
+		h.sendEvent(&vtinput.InputEvent{
+			Type:            vtinput.MouseEventType,
+			MouseX:          cellX,
+			MouseY:          cellY,
+			WheelDirection:  dir,
+			ControlKeyState: h.getModifiers(),
+		})
+		return 0
+
+	case wmDropFiles:
+		hDrop := syscall.Handle(wParam)
+		var pt win32Point
+		procDragQueryPoint.Call(uintptr(hDrop), uintptr(unsafe.Pointer(&pt)))
+		cellX := int(pt.x) / h.cellW
+		cellY := int(pt.y) / h.cellH
+
+		countRet, _, _ := procDragQueryFileW.Call(uintptr(hDrop), 0xFFFFFFFF, 0, 0)
+		fileCount := int(countRet)
+		var paths []string
+		for i := 0; i < fileCount; i++ {
+			var buf [1024]uint16
+			procDragQueryFileW.Call(uintptr(hDrop), uintptr(i), uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
+			paths = append(paths, syscall.UTF16ToString(buf[:]))
+		}
+		procDragFinish.Call(uintptr(hDrop))
+
+		if len(paths) > 0 {
+			payload := DragPayload{Paths: paths}
+			mods := h.getModifiers()
+			for _, phase := range []DragPhase{DragEnter, DragOver, DragDrop} {
+				DeliverDragEvent(&DragEvent{
+					Phase:     phase,
+					X:         cellX,
+					Y:         cellY,
+					Modifiers: mods,
+					Allowed:   DropCopy | DropMove | DropLink,
+					Suggested: DropCopy,
+					Payload:   payload,
+				})
+			}
+		}
+		return 0
+
+	case wmSetCursor:
+		if h.hCursor != 0 {
+			procSetCursor.Call(uintptr(h.hCursor))
+			return 1
+		}
+		r, _, _ := procDefWindowProcW.Call(uintptr(hwnd), uintptr(msg), wParam, lParam)
+		return r
+
+	case wmSetFocus:
+		h.sendEvent(&vtinput.InputEvent{Type: vtinput.FocusEventType, SetFocus: true})
+		return 0
+
+	case wmKillFocus:
+		h.sendEvent(&vtinput.InputEvent{Type: vtinput.FocusEventType, SetFocus: false})
+		return 0
+
+	case wmClose:
+		FrameManager.EmitCommand(CmQuit, nil)
+		return 0
+
+	case wmDestroy:
+		win32GuiActiveHosts.Delete(hwnd)
+		procPostQuitMessage.Call(0)
+		return 0
+	}
+
+	r, _, _ := procDefWindowProcW.Call(uintptr(hwnd), uintptr(msg), wParam, lParam)
+	return r
+}
+
+func (h *Win32GuiHost) Close() {
+	h.mu.Lock()
+	hwnd := h.hwnd
+	h.hwnd = 0
+	h.reader = nil
+	h.mu.Unlock()
+	if hwnd != 0 {
+		win32GuiActiveHosts.Delete(hwnd)
+		procDestroyWindow.Call(uintptr(hwnd))
+	}
+}
+
+func RunWin32GuiHost(cols, rows int, fontName string, fontSize float64, setupApp func()) error {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	if fontSize <= 0 {
+		fontSize = 18.0
+	}
+	face, cellW, cellH := loadBestFont(fontName, fontSize, 72.0)
+	if cellW <= 0 || cellH <= 0 {
+		cellW, cellH = 8, 16
+	}
+
+	host := &Win32GuiHost{
+		cols:  cols,
+		rows:  rows,
+		cellW: cellW,
+		cellH: cellH,
+		scale: 1,
+		winW:  cols * cellW,
+		winH:  rows * cellH,
+	}
+
+	className, err := syscall.UTF16PtrFromString("VTUI_WIN32_GUI")
+	if err != nil {
+		return err
+	}
+
+	win32GuiClassMu.Lock()
+	if !win32GuiClassRegistered {
+		hInst, _ := syscall.GetModuleHandle(nil)
+		hCursor, _, _ := procLoadCursorW.Call(0, 32512) // IDC_ARROW
+		host.hCursor = syscall.Handle(hCursor)
+
+		wc := win32WndClassExW{
+			cbSize:        uint32(unsafe.Sizeof(win32WndClassExW{})),
+			style:         csHRedraw | csVRedraw | csDblClks,
+			lpfnWndProc:   syscall.NewCallback(win32GuiWndProc),
+			hInstance:     hInst,
+			hCursor:       host.hCursor,
+			lpszClassName: className,
+		}
+		ret, _, err := procRegisterClassExW.Call(uintptr(unsafe.Pointer(&wc)))
+		if ret == 0 && err != windows.ERROR_CLASS_ALREADY_EXISTS {
+			win32GuiClassMu.Unlock()
+			return fmt.Errorf("failed to register Win32 GUI window class: %v", err)
+		}
+		win32GuiClassRegistered = true
+	}
+	win32GuiClassMu.Unlock()
+
+	style := uint32(wsOverlappedWindow | wsVisible)
+	var rc struct{ left, top, right, bottom int32 }
+	rc.right = int32(cols * cellW)
+	rc.bottom = int32(rows * cellH)
+	procAdjustWindowRectEx.Call(uintptr(unsafe.Pointer(&rc)), uintptr(style), 0, uintptr(wsExAcceptFiles|wsExAppWindow))
+	adjW := rc.right - rc.left
+	adjH := rc.bottom - rc.top
+
+	titlePtr, _ := syscall.UTF16PtrFromString(WindowTitleWithBackend(AppName))
+	hInst, _ := syscall.GetModuleHandle(nil)
+
+	hwndRet, _, err := procCreateWindowExW.Call(
+		uintptr(wsExAcceptFiles|wsExAppWindow),
+		uintptr(unsafe.Pointer(className)),
+		uintptr(unsafe.Pointer(titlePtr)),
+		uintptr(style),
+		0x80000000, // CW_USEDEFAULT
+		0x80000000,
+		uintptr(adjW),
+		uintptr(adjH),
+		0, 0,
+		uintptr(hInst),
+		0,
+	)
+	if hwndRet == 0 {
+		return fmt.Errorf("failed to create Win32 GUI window: %v", err)
+	}
+
+	host.hwnd = syscall.Handle(hwndRet)
+	win32GuiActiveHosts.Store(host.hwnd, host)
+	procDragAcceptFiles.Call(hwndRet, 1)
+
+	scr := NewScreenBuf()
+	scr.AllocBuf(cols, rows)
+	renderer := NewWin32GuiRenderer(host, face, cellW, cellH)
+	scr.Renderer = renderer
+	scr.Graphics().SetProtocol(GraphicsNative)
+	scr.Graphics().SetCellSize(cellW, cellH)
+	host.renderer = renderer
+	host.scr = scr
+
+	FrameManager.Init(scr)
+
+	pr, _ := io.Pipe()
+	reader := vtinput.NewReader(pr, true)
+	host.reader = reader
+
+	GetTerminalSize = func() (int, int, error) {
+		host.mu.Lock()
+		defer host.mu.Unlock()
+		return host.cols, host.rows, nil
+	}
+
+	DisableTerminalClipboard()
+	SetDragBackend(host)
+	setupApp()
+	SetActiveBackend("win32", fmt.Sprintf("cell %dx%d, font %q", cellW, cellH, fontName), "GDI SetDIBitsToDevice")
+	setWheelNotchLines(getSystemScrollLines())
+
+	procShowWindow.Call(hwndRet, 1)
+	procUpdateWindow.Call(hwndRet)
+
+	go func() {
+		defer LogAndRepanic("win32 FrameManager")
+		FrameManager.Run(reader)
+		host.PostQuit()
+	}()
+
+	var msg win32Msg
+	for {
+		r, _, _ := procGetMessageW.Call(uintptr(unsafe.Pointer(&msg)), 0, 0, 0)
+		if int32(r) <= 0 {
+			break
+		}
+		procTranslateMessage.Call(uintptr(unsafe.Pointer(&msg)))
+		procDispatchMessageW.Call(uintptr(unsafe.Pointer(&msg)))
+	}
+
+	return nil
+}
+
+func runInWin32Window(cols, rows int, fontName string, fontSize float64, setupApp func()) error {
+	return RunWin32GuiHost(cols, rows, fontName, fontSize, setupApp)
+}

@@ -1914,6 +1914,9 @@ func (fm *frameManager) GetBackendName() string {
 	if strings.Contains(rName, "Win32Console") {
 		return "Console (WinAPI)"
 	}
+	if strings.Contains(rName, "Win32Gui") {
+		return "GUI (Win32)"
+	}
 	if strings.Contains(rName, "Ansi") {
 		return "Console (ANSI)"
 	}
