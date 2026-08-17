@@ -502,6 +502,10 @@ func (h *Win32GuiHost) handleMessage(hwnd syscall.Handle, msg uint32, wParam, lP
 		return 0
 
 	case wmClose:
+		if h.closed || FrameManager.IsShutdown() {
+			procDestroyWindow.Call(uintptr(hwnd))
+			return 0
+		}
 		FrameManager.EmitCommand(CmQuit, nil)
 		return 0
 

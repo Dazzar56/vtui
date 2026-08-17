@@ -109,3 +109,29 @@ func TestFrameManager_GetBackendName_Win32Gui(t *testing.T) {
 		t.Errorf("GetBackendName() = %q, want 'GUI (Win32)'", name)
 	}
 }
+
+func TestWin32Gui_PostQuitState(t *testing.T) {
+	host := &Win32GuiHost{
+		closeChan: make(chan struct{}),
+	}
+
+	if host.closed {
+		t.Error("host should not be closed initially")
+	}
+
+	host.PostQuit()
+
+	if !host.closed {
+		t.Error("PostQuit should mark host as closed")
+	}
+
+	select {
+	case <-host.closeChan:
+		// success: closeChan closed
+	default:
+		t.Error("closeChan was not closed on PostQuit")
+	}
+
+	// Calling PostQuit again should be safe and idempotent
+	host.PostQuit()
+}
