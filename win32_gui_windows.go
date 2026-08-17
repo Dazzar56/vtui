@@ -4,20 +4,18 @@ package vtui
 
 import (
 	"fmt"
-	"image"
 	"io"
 	"runtime"
 	"sync"
 	"syscall"
-	"time"
 	"unsafe"
 
 	"github.com/unxed/vtinput"
-	"golang.org/x/image/font"
 	"golang.org/x/sys/windows"
 )
 
 var (
+	procGetModuleHandleW   = kernel32.NewProc("GetModuleHandleW")
 	procRegisterClassExW   = user32.NewProc("RegisterClassExW")
 	procCreateWindowExW    = user32.NewProc("CreateWindowExW")
 	procDefWindowProcW     = user32.NewProc("DefWindowProcW")
@@ -523,7 +521,7 @@ func RunWin32GuiHost(cols, rows int, fontName string, fontSize float64, setupApp
 
 	win32GuiClassMu.Lock()
 	if !win32GuiClassRegistered {
-		hInst, _ := syscall.GetModuleHandle(nil)
+		hInst, _, _ := procGetModuleHandleW.Call(0)
 		hCursor, _, _ := procLoadCursorW.Call(0, 32512) // IDC_ARROW
 		host.hCursor = syscall.Handle(hCursor)
 
@@ -531,7 +529,7 @@ func RunWin32GuiHost(cols, rows int, fontName string, fontSize float64, setupApp
 			cbSize:        uint32(unsafe.Sizeof(win32WndClassExW{})),
 			style:         csHRedraw | csVRedraw | csDblClks,
 			lpfnWndProc:   syscall.NewCallback(win32GuiWndProc),
-			hInstance:     hInst,
+			hInstance:     syscall.Handle(hInst),
 			hCursor:       host.hCursor,
 			lpszClassName: className,
 		}
@@ -553,7 +551,7 @@ func RunWin32GuiHost(cols, rows int, fontName string, fontSize float64, setupApp
 	adjH := rc.bottom - rc.top
 
 	titlePtr, _ := syscall.UTF16PtrFromString(WindowTitleWithBackend(AppName))
-	hInst, _ := syscall.GetModuleHandle(nil)
+	hInst, _, _ := procGetModuleHandleW.Call(0)
 
 	hwndRet, _, err := procCreateWindowExW.Call(
 		uintptr(wsExAcceptFiles|wsExAppWindow),
