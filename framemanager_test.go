@@ -316,6 +316,40 @@ func TestFrameManager_Toast(t *testing.T) {
 		t.Error("Toast did not expire")
 	}
 }
+func TestFrameManager_ToastStyle(t *testing.T) {
+	fm := &frameManager{}
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	fm.Init(scr)
+	fm.Push(&mockFrame{})
+
+	oldFm := FrameManager
+	FrameManager = fm
+	defer func() { FrameManager = oldFm }()
+
+	attr := SetRGBBoth(0, 0x112233, 0xAABBCC)
+	ShowToastStyled("Styled", 100*time.Millisecond, ToastStyle{Attr: attr, Row: -1})
+
+	select {
+	case task := <-fm.TaskChan:
+		task()
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("Toast task not posted")
+	}
+
+	fm.renderPhase()
+
+	// The styled toast must land centred on the last row with its colours
+	// (the message carries a leading space, so the first letter is at x+1).
+	c := scr.GetCell(37, 24)
+	if c.Attributes != attr {
+		t.Errorf("bottom toast must use the styled attribute, got %#x want %#x", c.Attributes, attr)
+	}
+	if c.Char != uint64('S') {
+		t.Errorf("bottom toast must draw the message, got %q", rune(c.Char))
+	}
+}
+
 func TestFrameManager_GetTopFrameType(t *testing.T) {
 	fm := &frameManager{}
 	fm.Init(NewSilentScreenBuf())
@@ -2961,5 +2995,29 @@ func TestFrameManager_ModifierKeyPressState(t *testing.T) {
 
 	if fm.KeyBar.shiftState {
 		t.Error("Expected shiftState to be false on Shift KeyUp despite active ControlKeyState")
+	}
+}
+
+// AddAnimation must wake the heartbeat at once: the idle poll alone would
+// wait 250ms and miss short animations like the viewer toast's wall flash.
+func TestAddAnimationWakesHeartbeat(t *testing.T) {
+	fm := NewFrameManager()
+	fm.animWake = make(chan struct{}, 1)
+	fm.AddAnimation(func(float64) bool { return true })
+	select {
+	case <-fm.animWake:
+	default:
+		t.Error("AddAnimation must signal animWake")
+	}
+}
+
+// AddAnimation must restart the dt clock after an idle gap, otherwise the
+// first tick would span the whole idle duration and jump the animation.
+func TestAddAnimationResetsStaleDt(t *testing.T) {
+	fm := NewFrameManager()
+	fm.lastAnim = time.Now().Add(-10 * time.Second)
+	fm.AddAnimation(func(float64) bool { return true })
+	if !fm.lastAnim.IsZero() {
+		t.Error("AddAnimation must reset lastAnim when transitioning from idle")
 	}
 }

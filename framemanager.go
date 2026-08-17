@@ -264,6 +264,7 @@ type frameManager struct {
 	animations             []func(dt float64) bool
 	animMu                 sync.Mutex
 	lastAnim               time.Time
+	animWake               chan struct{} // heartbeat wakes on new animations
 	eventSink              func(UIEvent)
 	eventSinkMu            sync.RWMutex
 	hostMode               bool
@@ -277,15 +278,31 @@ func (fm *frameManager) SetHostMode(enabled bool) {
 type Toast struct {
 	Message string
 	Expires time.Time
+	Style   ToastStyle
+}
+
+// ToastStyle is the optional presentation of a toast: colours and row.
+// The zero value is the default: white on dark grey at the top row.
+type ToastStyle struct {
+	// Attr overrides the default toast colours; zero keeps the default.
+	Attr uint64
+	// Row places the toast vertically: 0 = top (default), a positive value
+	// is an absolute row, a negative one counts from the bottom (-1 = last).
+	Row int
 }
 
 // ShowToast displays a non-blocking popup message at the top of the screen that disappears after the duration.
 func ShowToast(msg string, dur time.Duration) {
+	ShowToastStyled(msg, dur, ToastStyle{})
+}
+
+// ShowToastStyled is ShowToast with an explicit style (colours and row).
+func ShowToastStyled(msg string, dur time.Duration, style ToastStyle) {
 	if FrameManager == nil {
 		return
 	}
 	FrameManager.PostTask(func() {
-		FrameManager.currentToast = &Toast{Message: msg, Expires: time.Now().Add(dur)}
+		FrameManager.currentToast = &Toast{Message: msg, Expires: time.Now().Add(dur), Style: style}
 		FrameManager.Redraw()
 		go func() {
 			time.Sleep(dur)
@@ -323,7 +340,18 @@ func NewFrameManager() *FrameManagerType {
 func (fm *frameManager) AddAnimation(anim func(dt float64) bool) {
 	fm.animMu.Lock()
 	defer fm.animMu.Unlock()
+	if len(fm.animations) == 0 {
+		fm.lastAnim = time.Time{}
+	}
 	fm.animations = append(fm.animations, anim)
+	// Wake the heartbeat at once: a 250ms poll would miss short animations
+	// such as the viewer toast's wall flash.
+	if fm.animWake != nil {
+		select {
+		case fm.animWake <- struct{}{}:
+		default:
+		}
+	}
 }
 
 func (fm *frameManager) tickAnimations() {
@@ -666,6 +694,10 @@ func (fm *frameManager) Init(scr *ScreenBuf) {
 
 	if fm.RedrawChan == nil {
 		fm.RedrawChan = make(chan struct{}, 1)
+	}
+
+	if fm.animWake == nil {
+		fm.animWake = make(chan struct{}, 1)
 	}
 
 	if fm.taskChanIn == nil {
@@ -2029,22 +2061,49 @@ func (fm *frameManager) Run(readers ...*vtinput.Reader) {
 	sigChan := make(chan os.Signal, 1)
 	watchResizeSignal(sigChan)
 
-	// Heartbeat for animations and cursor blinking
+	// Closed when Run exits, so the idle heartbeat and resize forwarder stop.
+	done := make(chan struct{})
+	defer close(done)
+
+	// Heartbeat for animations: sleeps when idle and ticks at ~30fps only while animations are active.
 	go func() {
-		for fm.running {
+		tmr := time.NewTimer(33 * time.Millisecond)
+		if !tmr.Stop() {
+			select {
+			case <-tmr.C:
+			default:
+			}
+		}
+		defer tmr.Stop()
+
+		for {
 			fm.animMu.Lock()
 			hasAnims := len(fm.animations) > 0
 			fm.animMu.Unlock()
 
-			if hasAnims {
+			if !hasAnims {
+				// No animations: sleep until a new animation is registered or exit.
+				select {
+				case <-fm.animWake:
+					continue
+				case <-done:
+					return
+				}
+			}
+
+			tmr.Reset(33 * time.Millisecond)
+			select {
+			case <-fm.animWake:
+				if !tmr.Stop() {
+					select {
+					case <-tmr.C:
+					default:
+					}
+				}
+			case <-tmr.C:
 				fm.PostTask(func() { fm.tickAnimations() })
-				time.Sleep(33 * time.Millisecond) // ~30fps
-			} else {
-				fm.animMu.Lock()
-				fm.lastAnim = time.Time{}
-				fm.animMu.Unlock()
-				time.Sleep(250 * time.Millisecond)
-				fm.Redraw()
+			case <-done:
+				return
 			}
 		}
 	}()
@@ -2066,20 +2125,25 @@ func (fm *frameManager) Run(readers ...*vtinput.Reader) {
 		}
 	}()
 
+	// Forward resize notifications to the event queue
+	go func() {
+		for {
+			select {
+			case <-sigChan:
+				fm.PostTask(func() { fm.handleResize() })
+			case <-sizeChan:
+				fm.PostTask(func() { fm.handleResize() })
+			case <-done:
+				return
+			}
+		}
+	}()
+
 	for fm.running && !fm.IsShutdown() {
 		if !fm.hostMode && len(fm.frames) == 0 {
 			break
 		}
-		select {
-		case <-sigChan:
-			fm.handleResize()
-			continue
-		case <-sizeChan:
-			fm.handleResize()
-			continue
-		default:
-		}
-		if !fm.Step(10 * time.Millisecond) {
+		if !fm.Step(-1) {
 			if !fm.hostMode {
 				break
 			}
@@ -2211,11 +2275,26 @@ func (fm *frameManager) renderPhase() {
 			} else {
 				msg := " " + fm.currentToast.Message + " "
 				attr := SetRGBBoth(0, 0xFFFFFF, 0x444444) // White on Dark Gray
+				row := 0
+				if fm.currentToast.Style.Attr != 0 {
+					attr = fm.currentToast.Style.Attr
+				}
+				switch {
+				case fm.currentToast.Style.Row < 0:
+					row = fm.scr.height + fm.currentToast.Style.Row
+				case fm.currentToast.Style.Row > 0:
+					row = fm.currentToast.Style.Row
+				}
+				if row < 0 {
+					row = 0
+				} else if row >= fm.scr.height {
+					row = fm.scr.height - 1
+				}
 				x := (fm.scr.width - runewidth.StringWidth(msg)) / 2
 				if x < 0 {
 					x = 0
 				}
-				fm.scr.Write(x, 0, StringToCharInfo(msg, attr))
+				fm.scr.Write(x, row, StringToCharInfo(msg, attr))
 			}
 		}
 

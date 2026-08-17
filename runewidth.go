@@ -198,6 +198,16 @@ func FillCharInfo(target []CharInfo, data []byte, attr uint64) []CharInfo {
 	return target
 }
 
+// FillCharInfoString fills target with CharInfo for s with attr, reusing target capacity.
+func FillCharInfoString(target []CharInfo, s string, attr uint64) []CharInfo {
+	s = VisualString(s)
+	target = target[:0]
+	ForEachCluster(s, func(cluster string, w, _ int) {
+		target = AppendCluster(target, cluster, w, attr)
+	})
+	return target
+}
+
 // FillCharInfoWithSelection combines FillCharInfo and selection highlighting in a single pass.
 // Selection bounds are byte offsets into the whole line; a cluster is selected
 // when the byte its first rune starts at falls inside them.
