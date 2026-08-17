@@ -98,6 +98,7 @@ type Table struct {
 	// matchSpans holds the matched cell span per Rows index for needle
 	// highlighting; col == -1 means the row is not matched.
 	matchSpans []cellHighlight
+	cellBuf    []CharInfo
 }
 
 // searchMatch is one row passing the QuickSearch filter.
@@ -544,14 +545,14 @@ func (t *Table) drawRow(scr *ScreenBuf, y int, rowIdx int, attr uint64, widths [
 		if rowIdx == -1 && colIdx == t.SortColumn {
 			cellText = t.formatSortedHeader(text, widths[colIdx], col.Alignment)
 		}
-		cis := StringToCharInfo(cellText, cellAttr)
+		t.cellBuf = FillCharInfoString(t.cellBuf, cellText, cellAttr)
 		// Invert the colors of the matched substring (QuickSearch highlight).
 		if rowIdx >= 0 && len(t.searchRunes) > 0 && rowIdx < len(t.matchSpans) {
 			if span := t.matchSpans[rowIdx]; span.col == colIdx {
-				t.applyCellHighlight(cis, text, widths[colIdx], col.Alignment, span)
+				t.applyCellHighlight(t.cellBuf, text, widths[colIdx], col.Alignment, span)
 			}
 		}
-		scr.Write(currX, y, cis)
+		scr.Write(currX, y, t.cellBuf)
 		currX += widths[colIdx]
 
 		// Skip separator space if not the last column
