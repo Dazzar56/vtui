@@ -30,6 +30,7 @@ func (bf *BaseFrame) SetExitCode(code int) {
 
 func (bf *BaseFrame) IsDone() bool                { return bf.Done }
 func (bf *BaseFrame) IsBusy() bool                { return bf.Busy }
+func (bf *BaseFrame) SetBusy(b bool)              { bf.Busy = b }
 func (bf *BaseFrame) IsAttentionSuppressed() bool { return bf.AttentionSuppressed }
 func (bf *BaseFrame) IsModal() bool               { return bf.Modal }
 func (bf *BaseFrame) GetWindowNumber() int        { return bf.Number }
