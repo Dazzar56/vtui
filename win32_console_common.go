@@ -21,6 +21,10 @@ const (
 	Win32CommonLvbUnderscore     uint16 = 0x8000
 )
 
+// win32Coord and win32SmallRect aliases for Win32 Console API structures.
+type win32Coord = Coord
+type win32SmallRect = SmallRect
+
 // ansiToWin32ColorMap maps 0..15 ANSI/XTerm palette index to 0..15 Win32 IRGB attribute.
 var ansiToWin32ColorMap = [16]uint16{
 	0,                                       // 0: Black

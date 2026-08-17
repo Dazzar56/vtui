@@ -127,6 +127,23 @@ func TestHasConsoleBuffer_Safety(t *testing.T) {
 	// Calling hasConsoleBufferOS should never panic on any platform
 	_ = hasConsoleBufferOS()
 }
+func TestWin32CoordAndSmallRectTypes(t *testing.T) {
+	var c win32Coord
+	c.X = 80
+	c.Y = 25
+	if c.X != 80 || c.Y != 25 {
+		t.Errorf("win32Coord values mismatch: got (%d, %d)", c.X, c.Y)
+	}
+
+	var sr win32SmallRect
+	sr.Left = 0
+	sr.Top = 0
+	sr.Right = 79
+	sr.Bottom = 24
+	if sr.Right != 79 || sr.Bottom != 24 {
+		t.Errorf("win32SmallRect values mismatch: got right=%d, bottom=%d", sr.Right, sr.Bottom)
+	}
+}
 
 func TestWin32ConsoleRenderer_ScreenBufIntegration(t *testing.T) {
 	SetDefaultPalette()

@@ -693,15 +693,15 @@ func main() {
 		return
 	}
 
-		// Default auto-detect mode (neither --gui nor --tty specified)
-		// Under Wine, default to TTY console mode because GPU/GUI backends are not yet functional.
-		if !vtui.IsWine() {
-			if err := tryRunDefaultGui(); err == nil {
-				return
-			}
+	// Default auto-detect mode (neither --gui nor --tty specified)
+	// Under Wine, default to TTY console mode because GPU/GUI backends are not yet functional.
+	if !vtui.IsWine() {
+		if err := tryRunDefaultGui(); err == nil {
+			return
 		}
-		runConsole(ttyBackend)
 	}
+	runConsole(ttyBackend)
+}
 
 func showReactiveDemoDialog() {
 	dlg := buildReactiveDemoDialog()
