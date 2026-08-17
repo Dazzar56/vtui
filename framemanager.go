@@ -304,6 +304,11 @@ func (fm *frameManager) GetActiveToast() string {
 	return ""
 }
 
+// ClearToast immediately dismisses any active toast.
+func (fm *frameManager) ClearToast() {
+	fm.currentToast = nil
+}
+
 // FrameManager is the global instance of the frame manager.
 var FrameManager = &frameManager{}
 
@@ -657,6 +662,7 @@ func (fm *frameManager) Init(scr *ScreenBuf) {
 	fm.workspaceNewTabX = -1
 	fm.workspaceTabDrag = nil
 	fm.workspaceTabDragHits = nil
+	fm.currentToast = nil
 
 	if fm.RedrawChan == nil {
 		fm.RedrawChan = make(chan struct{}, 1)
