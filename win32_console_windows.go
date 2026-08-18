@@ -5,6 +5,7 @@ package vtui
 import (
 	"sync"
 	"syscall"
+	"time"
 	"unsafe"
 )
 
@@ -138,6 +139,42 @@ type Win32ConsoleRenderer struct {
 	lastCursorShape CursorShape
 	lastCursorX     int
 	lastCursorY     int
+
+	// dirty tracks whether Render() found any actual content change since
+	// the last Flush. Flush used to call WriteConsoleOutputW over the whole
+	// buffer unconditionally on every call, including the idle heartbeat's
+	// ~250ms ticks where nothing changed at all -- rewriting every cell,
+	// including whatever glyph sits under the cursor, disturbs Wine's
+	// native cursor blink rendering independently of the
+	// SetConsoleCursorInfo calls addressed above. See f4 issue #518.
+	dirty bool
+
+	// blinkState/lastBlinkTime/blinkStateSet drive the cursor's own blink
+	// cycle in software, on a fixed wall-clock period, instead of trusting
+	// the console frontend's native blink timer. Testing against real Wine
+	// showed the two console frontends disagree about what keeps a native
+	// blink alive: wineconsole's blink stops entirely once Flush stops
+	// making periodic calls (the dirty-skip above silenced it), while
+	// `wine f4.exe` from a unix terminal restarts its blink cycle on every
+	// redundant SetConsoleCursorInfo call, however unchanged (jittery,
+	// fast). Neither wants the same thing from us. Driving visibility
+	// ourselves on a fixed period sidesteps both: the toggle happens at a
+	// steady rate regardless of how often Flush is called, and Flush only
+	// issues an actual Win32 call on the toggle boundary, not on every tick.
+	blinkState    bool
+	lastBlinkTime time.Time
+	blinkStateSet bool
+
+	// realCursorSet/lastRealCursor* track SetCursor()'s raw request
+	// (independent of the blink phase) so a genuine move/visibility change
+	// can restart the blink cycle from visible -- otherwise the cursor
+	// could stay invisible for up to 530ms right after the user starts
+	// typing again, if that happened to land mid blink-off.
+	realCursorSet       bool
+	lastRealCursorVis   bool
+	lastRealCursorShape CursorShape
+	lastRealCursorX     int
+	lastRealCursorY     int
 }
 
 // NewWin32ConsoleRenderer creates a renderer using classic Win32 Console API with a dedicated screen buffer.
@@ -241,6 +278,7 @@ func (r *Win32ConsoleRenderer) Render(buf, shadow []CharInfo, w, h int, forceRed
 	for i := 0; i < size; i++ {
 		if forceRedraw || buf[i] != shadow[i] {
 			r.consoleBuf[i] = charInfoToWin32(buf[i], pal)
+			r.dirty = true
 		}
 	}
 }
@@ -263,28 +301,75 @@ func (r *Win32ConsoleRenderer) Flush() {
 
 	resetConsoleWindowPos(targetHandle, w, h)
 
-	bufSize := uintptr(uint32(uint16(w)) | (uint32(uint16(h)) << 16))
-	bufCoord := uintptr(0)
-	writeRegion := SmallRect{
-		Left:   0,
-		Top:    0,
-		Right:  w - 1,
-		Bottom: h - 1,
+	// Drive the blink cycle ourselves on a fixed period instead of trusting
+	// the console frontend's native timer (see blinkState's doc comment).
+	// A toggle forces both the cursor cell and, if the cursor's own cell
+	// happens to be the only thing that would otherwise look unchanged,
+	// the content write below, so the OS calls that actually flip
+	// visibility keep happening on schedule even while the screen is
+	// otherwise fully idle.
+	now := time.Now()
+	blinkToggled := false
+	if !r.blinkStateSet {
+		r.blinkState = true
+		r.lastBlinkTime = now
+		r.blinkStateSet = true
+		blinkToggled = true
+	} else if now.Sub(r.lastBlinkTime) >= 530*time.Millisecond {
+		r.blinkState = !r.blinkState
+		r.lastBlinkTime = now
+		blinkToggled = true
 	}
 
-	procWriteConsoleOutputW.Call(
-		uintptr(targetHandle),
-		uintptr(unsafe.Pointer(&r.consoleBuf[0])),
-		bufSize,
-		bufCoord,
-		uintptr(unsafe.Pointer(&writeRegion)),
-	)
+	// A real cursor move/visibility change (typing, navigation) should show
+	// the cursor immediately rather than leaving it stranded in whatever
+	// blink phase it happened to be in. Restart the cycle from visible.
+	realChanged := !r.realCursorSet ||
+		r.lastRealCursorVis != r.cursorVis ||
+		r.lastRealCursorShape != r.cursorShape ||
+		r.lastRealCursorX != r.cursorX ||
+		r.lastRealCursorY != r.cursorY
+	if realChanged {
+		r.blinkState = true
+		r.lastBlinkTime = now
+		blinkToggled = true
+		r.realCursorSet = true
+		r.lastRealCursorVis = r.cursorVis
+		r.lastRealCursorShape = r.cursorShape
+		r.lastRealCursorX = r.cursorX
+		r.lastRealCursorY = r.cursorY
+	}
+
+	if blinkToggled {
+		r.dirty = true
+	}
+
+	if r.dirty {
+		bufSize := uintptr(uint32(uint16(w)) | (uint32(uint16(h)) << 16))
+		bufCoord := uintptr(0)
+		writeRegion := SmallRect{
+			Left:   0,
+			Top:    0,
+			Right:  w - 1,
+			Bottom: h - 1,
+		}
+
+		procWriteConsoleOutputW.Call(
+			uintptr(targetHandle),
+			uintptr(unsafe.Pointer(&r.consoleBuf[0])),
+			bufSize,
+			bufCoord,
+			uintptr(unsafe.Pointer(&writeRegion)),
+		)
+		r.dirty = false
+	}
 
 	// Update cursor position and shape, but only when something about the
 	// cursor actually changed since the last call -- see cursorStateSet's
-	// doc comment for why this matters under Wine.
-	visNow := r.cursorVis && r.cursorX >= 0 && r.cursorX < int(w) && r.cursorY >= 0 && r.cursorY < int(h)
-	unchanged := r.cursorStateSet &&
+	// doc comment for why this matters under Wine. blinkToggled always
+	// counts as a change, so the visibility flip itself is never skipped.
+	visNow := r.cursorVis && r.blinkState && r.cursorX >= 0 && r.cursorX < int(w) && r.cursorY >= 0 && r.cursorY < int(h)
+	unchanged := !blinkToggled && r.cursorStateSet &&
 		r.lastCursorVis == visNow &&
 		r.lastCursorShape == r.cursorShape &&
 		(!visNow || (r.lastCursorX == r.cursorX && r.lastCursorY == r.cursorY))
