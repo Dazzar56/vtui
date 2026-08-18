@@ -89,6 +89,16 @@ var (
 	kernel32DLL              = syscall.NewLazyDLL("kernel32.dll")
 	procGetConsoleCursorInfo = kernel32DLL.NewProc("GetConsoleCursorInfo")
 	procSetConsoleCursorInfo = kernel32DLL.NewProc("SetConsoleCursorInfo")
+
+	// initialCursorSize is the dwSize the console already had before f4
+	// ever touched it -- captured once, on the first SetCursorStyleOS
+	// call. Real FAR2 for Windows does the same thing (far/interf.cpp:
+	// SetInitialCursorType/InitialCursorInfo.dwSize) rather than assuming
+	// a fixed percentage: the console's own default already matches
+	// whatever that system/Wine build considers a normal thin cursor, and
+	// a hardcoded guess (previously 30%) can look noticeably thicker than
+	// it. 0 means "not captured yet".
+	initialCursorSize uint32
 )
 
 func SetCursorStyleOS(visible bool, shape CursorShape) {
@@ -103,6 +113,17 @@ func SetCursorStyleOS(visible bool, shape CursorShape) {
 		return
 	}
 
+	if initialCursorSize == 0 {
+		if info.size >= 1 && info.size <= 100 {
+			initialCursorSize = info.size
+		} else {
+			// GetConsoleCursorInfo can report 0 under some registry
+			// quirks (see CONSOLE_CURSOR_INFO docs); 25 matches the
+			// classic cmd.exe/conhost underline-cursor default.
+			initialCursorSize = 25
+		}
+	}
+
 	if visible {
 		info.visible = 1
 	} else {
@@ -112,7 +133,7 @@ func SetCursorStyleOS(visible bool, shape CursorShape) {
 	if shape == CursorShapeBlock {
 		info.size = 100
 	} else {
-		info.size = 30
+		info.size = initialCursorSize
 	}
 
 	procSetConsoleCursorInfo.Call(uintptr(hOut), uintptr(unsafe.Pointer(&info)))
