@@ -25,6 +25,22 @@ type TableRow interface {
 	GetCellText(col int) string
 }
 
+// TableCellProvider provides direct cell data without allocating TableRow wrappers.
+type TableCellProvider interface {
+	RowCount() int
+	GetCellText(row, col int) string
+}
+
+// TableCellAttrProvider allows cell-specific attributes via TableCellProvider.
+type TableCellAttrProvider interface {
+	GetCellAttr(row, col int, defaultAttr uint64) uint64
+}
+
+// TableCellSelectProvider allows row/cell selection via TableCellProvider.
+type TableCellSelectProvider interface {
+	IsRowSelected(row int) bool
+}
+
 // Table is a generic control for displaying tabular data.
 // SelectableRow is an optional interface for rows that can be selected.
 type SelectableRow interface {
@@ -44,8 +60,9 @@ type CellColorableRow interface {
 // Table is a generic control for displaying tabular data.
 type Table struct {
 	ScrollView
-	Columns []TableColumn
-	Rows    []TableRow
+	Columns      []TableColumn
+	Rows         []TableRow
+	cellProvider TableCellProvider
 
 	SelectCol        int
 	CellSelection    bool
@@ -197,6 +214,7 @@ func (c *TableColumn) minWidth() int {
 
 func (t *Table) SetRows(rows []TableRow) {
 	t.rowProvider = nil
+	t.cellProvider = nil
 	t.Rows = rows
 	t.ItemCount = len(rows)
 	t.resort()
@@ -213,8 +231,36 @@ func (t *Table) SetRows(rows []TableRow) {
 // SetRowProvider configures an on-demand data source for virtualized table display.
 func (t *Table) SetRowProvider(p RowProvider) {
 	t.Rows = nil
+	t.cellProvider = nil
 	t.ScrollView.SetRowProvider(p)
 	t.resort()
+	t.EnsureVisible()
+}
+
+// SetCellProvider configures a direct zero-alloc cell provider.
+func (t *Table) SetCellProvider(p TableCellProvider) {
+	t.Rows = nil
+	t.rowProvider = nil
+	t.cellProvider = p
+	if p != nil {
+		t.ItemCount = p.RowCount()
+	} else {
+		t.ItemCount = 0
+	}
+	t.resort()
+	t.EnsureVisible()
+}
+
+// SetRowCount sets the total logical row count for cell providers.
+func (t *Table) SetRowCount(n int) {
+	t.ItemCount = n
+	if t.ItemCount == 0 {
+		t.SelectPos = 0
+	} else if t.SelectPos >= t.ItemCount {
+		t.SelectPos = t.ItemCount - 1
+	} else if t.SelectPos < 0 {
+		t.SelectPos = 0
+	}
 	t.EnsureVisible()
 }
 
@@ -236,7 +282,9 @@ func (t *Table) ClearSort() {
 // is the identity mapping; the Rows slice itself is never reordered.
 func (t *Table) resort() {
 	n := len(t.Rows)
-	if t.rowProvider != nil {
+	if t.cellProvider != nil {
+		n = t.cellProvider.RowCount()
+	} else if t.rowProvider != nil {
 		n = t.rowProvider.RowCount()
 	}
 	t.ItemCount = n
@@ -264,7 +312,10 @@ func (t *Table) resort() {
 				return c < 0
 			}
 			var aText, bText string
-			if t.rowProvider != nil {
+			if t.cellProvider != nil {
+				aText = t.cellProvider.GetCellText(aIdx, col)
+				bText = t.cellProvider.GetCellText(bIdx, col)
+			} else if t.rowProvider != nil {
 				aCells := t.rowProvider.Row(aIdx)
 				bCells := t.rowProvider.Row(bIdx)
 				if col < len(aCells) {
@@ -307,24 +358,28 @@ func (t *Table) resort() {
 func (t *Table) applySearchFilter() {
 	matcher := newFuzzyMatcher(string(t.searchRunes), t.SearchCaseSensitive)
 	t.matchBuf = t.matchBuf[:0]
-	if cap(t.matchSpans) < len(t.Rows) {
-		t.matchSpans = make([]cellHighlight, len(t.Rows))
+	rowCount := len(t.Rows)
+	if t.cellProvider != nil {
+		rowCount = t.cellProvider.RowCount()
+	} else if t.rowProvider != nil {
+		rowCount = t.rowProvider.RowCount()
+	}
+	if cap(t.matchSpans) < rowCount {
+		t.matchSpans = make([]cellHighlight, rowCount)
 	} else {
-		t.matchSpans = t.matchSpans[:len(t.Rows)]
+		t.matchSpans = t.matchSpans[:rowCount]
 	}
 	for i := range t.matchSpans {
 		t.matchSpans[i].col = -1
-	}
-	rowCount := len(t.Rows)
-	if t.rowProvider != nil {
-		rowCount = t.rowProvider.RowCount()
 	}
 	for i := 0; i < rowCount; i++ {
 		bestScore := -1
 		bestStart, bestEnd, bestCol := 0, 0, 0
 		for col := range t.Columns {
 			cellText := ""
-			if t.rowProvider != nil {
+			if t.cellProvider != nil {
+				cellText = t.cellProvider.GetCellText(i, col)
+			} else if t.rowProvider != nil {
 				cells := t.rowProvider.Row(i)
 				if col < len(cells) {
 					cellText = cells[col]
@@ -490,6 +545,8 @@ func (t *Table) drawRow(scr *ScreenBuf, y int, rowIdx int, attr uint64, widths [
 		text := ""
 		if rowIdx == -1 {
 			text = col.Title
+		} else if t.cellProvider != nil {
+			text = t.cellProvider.GetCellText(rowIdx, colIdx)
 		} else if t.rowProvider != nil {
 			cells := t.rowProvider.Row(rowIdx)
 			if colIdx < len(cells) {
@@ -500,11 +557,17 @@ func (t *Table) drawRow(scr *ScreenBuf, y int, rowIdx int, attr uint64, widths [
 		}
 
 		isSelected := false
-		if rowIdx != -1 && rowIdx < len(t.Rows) {
-			if mcsr, ok := t.Rows[rowIdx].(MultiColSelectableRow); ok {
-				isSelected = mcsr.IsColSelected(colIdx)
-			} else if selRow, ok := t.Rows[rowIdx].(SelectableRow); ok {
-				isSelected = selRow.IsSelected()
+		if rowIdx != -1 {
+			if t.cellProvider != nil {
+				if sp, ok := t.cellProvider.(TableCellSelectProvider); ok {
+					isSelected = sp.IsRowSelected(rowIdx)
+				}
+			} else if rowIdx < len(t.Rows) {
+				if mcsr, ok := t.Rows[rowIdx].(MultiColSelectableRow); ok {
+					isSelected = mcsr.IsColSelected(colIdx)
+				} else if selRow, ok := t.Rows[rowIdx].(SelectableRow); ok {
+					isSelected = selRow.IsSelected()
+				}
 			}
 		}
 
@@ -530,7 +593,11 @@ func (t *Table) drawRow(scr *ScreenBuf, y int, rowIdx int, attr uint64, widths [
 				stateAttr = Palette[t.ColorItemSelectTextIdx]
 			}
 
-			if rowIdx < len(t.Rows) {
+			if t.cellProvider != nil {
+				if ap, ok := t.cellProvider.(TableCellAttrProvider); ok {
+					stateAttr = ap.GetCellAttr(rowIdx, colIdx, stateAttr)
+				}
+			} else if rowIdx < len(t.Rows) {
 				if cr, ok := t.Rows[rowIdx].(CellColorableRow); ok {
 					stateAttr = cr.GetCellAttr(colIdx, stateAttr)
 				}
@@ -539,13 +606,12 @@ func (t *Table) drawRow(scr *ScreenBuf, y int, rowIdx int, attr uint64, widths [
 
 		cellAttr := stateAttr
 
-		// Prepare cell text with alignment. The sorted column's header gets a
-		// direction arrow appended at the right edge of the cell.
-		cellText := t.formatCell(text, widths[colIdx], col.Alignment)
 		if rowIdx == -1 && colIdx == t.SortColumn {
-			cellText = t.formatSortedHeader(text, widths[colIdx], col.Alignment)
+			cellText := t.formatSortedHeader(text, widths[colIdx], col.Alignment)
+			t.cellBuf = FillCharInfoString(t.cellBuf, cellText, cellAttr)
+		} else {
+			t.cellBuf = FillCharInfoAligned(t.cellBuf, text, widths[colIdx], col.Alignment, cellAttr)
 		}
-		t.cellBuf = FillCharInfoString(t.cellBuf, cellText, cellAttr)
 		// Invert the colors of the matched substring (QuickSearch highlight).
 		if rowIdx >= 0 && len(t.searchRunes) > 0 && rowIdx < len(t.matchSpans) {
 			if span := t.matchSpans[rowIdx]; span.col == colIdx {
