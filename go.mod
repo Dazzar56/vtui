@@ -14,7 +14,7 @@ require (
 	github.com/soniakeys/quant v1.0.0
 	github.com/unxed/keytrans v0.1.31
 	github.com/unxed/kiwi-go v0.1.0
-	github.com/unxed/vtinput v0.1.2
+	github.com/unxed/vtinput v0.1.4
 	golang.org/x/image v0.44.0
 	golang.org/x/sys v0.47.0
 	golang.org/x/term v0.40.0
