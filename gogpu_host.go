@@ -135,6 +135,14 @@ func gogpuKeystrokeSwallowsText(key gpucontext.Key, vk uint16, mods vtinput.Cont
 	if isGogpuKeypadKey(key) && gogpuNumpadRune(vk) == 0 {
 		return true
 	}
+	// Delete has no text of its own, but some xkbcommon layouts (seen on
+	// Arch/KDE Plasma) still fire OnTextInput for it with the ASCII DEL
+	// character (0x7F), which most fonts render as a blank box — it then
+	// gets typed right after Delete has already removed a character. See
+	// f4 issue #519.
+	if key == gpucontext.KeyDelete {
+		return true
+	}
 	return gogpuAltComposesText && mods&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed|
 		vtinput.LeftAltPressed|vtinput.RightAltPressed) != 0
 }
