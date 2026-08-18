@@ -2079,11 +2079,30 @@ func (fm *frameManager) Run(readers ...*vtinput.Reader) {
 	defer close(done)
 
 	// Heartbeat for animations and cursor blinking: ticks at ~30fps while
-	// animations are active, and at a much lighter 250ms while idle so the
-	// cursor still blinks (blink toggling lives in Render/DrawToScreen and
-	// only runs when something calls Redraw/Flush -- without this idle tick
-	// the cursor freezes wherever its blink phase happened to be when the
-	// last animation ended). See f4 issue #518.
+	// animations are active. The lighter 250ms idle tick only exists for
+	// backends that draw their own cursor in software (gogpu) -- their
+	// blink toggling lives in Render/DrawToScreen and only runs when
+	// something calls Redraw/Flush, so without this idle tick the cursor
+	// freezes wherever its blink phase happened to be when the last
+	// animation ended.
+	//
+	// Native console/terminal backends (Win32 console API, ANSI/VT to a
+	// real terminal) must NOT get this idle tick: they have no blink state
+	// of their own to advance, so every idle Redraw() is a pure no-op
+	// SetConsoleCursorInfo/cursor-position call -- and under Wine those
+	// redundant calls visibly disturb the console frontend's own native
+	// blink timer (jittery, uneven, or stopped entirely depending on the
+	// frontend). This is exactly how real FAR2 for Windows behaves: it
+	// only touches the cursor on genuine state changes and otherwise lets
+	// the OS blink it, with no periodic poking at all. See f4 issue #518.
+	needsSoftwareBlinkHeartbeat := false
+	if fm.scr != nil {
+		switch fm.scr.Renderer.(type) {
+		case *GogpuRenderer:
+			needsSoftwareBlinkHeartbeat = true
+		}
+	}
+
 	go func() {
 		tmr := time.NewTimer(33 * time.Millisecond)
 		if !tmr.Stop() {
@@ -2109,6 +2128,17 @@ func (fm *frameManager) Run(readers ...*vtinput.Reader) {
 			fm.animMu.Unlock()
 
 			if !hasAnims {
+				if !needsSoftwareBlinkHeartbeat {
+					// No animations and this backend blinks its own
+					// cursor natively: sleep until a real animation
+					// wakes us, exactly like before dfe297a.
+					select {
+					case <-fm.animWake:
+						continue
+					case <-done:
+						return
+					}
+				}
 				idleTmr.Reset(250 * time.Millisecond)
 				select {
 				case <-fm.animWake:
