@@ -5,6 +5,16 @@ import (
 	"testing"
 )
 
+func TestAutoComplete_SelectPos(t *testing.T) {
+	SetDefaultPalette()
+	edit := NewEdit(0, 0, 20, "l")
+	edit.History = []string{"ls -la", "ls"}
+	ac := NewAutoCompleteMenu(edit)
+	if ac.SelectPos() != 0 {
+		t.Errorf("Expected initial SelectPos 0, got %d", ac.SelectPos())
+	}
+}
+
 func TestAutoComplete_Matching(t *testing.T) {
 	SetDefaultPalette()
 	edit := NewEdit(0, 0, 20, "l")

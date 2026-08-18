@@ -156,6 +156,14 @@ func (ac *AutoCompleteMenu) HasMatches() bool {
 	return len(ac.Matches) > 0
 }
 
+// SelectPos returns the index of the currently selected item in the menu.
+func (ac *AutoCompleteMenu) SelectPos() int {
+	if ac.lb != nil {
+		return ac.lb.SelectPos
+	}
+	return -1
+}
+
 // capAutoCompleteGroups keeps at most n non-separator items in each
 // separator-delimited group.
 func capAutoCompleteGroups(items []AutoCompleteItem, n int) []AutoCompleteItem {
