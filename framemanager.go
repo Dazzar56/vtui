@@ -2065,7 +2065,12 @@ func (fm *frameManager) Run(readers ...*vtinput.Reader) {
 	done := make(chan struct{})
 	defer close(done)
 
-	// Heartbeat for animations: sleeps when idle and ticks at ~30fps only while animations are active.
+	// Heartbeat for animations and cursor blinking: ticks at ~30fps while
+	// animations are active, and at a much lighter 250ms while idle so the
+	// cursor still blinks (blink toggling lives in Render/DrawToScreen and
+	// only runs when something calls Redraw/Flush -- without this idle tick
+	// the cursor freezes wherever its blink phase happened to be when the
+	// last animation ended). See f4 issue #518.
 	go func() {
 		tmr := time.NewTimer(33 * time.Millisecond)
 		if !tmr.Stop() {
@@ -2076,15 +2081,33 @@ func (fm *frameManager) Run(readers ...*vtinput.Reader) {
 		}
 		defer tmr.Stop()
 
+		idleTmr := time.NewTimer(250 * time.Millisecond)
+		if !idleTmr.Stop() {
+			select {
+			case <-idleTmr.C:
+			default:
+			}
+		}
+		defer idleTmr.Stop()
+
 		for {
 			fm.animMu.Lock()
 			hasAnims := len(fm.animations) > 0
 			fm.animMu.Unlock()
 
 			if !hasAnims {
-				// No animations: sleep until a new animation is registered or exit.
+				idleTmr.Reset(250 * time.Millisecond)
 				select {
 				case <-fm.animWake:
+					if !idleTmr.Stop() {
+						select {
+						case <-idleTmr.C:
+						default:
+						}
+					}
+					continue
+				case <-idleTmr.C:
+					fm.Redraw()
 					continue
 				case <-done:
 					return
