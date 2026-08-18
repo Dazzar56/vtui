@@ -227,3 +227,84 @@ func FillCharInfoWithSelection(target []CharInfo, data []byte, defaultAttr, selA
 func RunesToCharInfo(runes []rune, attr uint64) []CharInfo {
 	return StringToCharInfo(string(runes), attr)
 }
+
+// FillCharInfoAligned fills target with CharInfo for s with width and alignment under attr.
+func FillCharInfoAligned(target []CharInfo, text string, width int, align Alignment, attr uint64) []CharInfo {
+	if width <= 0 {
+		return target[:0]
+	}
+	isASCII := true
+	for i := 0; i < len(text); i++ {
+		if text[i] >= 0x80 || text[i] < 0x20 {
+			isASCII = false
+			break
+		}
+	}
+	if isASCII {
+		vLen := len(text)
+		if vLen > width {
+			vLen = width
+			text = text[:width]
+		}
+		space := width - vLen
+		var leftSpace, rightSpace int
+		switch align {
+		case AlignLeft:
+			rightSpace = space
+		case AlignRight:
+			leftSpace = space
+		case AlignCenter:
+			leftSpace = space / 2
+			rightSpace = space - leftSpace
+		}
+		if cap(target) < width {
+			target = make([]CharInfo, width)
+		} else {
+			target = target[:width]
+		}
+		idx := 0
+		for i := 0; i < leftSpace; i++ {
+			target[idx] = CharInfo{Char: ' ', Attributes: attr}
+			idx++
+		}
+		for i := 0; i < vLen; i++ {
+			target[idx] = CharInfo{Char: uint64(text[i]), Attributes: attr}
+			idx++
+		}
+		for i := 0; i < rightSpace; i++ {
+			target[idx] = CharInfo{Char: ' ', Attributes: attr}
+			idx++
+		}
+		return target
+	}
+
+	truncated, vLen := truncateStringWidth(text, width, "")
+	if vLen >= width {
+		return FillCharInfoString(target, truncated, attr)
+	}
+
+	space := width - vLen
+	var leftSpace, rightSpace int
+	switch align {
+	case AlignLeft:
+		rightSpace = space
+	case AlignRight:
+		leftSpace = space
+	case AlignCenter:
+		leftSpace = space / 2
+		rightSpace = space - leftSpace
+	}
+
+	target = target[:0]
+	for i := 0; i < leftSpace; i++ {
+		target = append(target, CharInfo{Char: ' ', Attributes: attr})
+	}
+	s := VisualString(truncated)
+	ForEachCluster(s, func(cluster string, w, _ int) {
+		target = AppendCluster(target, cluster, w, attr)
+	})
+	for i := 0; i < rightSpace; i++ {
+		target = append(target, CharInfo{Char: ' ', Attributes: attr})
+	}
+	return target
+}

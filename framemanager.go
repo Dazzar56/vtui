@@ -214,6 +214,7 @@ type frameManager struct {
 	taskChanIn     chan func()
 	EventChan      chan *vtinput.InputEvent
 	EventFilter    func(*vtinput.InputEvent) bool
+	needsRender    bool
 	injectedEvents []*vtinput.InputEvent
 	injectedMu     sync.Mutex
 	OnRender       func(scr *ScreenBuf)
@@ -691,6 +692,7 @@ func (fm *frameManager) Init(scr *ScreenBuf) {
 	fm.workspaceTabDrag = nil
 	fm.workspaceTabDragHits = nil
 	fm.currentToast = nil
+	fm.needsRender = true
 
 	if fm.RedrawChan == nil {
 		fm.RedrawChan = make(chan struct{}, 1)
@@ -936,6 +938,7 @@ func (fm *frameManager) HardRefresh() {
 
 // Redraw triggers an asynchronous redraw request.
 func (fm *frameManager) Redraw() {
+	fm.needsRender = true
 	select {
 	case fm.RedrawChan <- struct{}{}:
 		DebugLog("FM: Redraw requested")
@@ -1040,7 +1043,10 @@ func (fm *frameManager) Step(timeout time.Duration) bool {
 		return false
 	}
 
-	fm.renderPhase()
+	if fm.needsRender {
+		fm.renderPhase()
+		fm.needsRender = false
+	}
 
 	var e *vtinput.InputEvent
 	injected := false
@@ -1060,6 +1066,7 @@ func (fm *frameManager) Step(timeout time.Duration) bool {
 			} else {
 				fm.dispatchEvent(e, true)
 			}
+			fm.needsRender = true
 		}
 		fm.cleanupDoneFrames()
 		return !fm.IsShutdown() && len(fm.frames) > 0
@@ -1068,10 +1075,11 @@ func (fm *frameManager) Step(timeout time.Duration) bool {
 	if timeout == 0 {
 		select {
 		case <-fm.RedrawChan:
+			fm.needsRender = true
 		case task := <-fm.TaskChan:
 			task()
 			fm.cleanupDoneFrames()
-			fm.Redraw()
+			fm.needsRender = true
 		case ev, ok := <-fm.EventChan:
 			if !ok {
 				return false
@@ -1082,6 +1090,7 @@ func (fm *frameManager) Step(timeout time.Duration) bool {
 				} else {
 					fm.dispatchEvent(ev, false)
 				}
+				fm.needsRender = true
 			}
 		default:
 		}
@@ -1092,10 +1101,11 @@ func (fm *frameManager) Step(timeout time.Duration) bool {
 	if timeout < 0 {
 		select {
 		case <-fm.RedrawChan:
+			fm.needsRender = true
 		case task := <-fm.TaskChan:
 			task()
 			fm.cleanupDoneFrames()
-			fm.Redraw()
+			fm.needsRender = true
 		case ev, ok := <-fm.EventChan:
 			if !ok {
 				return false
@@ -1106,6 +1116,7 @@ func (fm *frameManager) Step(timeout time.Duration) bool {
 				} else {
 					fm.dispatchEvent(ev, false)
 				}
+				fm.needsRender = true
 			}
 		}
 		fm.cleanupDoneFrames()
@@ -1118,10 +1129,11 @@ func (fm *frameManager) Step(timeout time.Duration) bool {
 	select {
 	case <-timer.C:
 	case <-fm.RedrawChan:
+		fm.needsRender = true
 	case task := <-fm.TaskChan:
 		task()
 		fm.cleanupDoneFrames()
-		fm.Redraw()
+		fm.needsRender = true
 	case ev, ok := <-fm.EventChan:
 		if !ok {
 			return false
@@ -1132,6 +1144,7 @@ func (fm *frameManager) Step(timeout time.Duration) bool {
 			} else {
 				fm.dispatchEvent(ev, false)
 			}
+			fm.needsRender = true
 		}
 	}
 	fm.cleanupDoneFrames()
@@ -2131,22 +2144,28 @@ func (fm *frameManager) Run(readers ...*vtinput.Reader) {
 		}
 	}()
 
-	// Terminal size polling (handles Windows and fallback for missed SIGWINCH)
+	// Terminal size polling: skipped in GUI backends; adaptive fallback in TTY.
 	sizeChan := make(chan struct{}, 1)
-	go func() {
-		lastW, lastH, _ := GetTerminalSize()
-		for fm.running {
-			time.Sleep(200 * time.Millisecond)
-			w, h, err := GetTerminalSize()
-			if err == nil && w > 0 && h > 0 && (w != lastW || h != lastH) {
-				lastW, lastH = w, h
-				select {
-				case sizeChan <- struct{}{}:
-				default:
+	if !fm.isGUI() {
+		go func() {
+			lastW, lastH, _ := GetTerminalSize()
+			interval := 200 * time.Millisecond
+			for fm.running {
+				time.Sleep(interval)
+				w, h, err := GetTerminalSize()
+				if err == nil && w > 0 && h > 0 && (w != lastW || h != lastH) {
+					lastW, lastH = w, h
+					interval = 200 * time.Millisecond
+					select {
+					case sizeChan <- struct{}{}:
+					default:
+					}
+				} else if interval < 2*time.Second {
+					interval += 200 * time.Millisecond
 				}
 			}
-		}
-	}()
+		}()
+	}
 
 	// Forward resize notifications to the event queue
 	go func() {
@@ -2890,4 +2909,19 @@ func (fm *frameManager) markMultiClick(ev *vtinput.InputEvent, now time.Time) {
 		fm.lastMouseClickCount = 0
 		DebugLog("FM: TripleClick generated at (%d,%d)", ev.MouseX, ev.MouseY)
 	}
+}
+
+func (fm *frameManager) isGUI() bool {
+	if ActiveBackend() != "" {
+		return true
+	}
+	if fm.scr != nil && fm.scr.Renderer != nil {
+		switch fm.scr.Renderer.(type) {
+		case *AnsiRenderer, *Win32ConsoleRenderer:
+			return false
+		default:
+			return true
+		}
+	}
+	return false
 }
