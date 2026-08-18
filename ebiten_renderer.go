@@ -432,3 +432,7 @@ func (r *EbitenRenderer) takeTitle() (string, bool) {
 	r.titleChanged = false
 	return r.title, true
 }
+
+// needsIdleBlinkHeartbeat marks EbitenRenderer as needing the idle blink
+// heartbeat in FrameManager.Run(). See softwareBlinkRenderer.
+func (r *EbitenRenderer) needsIdleBlinkHeartbeat() {}

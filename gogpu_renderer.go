@@ -906,3 +906,7 @@ func (r *GogpuRenderer) getCellColors(cell CharInfo) (color.RGBA, color.RGBA) {
 	return color.RGBA{uint8(fg >> 16), uint8(fg >> 8), uint8(fg), 255},
 		color.RGBA{uint8(bg >> 16), uint8(bg >> 8), uint8(bg), 255}
 }
+
+// needsIdleBlinkHeartbeat marks GogpuRenderer as needing the idle blink
+// heartbeat in FrameManager.Run(). See softwareBlinkRenderer.
+func (r *GogpuRenderer) needsIdleBlinkHeartbeat() {}

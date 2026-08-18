@@ -360,3 +360,7 @@ func (r *Win32GuiRenderer) syncBGRA() (w, h int, ok bool) {
 	}
 	return w, h, true
 }
+
+// needsIdleBlinkHeartbeat marks Win32GuiRenderer as needing the idle
+// blink heartbeat in FrameManager.Run(). See softwareBlinkRenderer.
+func (r *Win32GuiRenderer) needsIdleBlinkHeartbeat() {}

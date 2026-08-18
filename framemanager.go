@@ -2041,6 +2041,17 @@ func (fm *frameManager) Stop() {
 }
 
 // Run starts the main application event loop.
+// softwareBlinkRenderer is implemented by renderers that draw their own
+// cursor in pixels (rather than relying on a native console/terminal
+// blink) and therefore need the idle heartbeat in Run() to keep it
+// blinking while otherwise idle. Each such renderer declares the marker
+// method in its own file, under its own build tag -- see Run()'s
+// needsSoftwareBlinkHeartbeat check for why a direct type switch doesn't
+// work here.
+type softwareBlinkRenderer interface {
+	needsIdleBlinkHeartbeat()
+}
+
 func (fm *frameManager) Run(readers ...*vtinput.Reader) {
 	if len(readers) > 0 && readers[0] != nil {
 		fm.Reader = readers[0]
@@ -2080,7 +2091,7 @@ func (fm *frameManager) Run(readers ...*vtinput.Reader) {
 
 	// Heartbeat for animations and cursor blinking: ticks at ~30fps while
 	// animations are active. The lighter 250ms idle tick only exists for
-	// backends that draw their own cursor in software (all the GUI-pixel
+	// backends that draw their own cursor in software (the GUI-pixel
 	// renderers: gogpu, ebiten, X11, Wayland, Win32 GUI) -- their blink
 	// toggling lives in Render/DrawToScreen and only runs when something
 	// calls Redraw/Flush, so without this idle tick the cursor freezes
@@ -2096,10 +2107,17 @@ func (fm *frameManager) Run(readers ...*vtinput.Reader) {
 	// frontend). This is exactly how real FAR2 for Windows behaves: it
 	// only touches the cursor on genuine state changes and otherwise lets
 	// the OS blink it, with no periodic poking at all. See f4 issue #518.
+	//
+	// Checked via the softwareBlinkRenderer marker interface rather than a
+	// type switch on concrete renderer types: several of those types
+	// (WaylandRenderer, EbitenRenderer) only exist under their own
+	// platform build tags, and a type switch naming them directly fails to
+	// compile on platforms where they're absent (e.g. Windows lacks
+	// WaylandRenderer entirely). Each renderer file declares its own
+	// marker method under its own build tag instead.
 	needsSoftwareBlinkHeartbeat := false
 	if fm.scr != nil {
-		switch fm.scr.Renderer.(type) {
-		case *GogpuRenderer, *EbitenRenderer, *X11Renderer, *WaylandRenderer, *Win32GuiRenderer:
+		if _, ok := fm.scr.Renderer.(softwareBlinkRenderer); ok {
 			needsSoftwareBlinkHeartbeat = true
 		}
 	}

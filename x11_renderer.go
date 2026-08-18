@@ -428,3 +428,7 @@ func (r *X11Renderer) reportStats() {
 func (r *X11Renderer) drawCustomChar(img *image.RGBA, char rune, px, py, cw, ch int, fg uint32) bool {
 	return drawBoxGlyph(img, char, px, py, cw, ch, r.host.scale, fg)
 }
+
+// needsIdleBlinkHeartbeat marks X11Renderer as needing the idle blink
+// heartbeat in FrameManager.Run(). See softwareBlinkRenderer.
+func (r *X11Renderer) needsIdleBlinkHeartbeat() {}

@@ -327,3 +327,7 @@ func (r *WaylandRenderer) Flush() {
 	r.stats.totalFlush += time.Since(start)
 	r.stats.frameCount++
 }
+
+// needsIdleBlinkHeartbeat marks WaylandRenderer as needing the idle blink
+// heartbeat in FrameManager.Run(). See softwareBlinkRenderer.
+func (r *WaylandRenderer) needsIdleBlinkHeartbeat() {}
