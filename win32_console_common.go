@@ -50,6 +50,15 @@ func AnsiIndexToWin32Color(idx uint8) uint16 {
 	return ansiToWin32ColorMap[idx&15]
 }
 
+// AttrToWin32Attr exports attrToWin32Attr for renderers outside this package
+// that need to paint using the Windows Console API directly (e.g. f4's
+// console-view popup overlay, which draws with WriteConsoleOutputW instead
+// of going through ScreenBuf) and want colors that match the active theme
+// instead of hardcoded attribute bytes.
+func AttrToWin32Attr(attr uint64, activePal *[256]uint32) uint16 {
+	return attrToWin32Attr(attr, activePal)
+}
+
 // attrToWin32Attr maps 64-bit CharInfo attributes to 16-bit Win32 Console attributes.
 func attrToWin32Attr(attr uint64, activePal *[256]uint32) uint16 {
 	var fgIdx uint8
