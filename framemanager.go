@@ -2080,11 +2080,12 @@ func (fm *frameManager) Run(readers ...*vtinput.Reader) {
 
 	// Heartbeat for animations and cursor blinking: ticks at ~30fps while
 	// animations are active. The lighter 250ms idle tick only exists for
-	// backends that draw their own cursor in software (gogpu) -- their
-	// blink toggling lives in Render/DrawToScreen and only runs when
-	// something calls Redraw/Flush, so without this idle tick the cursor
-	// freezes wherever its blink phase happened to be when the last
-	// animation ended.
+	// backends that draw their own cursor in software (all the GUI-pixel
+	// renderers: gogpu, ebiten, X11, Wayland, Win32 GUI) -- their blink
+	// toggling lives in Render/DrawToScreen and only runs when something
+	// calls Redraw/Flush, so without this idle tick the cursor freezes
+	// wherever its blink phase happened to be when the last animation
+	// ended.
 	//
 	// Native console/terminal backends (Win32 console API, ANSI/VT to a
 	// real terminal) must NOT get this idle tick: they have no blink state
@@ -2098,7 +2099,7 @@ func (fm *frameManager) Run(readers ...*vtinput.Reader) {
 	needsSoftwareBlinkHeartbeat := false
 	if fm.scr != nil {
 		switch fm.scr.Renderer.(type) {
-		case *GogpuRenderer:
+		case *GogpuRenderer, *EbitenRenderer, *X11Renderer, *WaylandRenderer, *Win32GuiRenderer:
 			needsSoftwareBlinkHeartbeat = true
 		}
 	}
