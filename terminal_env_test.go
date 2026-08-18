@@ -233,3 +233,69 @@ func TestInitTerminalOS_NoPanic(t *testing.T) {
 	}()
 	initTerminalOS()
 }
+
+// TestTerminalEnv_NoVTWhenWin32ConsoleOwnsScreen covers the fix for
+// WINE.md §2j.4/P4: when the Win32ConsoleRenderer owns the visible screen
+// through its own dedicated console buffer, getTermOut() is the *other*
+// buffer (hStdOut) -- painted with WriteConsoleOutputW, not a VT stream --
+// and Suspend/Resume/SetAltScreen must not write ANSI escape sequences into
+// it. Not gating this was the leading suspect for f4's "console overlay
+// renders at the top of the window" bug under Wine: literal escape bytes
+// (or a second, VT-driven alt-screen toggle racing the Win32 one) landing in
+// the buffer the user is actually looking at.
+func TestTerminalEnv_NoVTWhenWin32ConsoleOwnsScreen(t *testing.T) {
+	mock := &mockTermOut{}
+	oldGetTermOut := getTermOut
+	getTermOut = func() interface {
+		WriteString(string) (int, error)
+		Sync() error
+	} {
+		return mock
+	}
+	oldConsoleUsesVT := consoleUsesVT
+	consoleUsesVT = func() bool { return false }
+	defer func() {
+		getTermOut = oldGetTermOut
+		consoleUsesVT = oldConsoleUsesVT
+	}()
+
+	assertNoVTBytes := func(step string) {
+		t.Helper()
+		if mock.builder.Len() != 0 {
+			t.Errorf("%s wrote %d bytes into the non-VT buffer: %q", step, mock.builder.Len(), mock.builder.String())
+		}
+		mock.builder.Reset()
+	}
+
+	isPrepared = false
+	inAltScreen = false
+	inputRestore = nil
+	_ = Resume()
+	assertNoVTBytes("Resume")
+	// Resume leaves isPrepared=false if vtinput.Enable() errors in this
+	// headless test environment (same caveat as TestTerminalEnv_AutoWrap);
+	// force the state Suspend/SetAltScreen expect regardless of that.
+	isPrepared = true
+	inAltScreen = true
+	inputRestore = func() {}
+
+	SetAltScreen(false)
+	assertNoVTBytes("SetAltScreen(false)")
+
+	SetAltScreen(true)
+	assertNoVTBytes("SetAltScreen(true)")
+
+	Suspend()
+	assertNoVTBytes("Suspend")
+
+	// Sanity check: the same sequence WITH consoleUsesVT reporting true (the
+	// normal, non-Win32-console case) must still produce output, so the test
+	// above is verifying the gate and not a broken mock.
+	consoleUsesVT = func() bool { return true }
+	isPrepared = true
+	inAltScreen = true
+	SetAltScreen(false)
+	if mock.builder.Len() == 0 {
+		t.Error("SetAltScreen(false) wrote nothing even though consoleUsesVT() is true")
+	}
+}

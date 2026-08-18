@@ -14,6 +14,11 @@ func hasConsoleBufferOS() bool {
 func setAltScreenWin32(enable bool)   {}
 func getActiveConsoleHandle() uintptr { return 0 }
 
+// win32ConsoleActive is always false off Windows: there is no separate
+// Win32 console screen buffer to worry about, so the terminal is reached via
+// VT sequences as usual. See win32_console_windows.go for the real check.
+func win32ConsoleActive() bool { return false }
+
 // Win32ConsoleRenderer is a fallback stub for non-Windows platforms.
 type Win32ConsoleRenderer struct {
 	mu sync.Mutex

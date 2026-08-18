@@ -32,6 +32,22 @@ var getTermOut = func() interface {
 	return os.Stdout
 }
 
+// consoleUsesVT reports whether the buffer getTermOut() writes to is a VT
+// stream that understands ANSI escape sequences. It is false exactly when
+// the Win32ConsoleRenderer owns the visible screen through its own
+// dedicated console buffer (see win32ConsoleActive): os.Stdout there is the
+// *other* buffer -- the one the user sees after the renderer switches away,
+// e.g. hStdOut under WINE.md's no-PTY console view -- and it is painted
+// directly with WriteConsoleOutputW, not interpreted as text. Writing
+// "\x1b[?1049h" into it does not toggle any alternate screen; it either
+// prints seven junk characters or, if some other layer does interpret it,
+// fights the Win32 Console API's own idea of which buffer is active and
+// where the cursor sits. A test can override this to exercise the gated
+// path without a real Win32 console.
+var consoleUsesVT = func() bool {
+	return !win32ConsoleActive()
+}
+
 // PrepareTerminal puts the terminal into raw mode, enables advanced input,
 // and switches to the alternate screen buffer. Returns a restore function.
 func PrepareTerminal() (func(), error) {
@@ -50,16 +66,23 @@ func Suspend() {
 	defer termMu.Unlock()
 	if isPrepared {
 		out := getTermOut()
-		out.WriteString(seqAutoWrapOn) // Restore auto-wrap
+		vt := consoleUsesVT()
+		if vt {
+			out.WriteString(seqAutoWrapOn) // Restore auto-wrap
+		}
 		if inAltScreen {
-			out.WriteString(seqAltScreenOff)
+			if vt {
+				out.WriteString(seqAltScreenOff)
+			}
 			inAltScreen = false
 		}
 		setAltScreenOS(false)
-		if ManageCursorStyle {
-			out.WriteString(seqDefaultCursor)
+		if vt {
+			if ManageCursorStyle {
+				out.WriteString(seqDefaultCursor)
+			}
+			out.WriteString(seqResetPalette + seqResetAttributes)
 		}
-		out.WriteString(seqResetPalette + seqResetAttributes)
 		out.Sync()
 		// seqResetPalette (OSC 104) throws away the colors we loaded into
 		// the terminal. Unless the screen buffer is told, it keeps believing
@@ -82,29 +105,36 @@ func Resume() error {
 	defer termMu.Unlock()
 	if !isPrepared {
 		out := getTermOut()
+		vt := consoleUsesVT()
 
 		// 1. Enter AltScreen FIRST. Many terminals (like Kitty) reset
 		// their keyboard protocol state when switching screen buffers.
 		if !inAltScreen {
-			out.WriteString(seqAltScreenOn)
+			if vt {
+				out.WriteString(seqAltScreenOn)
+			}
 			inAltScreen = true
 		}
 		setAltScreenOS(true)
-		out.WriteString(seqAutoWrapOff) // Disable auto-wrap for exact rendering
+		if vt {
+			out.WriteString(seqAutoWrapOff) // Disable auto-wrap for exact rendering
+		}
 		out.Sync()
 
 		// 2. Enable advanced input protocols AFTER entering AltScreen.
 		r, err := vtinput.Enable()
 		if err != nil {
 			// Rollback AltScreen if input setup failed
-			out.WriteString(seqAltScreenOff)
+			if vt {
+				out.WriteString(seqAltScreenOff)
+			}
 			inAltScreen = false
 			out.Sync()
 			return err
 		}
 		inputRestore = r
 
-		if ManageCursorStyle {
+		if vt && ManageCursorStyle {
 			out.WriteString(seqBlinkingUnderline)
 		}
 		out.Sync()
@@ -128,8 +158,11 @@ func SetAltScreen(enable bool) {
 	if inAltScreen != enable {
 		inAltScreen = enable
 		out := getTermOut()
+		vt := consoleUsesVT()
 		if enable {
-			out.WriteString(seqAltScreenOn)
+			if vt {
+				out.WriteString(seqAltScreenOn)
+			}
 			setAltScreenOS(true)
 			// When returning to alt screen, it's usually empty, so force a redraw
 			if FrameManager != nil && FrameManager.scr != nil {
@@ -137,7 +170,9 @@ func SetAltScreen(enable bool) {
 				FrameManager.Redraw()
 			}
 		} else {
-			out.WriteString(seqAltScreenOff)
+			if vt {
+				out.WriteString(seqAltScreenOff)
+			}
 			setAltScreenOS(false)
 		}
 		out.Sync()

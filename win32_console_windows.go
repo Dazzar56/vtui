@@ -68,6 +68,21 @@ func getActiveConsoleHandle() uintptr {
 	return 0
 }
 
+// win32ConsoleActive reports whether the classic Windows Console API renderer
+// currently owns the visible screen via its own dedicated screen buffer
+// (hFarOut distinct from hStdOut). When it does, the console buffer the user
+// sees after leaving f4's screen (e.g. Ctrl+O under WINE.md's no-PTY console
+// view) is not a VT stream: it is hStdOut, painted directly with
+// WriteConsoleOutputW, and ANSI escape sequences written into it would show
+// up as literal text or move the buffer's own cursor instead of doing
+// anything useful.
+func win32ConsoleActive() bool {
+	activeWin32ConsoleMu.Lock()
+	defer activeWin32ConsoleMu.Unlock()
+	r := activeWin32ConsoleRenderer
+	return r != nil && r.hFarOut != 0 && r.hFarOut != r.hStdOut
+}
+
 type consoleScreenBufferInfo struct {
 	dwSize              Coord
 	dwCursorPosition    Coord
