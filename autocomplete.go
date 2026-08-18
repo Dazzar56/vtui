@@ -164,6 +164,18 @@ func (ac *AutoCompleteMenu) SelectPos() int {
 	return -1
 }
 
+// IsBusy reports true if the underlying frame is busy (e.g. PanelsFrame in console view),
+// suppressing full-screen Flush passes that would otherwise overwrite host console history.
+func (ac *AutoCompleteMenu) IsBusy() bool {
+	if FrameManager != nil && len(FrameManager.frames) > 1 {
+		under := FrameManager.frames[len(FrameManager.frames)-2]
+		if under != nil && under.IsBusy() {
+			return true
+		}
+	}
+	return false
+}
+
 // capAutoCompleteGroups keeps at most n non-separator items in each
 // separator-delimited group.
 func capAutoCompleteGroups(items []AutoCompleteItem, n int) []AutoCompleteItem {

@@ -14,6 +14,28 @@ func TestAutoComplete_SelectPos(t *testing.T) {
 		t.Errorf("Expected initial SelectPos 0, got %d", ac.SelectPos())
 	}
 }
+func TestAutoComplete_IsBusyInheritance(t *testing.T) {
+	SetDefaultPalette()
+	fm := NewFrameManager()
+	fm.Init(NewSilentScreenBuf())
+	FrameManager = fm
+
+	busyUnder := &busyFrame{Busy: true}
+	fm.Push(busyUnder)
+
+	edit := NewEdit(0, 0, 20, "l")
+	ac := NewAutoCompleteMenu(edit)
+	fm.Push(ac)
+
+	if !ac.IsBusy() {
+		t.Error("AutoCompleteMenu should inherit busy state when underlying frame is busy")
+	}
+
+	busyUnder.Busy = false
+	if ac.IsBusy() {
+		t.Error("AutoCompleteMenu should not be busy when underlying frame is not busy")
+	}
+}
 
 func TestAutoComplete_Matching(t *testing.T) {
 	SetDefaultPalette()
