@@ -121,6 +121,23 @@ type Win32ConsoleRenderer struct {
 	cursorShape CursorShape
 	activePal   *[256]uint32
 	forceRedraw bool
+
+	// cursorStateSet/lastCursor* let Flush skip SetConsoleCursorInfo/
+	// SetConsoleCursorPosition when nothing about the cursor actually
+	// changed. Without this, the idle heartbeat that keeps the software
+	// (gogpu) cursor blinking also fires here every ~250ms, and each
+	// resulting SetConsoleCursorInfo call -- even with identical
+	// visible/size -- restarts Wine's native cursor blink timer, making an
+	// otherwise-idle cursor blink fast and jittery instead of at its normal
+	// rate. Real Windows appears to tolerate the redundant calls; Wine does
+	// not. See f4 issue #518 (jittery cursor with panels visible under
+	// `wine f4.exe`, fine with panels hidden where the busy gate mostly
+	// suppresses this heartbeat).
+	cursorStateSet  bool
+	lastCursorVis   bool
+	lastCursorShape CursorShape
+	lastCursorX     int
+	lastCursorY     int
 }
 
 // NewWin32ConsoleRenderer creates a renderer using classic Win32 Console API with a dedicated screen buffer.
@@ -263,12 +280,26 @@ func (r *Win32ConsoleRenderer) Flush() {
 		uintptr(unsafe.Pointer(&writeRegion)),
 	)
 
-	// Update cursor position and shape
-	if r.cursorVis && r.cursorX >= 0 && r.cursorX < int(w) && r.cursorY >= 0 && r.cursorY < int(h) {
-		cursorCoord := uintptr(uint32(uint16(r.cursorX)) | (uint32(uint16(r.cursorY)) << 16))
-		procSetConsoleCursorPosition.Call(uintptr(targetHandle), cursorCoord)
-		SetCursorStyleOS(true, r.cursorShape)
-	} else {
-		SetCursorStyleOS(false, r.cursorShape)
+	// Update cursor position and shape, but only when something about the
+	// cursor actually changed since the last call -- see cursorStateSet's
+	// doc comment for why this matters under Wine.
+	visNow := r.cursorVis && r.cursorX >= 0 && r.cursorX < int(w) && r.cursorY >= 0 && r.cursorY < int(h)
+	unchanged := r.cursorStateSet &&
+		r.lastCursorVis == visNow &&
+		r.lastCursorShape == r.cursorShape &&
+		(!visNow || (r.lastCursorX == r.cursorX && r.lastCursorY == r.cursorY))
+	if !unchanged {
+		if visNow {
+			cursorCoord := uintptr(uint32(uint16(r.cursorX)) | (uint32(uint16(r.cursorY)) << 16))
+			procSetConsoleCursorPosition.Call(uintptr(targetHandle), cursorCoord)
+			SetCursorStyleOS(true, r.cursorShape)
+		} else {
+			SetCursorStyleOS(false, r.cursorShape)
+		}
+		r.cursorStateSet = true
+		r.lastCursorVis = visNow
+		r.lastCursorShape = r.cursorShape
+		r.lastCursorX = r.cursorX
+		r.lastCursorY = r.cursorY
 	}
 }
