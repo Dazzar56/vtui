@@ -103,33 +103,71 @@ func Suspend() {
 func Resume() error {
 	termMu.Lock()
 	defer termMu.Unlock()
+	return resumeLocked(true)
+}
+
+// ResumeWithoutAltScreen re-enables raw mode and advanced input exactly like
+// Resume, but never touches which screen buffer is active (no AltScreen
+// enter, no setAltScreenOS call, no forced FrameManager redraw).
+//
+// Resume() unconditionally switches to f4's own alternate screen buffer as
+// its first step, on the assumption that "resuming" means "going back to
+// showing our own UI". That assumption is wrong for a caller who suspended
+// only to hand the terminal to a child process while deliberately staying on
+// the *other* buffer (e.g. f4's no-PTY console view, ConsoleMode=own /
+// ConsoleViewFar: WriteConsoleOutputW painted its overlay directly onto the
+// host buffer and wants to keep that buffer visible). Such a caller used to
+// have to call Resume() anyway just to get vtinput re-enabled, then
+// immediately call SetAltScreen(false) to undo the unwanted switch --
+// producing two SetConsoleActiveScreenBuffer calls (host buffer -> f4's own
+// buffer -> host buffer again) within a handful of milliseconds. Real
+// Windows consoles handle that synchronously and it is invisible; Wine's
+// console frontends have a documented history of mishandling rapid active-
+// screen-buffer switches with an async/stale-snapshot repaint (see f4's
+// WINE.md §2f-§2g and the "single-line command output vanishes after
+// Ctrl+O under Wine" report this function was added for). Since the caller
+// already knows the correct buffer is showing, skip the switch entirely
+// instead of doing it and immediately undoing it.
+func ResumeWithoutAltScreen() error {
+	termMu.Lock()
+	defer termMu.Unlock()
+	return resumeLocked(false)
+}
+
+// resumeLocked is Resume()'s body, parameterized on whether to perform the
+// AltScreen-enter step. Callers must hold termMu.
+func resumeLocked(withAltScreen bool) error {
 	if !isPrepared {
 		out := getTermOut()
 		vt := consoleUsesVT()
 
-		// 1. Enter AltScreen FIRST. Many terminals (like Kitty) reset
-		// their keyboard protocol state when switching screen buffers.
-		if !inAltScreen {
-			if vt {
-				out.WriteString(seqAltScreenOn)
+		if withAltScreen {
+			// 1. Enter AltScreen FIRST. Many terminals (like Kitty) reset
+			// their keyboard protocol state when switching screen buffers.
+			if !inAltScreen {
+				if vt {
+					out.WriteString(seqAltScreenOn)
+				}
+				inAltScreen = true
 			}
-			inAltScreen = true
+			setAltScreenOS(true)
+			if vt {
+				out.WriteString(seqAutoWrapOff) // Disable auto-wrap for exact rendering
+			}
+			out.Sync()
 		}
-		setAltScreenOS(true)
-		if vt {
-			out.WriteString(seqAutoWrapOff) // Disable auto-wrap for exact rendering
-		}
-		out.Sync()
 
 		// 2. Enable advanced input protocols AFTER entering AltScreen.
 		r, err := vtinput.Enable()
 		if err != nil {
 			// Rollback AltScreen if input setup failed
-			if vt {
-				out.WriteString(seqAltScreenOff)
+			if withAltScreen {
+				if vt {
+					out.WriteString(seqAltScreenOff)
+				}
+				inAltScreen = false
+				out.Sync()
 			}
-			inAltScreen = false
-			out.Sync()
 			return err
 		}
 		inputRestore = r
@@ -140,10 +178,15 @@ func Resume() error {
 		out.Sync()
 		isPrepared = true
 
-		// Force a full redraw if FrameManager is running
-		if FrameManager != nil && FrameManager.scr != nil {
-			FrameManager.scr.HardReset()
-			FrameManager.Redraw()
+		if withAltScreen {
+			// Force a full redraw if FrameManager is running. Only relevant
+			// when we actually switched back to f4's own buffer -- with
+			// ResumeWithoutAltScreen the host buffer stays visible and
+			// there is nothing of f4's own to redraw yet.
+			if FrameManager != nil && FrameManager.scr != nil {
+				FrameManager.scr.HardReset()
+				FrameManager.Redraw()
+			}
 		}
 	}
 	return nil
