@@ -41,7 +41,6 @@ func RunAsync(worker func(ctx *TaskContext)) *TaskContext {
 				CleanupStderrLog()
 				os.Exit(2)
 			}
-			CleanupStderrLog()
 		}()
 		worker(taskCtx)
 	}()
