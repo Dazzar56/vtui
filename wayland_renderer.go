@@ -47,6 +47,14 @@ func NewWaylandRenderer(host *WaylandHost, face font.Face) *WaylandRenderer {
 	}
 }
 
+// setFace replaces the rasterizer after the Wayland output scale changes.
+// The caller holds host.mu, which also protects rendering.
+func (r *WaylandRenderer) setFace(face font.Face) {
+	r.face = face
+	r.glyphCache = make(map[glyphKey]*image.RGBA)
+	r.gfxKnown = false
+}
+
 func (r *WaylandRenderer) SetPalette(pal *[256]uint32) {
 	// Native RGB environment, palette mapping occurs logically upstream
 }
@@ -76,10 +84,11 @@ func (r *WaylandRenderer) ResizeWindow(cols, rows int) {
 	widget := r.host.widget
 	cw := r.host.cellW
 	ch := r.host.cellH
+	scale := r.host.scale
 	r.host.mu.Unlock()
 
 	if widget != nil {
-		widget.ScheduleResize(int32(cols*cw), int32(rows*ch))
+		widget.ScheduleResize(logicalWaylandPixels(cols*cw, scale), logicalWaylandPixels(rows*ch, scale))
 	}
 }
 

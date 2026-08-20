@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"image"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -76,6 +78,11 @@ var fallbackFontPaths = []string{
 	"/System/Library/Fonts/Supplemental/Songti.ttc",
 	"/System/Library/Fonts/Apple Color Emoji.ttc",
 	"/Library/Fonts/Arial Unicode.ttf",
+}
+
+var runFontconfigMonospace = func() (string, error) {
+	out, err := exec.Command("fc-match", "-f", "%{file}", "monospace").Output()
+	return strings.TrimSpace(string(out)), err
 }
 
 // runeCoverage is a bitmap of the runes a font has glyphs for, over all of
@@ -438,6 +445,12 @@ func getFontCandidates(fontName string) []string {
 		}
 	}
 
+	if fontName == "" {
+		if path := fontconfigMonospacePath(); path != "" {
+			candidates = append(candidates, path)
+		}
+	}
+
 	defaultPaths := []string{
 		`C:\Windows\Fonts\consola.ttf`,
 		`C:\Windows\Fonts\lucon.ttf`,
@@ -447,11 +460,30 @@ func getFontCandidates(fontName string) []string {
 		"/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
 		"/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
 		"/usr/share/fonts/TTF/DejaVuSansMono.ttf",
+		"/usr/share/fonts/google-noto/NotoSansMono-Regular.ttf",
+		"/usr/share/fonts/adwaita-mono-fonts/AdwaitaMono-Regular.ttf",
 		"/System/Library/Fonts/Supplemental/Courier New.ttf",
 		"/System/Library/Fonts/Monaco.ttf",
 	}
 	candidates = append(candidates, defaultPaths...)
 	return candidates
+}
+
+// fontconfigMonospacePath asks the platform's fontconfig database for the
+// system monospace default. Fedora and other distributions commonly install
+// it outside the traditional DejaVu paths.
+func fontconfigMonospacePath() string {
+	if runtime.GOOS != "linux" {
+		return ""
+	}
+	path, err := runFontconfigMonospace()
+	if err != nil {
+		return ""
+	}
+	if !filepath.IsAbs(path) {
+		return ""
+	}
+	return path
 }
 
 // loadBestFont attempts to find a suitable monospace TTF font on the system.
