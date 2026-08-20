@@ -285,7 +285,7 @@ func (h *Win32GuiHost) handleMessage(hwnd syscall.Handle, msg uint32, wParam, lP
 
 	case wmSize:
 		newW := int(lParam & 0xFFFF)
-		newH := int(lParam >> 16)
+		newH := int((lParam >> 16) & 0xFFFF)
 		if wParam != 1 && newW > 0 && newH > 0 {
 			h.mu.Lock()
 			newCols := newW / h.cellW
@@ -383,7 +383,7 @@ func (h *Win32GuiHost) handleMessage(hwnd syscall.Handle, msg uint32, wParam, lP
 
 	case wmLButtonUp, wmRButtonUp, wmMButtonUp:
 		x := int16(int32(int16(lParam & 0xFFFF)))
-		y := int16(int32(int16(lParam >> 16)))
+		y := int16(int32(int16((lParam >> 16) & 0xFFFF)))
 		cellX := int16(int(x) / h.cellW)
 		cellY := int16(int(y) / h.cellH)
 		var btn uint32
@@ -414,7 +414,7 @@ func (h *Win32GuiHost) handleMessage(hwnd syscall.Handle, msg uint32, wParam, lP
 
 	case wmMouseMove:
 		x := int16(int32(int16(lParam & 0xFFFF)))
-		y := int16(int32(int16(lParam >> 16)))
+		y := int16(int32(int16((lParam >> 16) & 0xFFFF)))
 		cellX := int16(int(x) / h.cellW)
 		cellY := int16(int(y) / h.cellH)
 		h.mu.Lock()
@@ -433,14 +433,14 @@ func (h *Win32GuiHost) handleMessage(hwnd syscall.Handle, msg uint32, wParam, lP
 		return 0
 
 	case wmMouseWheel:
-		zDelta := int16(wParam >> 16)
+		zDelta := int16((wParam >> 16) & 0xFFFF)
 		dir := 1
 		if zDelta < 0 {
 			dir = -1
 		}
 		var pt win32Point
 		pt.x = int32(int16(lParam & 0xFFFF))
-		pt.y = int32(int16(lParam >> 16))
+		pt.y = int32(int16((lParam >> 16) & 0xFFFF))
 		procScreenToClient.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&pt)))
 		cellX := int16(int(pt.x) / h.cellW)
 		cellY := int16(int(pt.y) / h.cellH)
@@ -650,7 +650,14 @@ func RunWin32GuiHost(cols, rows int, fontName string, fontSize float64, setupApp
 	GetTerminalSize = func() (int, int, error) {
 		host.mu.Lock()
 		defer host.mu.Unlock()
-		return host.cols, host.rows, nil
+		cols, rows := host.cols, host.rows
+		if cols > 500 {
+			cols = 500
+		}
+		if rows > 300 {
+			rows = 300
+		}
+		return cols, rows, nil
 	}
 
 	DisableTerminalClipboard()
