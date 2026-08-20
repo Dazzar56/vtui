@@ -44,18 +44,19 @@ var (
 	procReleaseDC          = user32.NewProc("ReleaseDC")
 	procFillRect           = user32.NewProc("FillRect")
 
-	gdi32DLL            = syscall.NewLazyDLL("gdi32.dll")
-	procStretchDIBits   = gdi32DLL.NewProc("StretchDIBits")
-	procGetDeviceCaps   = gdi32DLL.NewProc("GetDeviceCaps")
-	procGetStockObject  = gdi32DLL.NewProc("GetStockObject")
-	procCreateCompatDC  = gdi32DLL.NewProc("CreateCompatibleDC")
-	procCreateCompatBmp = gdi32DLL.NewProc("CreateCompatibleBitmap")
-	procSelectObject    = gdi32DLL.NewProc("SelectObject")
-	procSetDIBits       = gdi32DLL.NewProc("SetDIBits")
-	procBitBlt          = gdi32DLL.NewProc("BitBlt")
-	procDeleteDC        = gdi32DLL.NewProc("DeleteDC")
-	procDeleteObject    = gdi32DLL.NewProc("DeleteObject")
-	procGdiFlush        = gdi32DLL.NewProc("GdiFlush")
+	gdi32DLL             = syscall.NewLazyDLL("gdi32.dll")
+	procStretchDIBits    = gdi32DLL.NewProc("StretchDIBits")
+	procGetDeviceCaps    = gdi32DLL.NewProc("GetDeviceCaps")
+	procGetStockObject   = gdi32DLL.NewProc("GetStockObject")
+	procCreateCompatDC   = gdi32DLL.NewProc("CreateCompatibleDC")
+	procCreateCompatBmp  = gdi32DLL.NewProc("CreateCompatibleBitmap")
+	procCreateDIBSection = gdi32DLL.NewProc("CreateDIBSection")
+	procSelectObject     = gdi32DLL.NewProc("SelectObject")
+	procSetDIBits        = gdi32DLL.NewProc("SetDIBits")
+	procBitBlt           = gdi32DLL.NewProc("BitBlt")
+	procDeleteDC         = gdi32DLL.NewProc("DeleteDC")
+	procDeleteObject     = gdi32DLL.NewProc("DeleteObject")
+	procGdiFlush         = gdi32DLL.NewProc("GdiFlush")
 
 	shell32DLL          = syscall.NewLazyDLL("shell32.dll")
 	procDragAcceptFiles = shell32DLL.NewProc("DragAcceptFiles")
@@ -326,6 +327,9 @@ func (h *Win32GuiHost) handleMessage(hwnd syscall.Handle, msg uint32, wParam, lP
 				// happened to contain. Paint it black and keep paintPending
 				// set so the next Flush() asks for this paint again.
 				fillRectBlack(hdc, &ps.rcPaint)
+				// Self-heal: immediately ask for another paint instead of
+				// waiting for the next 250ms Flush() heartbeat.
+				procInvalidateRect.Call(uintptr(hwnd), 0, 0)
 			}
 			procEndPaint.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&ps)))
 		}
@@ -358,6 +362,10 @@ func (h *Win32GuiHost) handleMessage(hwnd syscall.Handle, msg uint32, wParam, lP
 			if sizeChanged && h.reader != nil && h.reader.EventChan != nil {
 				h.sendEvent(&vtinput.InputEvent{Type: vtinput.ResizeEventType})
 			}
+			// Explicitly ask for a repaint: CS_HREDRAW|CS_VREDRAW should do
+			// this, but a DWM-presented window can stay black if the paint
+			// arrives before the FrameManager recomposes for the new size.
+			procInvalidateRect.Call(uintptr(hwnd), 0, 0)
 		}
 		return 0
 
@@ -629,28 +637,38 @@ func (r *Win32GuiRenderer) blitTo(hdc uintptr) bool {
 		if memDC == 0 {
 			return false
 		}
-		bmp, _, _ := procCreateCompatBmp.Call(hdc, uintptr(w), uintptr(h))
+		// A device-INDEPENDENT bitmap (DIB section): unlike a DDB from
+		// CreateCompatibleBitmap, its pixel buffer is always writable
+		// directly (and SetDIBits into a DDB created off a DWM window DC
+		// intermittently fails on larger sizes, leaving the window black --
+		// f4 issue #514).
+		bmi := makeTopDownDIBInfo(w, h)
+		var bits uintptr
+		bmp, _, _ := procCreateDIBSection.Call(
+			hdc,
+			uintptr(unsafe.Pointer(&bmi)),
+			dibRGBColors,
+			uintptr(unsafe.Pointer(&bits)),
+			0, 0,
+		)
 		if bmp == 0 {
 			procDeleteDC.Call(memDC)
 			return false
 		}
 		procSelectObject.Call(memDC, bmp)
 		r.memDC, r.memBitmap = memDC, bmp
+		r.memBits = bits
 		r.memW, r.memH = w, h
 	}
 
-	bmi := makeTopDownDIBInfo(w, h)
-	linesSet, _, _ := procSetDIBits.Call(
-		r.memDC,
-		r.memBitmap,
-		0, uintptr(h),
-		uintptr(unsafe.Pointer(&r.bgraBuf[0])),
-		uintptr(unsafe.Pointer(&bmi)),
-		dibRGBColors,
-	)
-	if linesSet == 0 {
+	// The DIB section is 32bpp top-down, i.e. BGRA row-major top-to-bottom,
+	// exactly the layout syncBGRALocked produced -- so copy pixels straight
+	// into the DIB memory and skip SetDIBits entirely.
+	if r.memBits == 0 || len(r.bgraBuf) < w*h*4 {
 		return false
 	}
+	dst := unsafe.Slice((*byte)(unsafe.Pointer(r.memBits)), w*h*4)
+	copy(dst, r.bgraBuf[:w*h*4])
 
 	const srcCopyRop = srcCopy
 	ret, _, _ := procBitBlt.Call(hdc, 0, 0, uintptr(w), uintptr(h), r.memDC, 0, 0, srcCopyRop)
@@ -670,6 +688,7 @@ func (r *Win32GuiRenderer) releaseMemDCLocked() {
 		r.memDC = 0
 	}
 	r.memW, r.memH = 0, 0
+	r.memBits = 0
 }
 
 // releaseGDIResources frees GDI handles owned by the renderer. Called from
@@ -830,9 +849,23 @@ func RunWin32GuiHost(cols, rows int, fontName string, fontSize float64, setupApp
 	SetActiveBackend("win32", fmt.Sprintf("cell %dx%d, font %q", cellW, cellH, fontName), "GDI SetDIBitsToDevice")
 	setWheelNotchLines(getSystemScrollLines())
 
+	// Compose the very first real frame while the window is still hidden.
+	// Without this, the window becomes visible with an empty (black) screen
+	// and only receives its content after FrameManager.Run's first
+	// renderPhase -- which on a cold start (font glyph cache, panel layout,
+	// session restore) takes long enough to read as a ~1s black flash.
+	FrameManager.renderPhase()
+
 	// Force the initial frame composition so the bitmap buffer is fully populated
 	// before the window is made visible and receives its first WM_PAINT.
 	scr.Flush()
+
+	// Paint the first frame into the (still hidden) window before showing it:
+	// DWM presents the window the instant ShowWindow runs, a frame or two
+	// before the first GDI blit would land, so an unpainted window flashes
+	// black on cold start.
+	procInvalidateRect.Call(hwndRet, 0, 0)
+	procUpdateWindow.Call(hwndRet)
 
 	procShowWindow.Call(hwndRet, 1)
 	procUpdateWindow.Call(hwndRet)

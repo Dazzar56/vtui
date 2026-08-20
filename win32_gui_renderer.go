@@ -48,6 +48,7 @@ type Win32GuiRenderer struct {
 	// See blitTo() in win32_gui_windows.go and f4 issue #514.
 	memDC      uintptr
 	memBitmap  uintptr
+	memBits    uintptr
 	memW, memH int
 }
 
