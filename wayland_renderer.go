@@ -5,6 +5,7 @@ package vtui
 import (
 	"image"
 	"image/color"
+	"math"
 	"time"
 
 	"golang.org/x/image/font"
@@ -326,7 +327,7 @@ func (r *WaylandRenderer) drawCachedGlyph(img *image.RGBA, cellVal uint64, px, p
 }
 
 func (r *WaylandRenderer) drawCustomChar(img *image.RGBA, char rune, px, py, cw, ch int, fg uint32) bool {
-	return drawBoxGlyph(img, char, px, py, cw, ch, r.host.scale, fg)
+	return drawBoxGlyph(img, char, px, py, cw, ch, int(math.Ceil(r.host.scale)), fg)
 }
 
 func (r *WaylandRenderer) Flush() {

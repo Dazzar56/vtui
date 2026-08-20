@@ -5,6 +5,7 @@ package vtui
 import (
 	"image"
 	"io"
+	"math"
 	"sync"
 	"time"
 
@@ -25,7 +26,7 @@ type WaylandHost struct {
 	cols, rows int
 	cellW      int
 	cellH      int
-	scale      int
+	scale      float64
 	fontName   string
 	fontSize   float64
 	screen     *ScreenBuf
@@ -56,7 +57,8 @@ func runInWaylandWindow(cols, rows int, fontName string, fontSize float64, setup
 		fontSize = 18.0
 	}
 	// The host starts at 1x and updates itself from the physical dimensions
-	// supplied by the Wayland surface after it enters an output.
+	// supplied by the Wayland surface. Fractional-scale compositors report a
+	// 1.5x backing buffer for a 150% output, for example.
 	dpi := 72.0
 	face, cellW, cellH := loadBestFont(fontName, fontSize, dpi)
 
@@ -128,6 +130,15 @@ func runInWaylandWindow(cols, rows int, fontName string, fontSize float64, setup
 // -- window.WidgetHandler Implementation --
 
 func (h *WaylandHost) Resize(widget *window.Widget, width int32, height int32, pwidth int32, pheight int32) {
+	// xdg_toplevel is allowed to send an initial 0x0 configure while the
+	// surface is being mapped. It is not a usable pixel size: accepting it
+	// would replace the backing image with an empty one and permanently zero
+	// the terminal grid before the first real configure arrives.
+	if !hasWaylandPixelSize(width, height, pwidth, pheight) {
+		DebugLog("WAYLAND: ignoring zero-sized configure logical=%dx%d pixels=%dx%d", width, height, pwidth, pheight)
+		return
+	}
+
 	h.mu.Lock()
 	targetCols, targetRows := h.cols, h.rows
 	scaleChanged := h.updateScaleLocked(waylandScaleFromDimensions(width, height, pwidth, pheight))
@@ -143,13 +154,13 @@ func (h *WaylandHost) Resize(widget *window.Widget, width int32, height int32, p
 		cols, rows = h.cols, h.rows
 		h.mu.Unlock()
 
-		if !scaleChanged && h.reader != nil {
+		if h.reader != nil {
 			h.reader.EventChan <- &vtinput.InputEvent{Type: vtinput.ResizeEventType}
 		}
 	} else {
 		h.mu.Unlock()
 	}
-	DebugLog("WAYLAND: resize logical=%dx%d pixels=%dx%d scale=%d cell=%dx%d grid=%dx%d", width, height, pwidth, pheight, scale, cellW, cellH, cols, rows)
+	DebugLog("WAYLAND: resize logical=%dx%d pixels=%dx%d scale=%.2f cell=%dx%d grid=%dx%d", width, height, pwidth, pheight, scale, cellW, cellH, cols, rows)
 	widget.SetAllocation(0, 0, width, height)
 	if scaleChanged && targetCols > 0 && targetRows > 0 {
 		widget.ScheduleResize(logicalWaylandPixels(targetCols*cellW, scale), logicalWaylandPixels(targetRows*cellH, scale))
@@ -167,26 +178,33 @@ func (h *WaylandHost) Resize(widget *window.Widget, width int32, height int32, p
 	}
 }
 
-func waylandScaleFromDimensions(width, height, pwidth, pheight int32) int {
-	scale := int32(1)
-	if width > 0 && pwidth >= width {
-		scale = max(scale, pwidth/width)
-	}
-	if height > 0 && pheight >= height {
-		scale = max(scale, pheight/height)
-	}
-	return int(scale)
+func hasWaylandPixelSize(width, height, pwidth, pheight int32) bool {
+	return width > 0 && height > 0 && pwidth > 0 && pheight > 0
 }
 
-func logicalWaylandPixels(physical, scale int) int32 {
-	if scale < 1 {
+func waylandScaleFromDimensions(width, height, pwidth, pheight int32) float64 {
+	scale := 0.0
+	if width > 0 && pwidth > 0 {
+		scale = math.Max(scale, float64(pwidth)/float64(width))
+	}
+	if height > 0 && pheight > 0 {
+		scale = math.Max(scale, float64(pheight)/float64(height))
+	}
+	if scale <= 0 {
+		return 1
+	}
+	return scale
+}
+
+func logicalWaylandPixels(physical int, scale float64) int32 {
+	if scale <= 0 {
 		scale = 1
 	}
-	return int32((physical + scale - 1) / scale)
+	return int32(math.Ceil(float64(physical) / scale))
 }
 
-func (h *WaylandHost) updateScaleLocked(scale int) bool {
-	if scale < 1 || h.scale == scale {
+func (h *WaylandHost) updateScaleLocked(scale float64) bool {
+	if scale <= 0 || math.Abs(h.scale-scale) < 0.001 {
 		return false
 	}
 	face, cellW, cellH := loadBestFont(h.fontName, h.fontSize, 72.0*float64(scale))
@@ -330,7 +348,7 @@ func (h *WaylandHost) mouseCellLocked() (int, int) {
 	if h.cellW <= 0 || h.cellH <= 0 {
 		return 0, 0
 	}
-	return h.mouseX * h.scale / h.cellW, h.mouseY * h.scale / h.cellH
+	return int(float64(h.mouseX) * h.scale / float64(h.cellW)), int(float64(h.mouseY) * h.scale / float64(h.cellH))
 }
 
 func (h *WaylandHost) AxisDiscrete(w *window.Widget, input *window.Input, axis uint32, discrete int32) {
