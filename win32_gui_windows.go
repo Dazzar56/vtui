@@ -598,7 +598,7 @@ func RunWin32GuiHost(cols, rows int, fontName string, fontSize float64, setupApp
 	}
 	win32GuiClassMu.Unlock()
 
-	style := uint32(wsOverlappedWindow | wsVisible)
+	style := uint32(wsOverlappedWindow)
 	var rc struct{ left, top, right, bottom int32 }
 	rc.right = int32(cols * cellW)
 	rc.bottom = int32(rows * cellH)
@@ -656,6 +656,10 @@ func RunWin32GuiHost(cols, rows int, fontName string, fontSize float64, setupApp
 	setupApp()
 	SetActiveBackend("win32", fmt.Sprintf("cell %dx%d, font %q", cellW, cellH, fontName), "GDI SetDIBitsToDevice")
 	setWheelNotchLines(getSystemScrollLines())
+
+	// Force the initial frame composition so the bitmap buffer is fully populated
+	// before the window is made visible and receives its first WM_PAINT.
+	scr.Flush()
 
 	procShowWindow.Call(hwndRet, 1)
 	procUpdateWindow.Call(hwndRet)

@@ -170,6 +170,11 @@ func resumeLocked(withAltScreen bool) error {
 
 		// 2. Enable advanced input protocols AFTER entering AltScreen.
 		r, err := vtinput.Enable()
+		if err != nil && !vt {
+			// On Windows without VT input support (Windows 7/8/8.1), ReadConsoleInput
+			// works in standard console mode without ENABLE_VIRTUAL_TERMINAL_INPUT.
+			err = nil
+		}
 		if err != nil {
 			// Rollback AltScreen if input setup failed
 			if withAltScreen {
