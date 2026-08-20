@@ -880,15 +880,7 @@ func (r *GogpuRenderer) DrawToScreen(ctx *gogpu.Context) {
 	r.dirty = false
 
 	tRender := gogpuProfNow()
-	if drawer := ctx.AsTextureDrawer(); drawer != nil {
-		if err := r.canvas.RenderTo(drawer); err != nil {
-			DebugLog("GOGPU_DRAW: r.canvas.RenderTo failed: %v", err)
-		}
-	} else if target := ctx.RenderTarget(); target != nil {
-		if err := r.canvas.Render(target); err != nil {
-			DebugLog("GOGPU_DRAW: r.canvas.Render failed: %v", err)
-		}
-	}
+	r.canvas.Render(ctx.RenderTarget())
 	prof.renderTime = gogpuProfSince(tRender)
 
 	if gogpuProfileEnabled {
