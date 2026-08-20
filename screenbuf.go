@@ -805,17 +805,26 @@ func (r *AnsiRenderer) SetPalette(pal *[256]uint32) {
 	if pal == nil {
 		return
 	}
+	// All changed entries go into a single OSC 4 message (xterm accepts
+	// multiple ;index;spec pairs). One message per frame instead of up to
+	// 256: terminals that repaint per OSC message (iTerm2) take seconds to
+	// chew through individual messages, which showed up as a multi-second
+	// visible freeze on startup and exit.
 	changed := false
 	for i := 0; i < 256; i++ {
 		if !r.parent.HostPaletteValid[i] || r.parent.HostPalette[i] != pal[i] {
-			changed = true
+			if !changed {
+				changed = true
+				r.frameOut.WriteString("\x1b]4")
+			}
 			pr, pg, pb := rgb(pal[i])
-			r.frameOut.WriteString(fmt.Sprintf("\x1b]4;%d;rgb:%02x/%02x/%02x\x07", i, pr, pg, pb))
+			r.frameOut.WriteString(fmt.Sprintf(";%d;rgb:%02x/%02x/%02x", i, pr, pg, pb))
 			r.parent.HostPalette[i] = pal[i]
 			r.parent.HostPaletteValid[i] = true
 		}
 	}
 	if changed {
+		r.frameOut.WriteString("\x07")
 		r.parent.quantCache = make(map[uint32]uint8)
 	}
 }

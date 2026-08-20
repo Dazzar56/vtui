@@ -61,6 +61,17 @@ func PrepareTerminal() (func(), error) {
 
 // Suspend fully restores the terminal state (exits raw mode, alternate screen, etc.).
 // Useful when temporarily returning control to the shell or an external program.
+// IsPrepared reports whether the terminal is currently in the raw/alt-screen
+// state (between Resume and Suspend). Frame flushes must not reach the host
+// terminal outside that window: Suspend has already reset the palette and
+// attributes, and a late frame would repaint the theme palette (OSC 4) right
+// over the user's restored shell.
+func IsPrepared() bool {
+	termMu.Lock()
+	defer termMu.Unlock()
+	return isPrepared
+}
+
 func Suspend() {
 	termMu.Lock()
 	defer termMu.Unlock()
