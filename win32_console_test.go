@@ -101,14 +101,8 @@ func TestWin32ConsoleRenderer_ImplementsSurfaceRenderer(t *testing.T) {
 
 func TestDefaultConsoleBackend(t *testing.T) {
 	backend := DefaultConsoleBackend()
-	if IsWine() {
-		if backend != "winapi" && backend != "ansi" {
-			t.Errorf("Expected 'winapi' or 'ansi' backend under Wine, got %q", backend)
-		}
-	} else {
-		if backend != "ansi" {
-			t.Errorf("Expected 'ansi' backend on non-Wine environment, got %q", backend)
-		}
+	if backend != "winapi" && backend != "ansi" {
+		t.Errorf("Expected 'winapi' or 'ansi' backend, got %q", backend)
 	}
 }
 

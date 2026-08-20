@@ -132,15 +132,18 @@ func IsWine() bool {
 }
 
 // DefaultConsoleBackend returns the default console backend name ("winapi" or "ansi").
-// Under Wine on Windows:
-// - If running inside a Win32 Console (wineconsole/conhost), it defaults to "winapi".
-// - If running directly from a Unix terminal without a Win32 console buffer, it defaults to "ansi".
+// Under Wine and legacy Windows (Windows 7/8/8.1 without VT support):
+// - If running inside a Win32 Console, it defaults to "winapi".
+// - If running directly from a terminal with VT processing support, it defaults to "ansi".
 func DefaultConsoleBackend() string {
 	if isWineOS() {
 		if hasConsoleBufferOS() {
 			return "winapi"
 		}
 		return "ansi"
+	}
+	if hasConsoleBufferOS() && !hasVTConsoleSupportOS() {
+		return "winapi"
 	}
 	return "ansi"
 }

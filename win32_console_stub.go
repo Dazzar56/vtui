@@ -11,6 +11,9 @@ func isWineOS() bool {
 func hasConsoleBufferOS() bool {
 	return false
 }
+func hasVTConsoleSupportOS() bool {
+	return true
+}
 func setAltScreenWin32(enable bool)   {}
 func getActiveConsoleHandle() uintptr { return 0 }
 

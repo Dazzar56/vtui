@@ -111,6 +111,25 @@ func hasConsoleBufferOS() bool {
 	r1, _, _ := procGetConsoleScreenBufferInfo.Call(uintptr(hOut), uintptr(unsafe.Pointer(&csbi)))
 	return r1 != 0 && csbi.dwSize.X > 0 && csbi.dwSize.Y > 0
 }
+func hasVTConsoleSupportOS() bool {
+	hOut, err := syscall.GetStdHandle(syscall.STD_OUTPUT_HANDLE)
+	if err != nil || hOut == syscall.InvalidHandle || hOut == 0 {
+		return false
+	}
+	var mode uint32
+	if err := windows.GetConsoleMode(windows.Handle(hOut), &mode); err != nil {
+		return false
+	}
+	const enableVT = 0x0004 // ENABLE_VIRTUAL_TERMINAL_PROCESSING
+	if (mode & enableVT) != 0 {
+		return true
+	}
+	if err := windows.SetConsoleMode(windows.Handle(hOut), mode|enableVT); err != nil {
+		return false
+	}
+	_ = windows.SetConsoleMode(windows.Handle(hOut), mode)
+	return true
+}
 
 // Win32ConsoleRenderer implements SurfaceRenderer using the classic Windows Console API (WriteConsoleOutputW).
 type Win32ConsoleRenderer struct {
