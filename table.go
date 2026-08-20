@@ -37,8 +37,23 @@ type TableCellAttrProvider interface {
 }
 
 // TableCellSelectProvider allows row/cell selection via TableCellProvider.
+// IsRowSelected(row) only sees a row number, so it cannot tell apart cells
+// in grid layouts where several data items share one row across different
+// columns (e.g. a multi-column file panel). Implementers of such layouts
+// should also implement TableCellColSelectProvider, which the table prefers
+// whenever both are present.
 type TableCellSelectProvider interface {
 	IsRowSelected(row int) bool
+}
+
+// TableCellColSelectProvider is the column-aware counterpart of
+// TableCellSelectProvider, for TableCellProvider-backed tables whose cells
+// at the same row but different columns can belong to different, separately
+// selectable data items (grid/multi-column layouts). When a cellProvider
+// implements this, the table calls IsCellSelected(row, col) instead of
+// IsRowSelected(row).
+type TableCellColSelectProvider interface {
+	IsCellSelected(row, col int) bool
 }
 
 // Table is a generic control for displaying tabular data.
@@ -559,7 +574,9 @@ func (t *Table) drawRow(scr *ScreenBuf, y int, rowIdx int, attr uint64, widths [
 		isSelected := false
 		if rowIdx != -1 {
 			if t.cellProvider != nil {
-				if sp, ok := t.cellProvider.(TableCellSelectProvider); ok {
+				if csp, ok := t.cellProvider.(TableCellColSelectProvider); ok {
+					isSelected = csp.IsCellSelected(rowIdx, colIdx)
+				} else if sp, ok := t.cellProvider.(TableCellSelectProvider); ok {
 					isSelected = sp.IsRowSelected(rowIdx)
 				}
 			} else if rowIdx < len(t.Rows) {

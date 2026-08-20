@@ -1219,3 +1219,41 @@ func TestTable_QuickSearchBottomUpMouse(t *testing.T) {
 		t.Errorf("click on empty space must be ignored, got %d", tbl.SelectPos)
 	}
 }
+
+// mockGridCellProvider is a TableCellProvider for a grid layout where two
+// display columns each hold an independently selectable item on the same
+// row (e.g. a two-column file panel). It implements both
+// TableCellSelectProvider (row-only, always wrong here) and
+// TableCellColSelectProvider (row+col, correct), to prove the table prefers
+// the column-aware one when both are present.
+type mockGridCellProvider struct {
+	// items[col] is the selection state of the item shown in that column.
+	items [2]bool
+}
+
+func (m mockGridCellProvider) RowCount() int                    { return 1 }
+func (m mockGridCellProvider) GetCellText(row, col int) string  { return "X" }
+func (m mockGridCellProvider) IsRowSelected(row int) bool       { return false }
+func (m mockGridCellProvider) IsCellSelected(row, col int) bool { return m.items[col] }
+
+func TestTable_ColSelectProviderPreferredOverRowSelectProvider(t *testing.T) {
+	SetDefaultPalette()
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(20, 3)
+
+	cols := []TableColumn{
+		{Title: "L", Width: 5, Alignment: AlignLeft},
+		{Title: "R", Width: 5, Alignment: AlignLeft},
+	}
+	tbl := NewTable(0, 0, 10, 2, cols)
+	tbl.ColorTextIdx = ColTableText
+	tbl.ColorItemSelectTextIdx = ColDialogHighlightText
+
+	// Left column's item is selected, right column's is not.
+	tbl.SetCellProvider(mockGridCellProvider{items: [2]bool{true, false}})
+	tbl.SetRowCount(1)
+	tbl.Show(scr)
+
+	checkCell(t, scr, 0, 1, 'X', Palette[ColDialogHighlightText])
+	checkCell(t, scr, 6, 1, 'X', Palette[ColTableText])
+}
