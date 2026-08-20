@@ -1,6 +1,7 @@
 package vtui
 
 import (
+	"runtime"
 	"strings"
 	"testing"
 
@@ -87,6 +88,19 @@ func TestGetFontCandidates(t *testing.T) {
 	}
 	if !foundDirCandidate {
 		t.Error("Expected directory-specific candidates for custom font")
+	}
+}
+
+func TestFontconfigMonospacePath(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("fontconfig lookup is Linux-only")
+	}
+	previous := runFontconfigMonospace
+	runFontconfigMonospace = func() (string, error) { return "/tmp/Mono.ttf", nil }
+	t.Cleanup(func() { runFontconfigMonospace = previous })
+
+	if got := fontconfigMonospacePath(); got != "/tmp/Mono.ttf" {
+		t.Errorf("fontconfigMonospacePath() = %q, want /tmp/Mono.ttf", got)
 	}
 }
 

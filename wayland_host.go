@@ -26,6 +26,10 @@ type WaylandHost struct {
 	cellW      int
 	cellH      int
 	scale      int
+	fontName   string
+	fontSize   float64
+	screen     *ScreenBuf
+	renderer   *WaylandRenderer
 
 	mouseX   int
 	mouseY   int
@@ -51,19 +55,21 @@ func runInWaylandWindow(cols, rows int, fontName string, fontSize float64, setup
 	if fontSize <= 0 {
 		fontSize = 18.0
 	}
-	// Wayland scaling is handled by the compositor scaling the 1x buffer.
-	// Use 72.0 DPI so that fontSize maps exactly 1:1 to logical pixels, matching gogpu.
+	// The host starts at 1x and updates itself from the physical dimensions
+	// supplied by the Wayland surface after it enters an output.
 	dpi := 72.0
 	face, cellW, cellH := loadBestFont(fontName, fontSize, dpi)
 
 	host := &WaylandHost{
-		display: d,
-		cols:    cols,
-		rows:    rows,
-		cellW:   cellW,
-		cellH:   cellH,
-		scale:   1, // Will be updated if output scale changes
-		imgBuf:  image.NewRGBA(image.Rect(0, 0, cols*cellW, rows*cellH)),
+		display:  d,
+		cols:     cols,
+		rows:     rows,
+		cellW:    cellW,
+		cellH:    cellH,
+		scale:    1,
+		fontName: fontName,
+		fontSize: fontSize,
+		imgBuf:   image.NewRGBA(image.Rect(0, 0, cols*cellW, rows*cellH)),
 	}
 
 	host.win = window.Create(d)
@@ -77,7 +83,9 @@ func runInWaylandWindow(cols, rows int, fontName string, fontSize float64, setup
 
 	scr := NewScreenBuf()
 	scr.AllocBuf(cols, rows)
-	scr.Renderer = NewWaylandRenderer(host, face)
+	host.screen = scr
+	host.renderer = NewWaylandRenderer(host, face)
+	scr.Renderer = host.renderer
 	scr.Graphics().SetProtocol(GraphicsNative)
 	scr.Graphics().SetCellSize(cellW, cellH)
 	FrameManager.Init(scr)
@@ -92,7 +100,7 @@ func runInWaylandWindow(cols, rows int, fontName string, fontSize float64, setup
 		return host.cols, host.rows, nil
 	}
 
-	host.widget.ScheduleResize(int32(cols*cellW), int32(rows*cellH))
+	host.widget.ScheduleResize(logicalWaylandPixels(cols*cellW, host.scale), logicalWaylandPixels(rows*cellH, host.scale))
 
 	setupApp()
 	// After setupApp: the application installs the debug log sink during
@@ -121,24 +129,77 @@ func runInWaylandWindow(cols, rows int, fontName string, fontSize float64, setup
 
 func (h *WaylandHost) Resize(widget *window.Widget, width int32, height int32, pwidth int32, pheight int32) {
 	h.mu.Lock()
-	if int(pwidth) != h.imgBuf.Rect.Dx() || int(pheight) != h.imgBuf.Rect.Dy() {
+	targetCols, targetRows := h.cols, h.rows
+	scaleChanged := h.updateScaleLocked(waylandScaleFromDimensions(width, height, pwidth, pheight))
+	scale, cellW, cellH := h.scale, h.cellW, h.cellH
+	cols, rows := h.cols, h.rows
+	pixelSizeChanged := int(pwidth) != h.imgBuf.Rect.Dx() || int(pheight) != h.imgBuf.Rect.Dy()
+	if pixelSizeChanged {
 		h.imgBuf = image.NewRGBA(image.Rect(0, 0, int(pwidth), int(pheight)))
-		h.cols = int(pwidth) / h.cellW
-		h.rows = int(pheight) / h.cellH
+		if !scaleChanged {
+			h.cols = int(pwidth) / h.cellW
+			h.rows = int(pheight) / h.cellH
+		}
+		cols, rows = h.cols, h.rows
 		h.mu.Unlock()
 
-		if h.reader != nil {
+		if !scaleChanged && h.reader != nil {
 			h.reader.EventChan <- &vtinput.InputEvent{Type: vtinput.ResizeEventType}
 		}
 	} else {
 		h.mu.Unlock()
 	}
-	widget.SetAllocation(0, 0, pwidth, pheight)
+	DebugLog("WAYLAND: resize logical=%dx%d pixels=%dx%d scale=%d cell=%dx%d grid=%dx%d", width, height, pwidth, pheight, scale, cellW, cellH, cols, rows)
+	widget.SetAllocation(0, 0, width, height)
+	if scaleChanged && targetCols > 0 && targetRows > 0 {
+		widget.ScheduleResize(logicalWaylandPixels(targetCols*cellW, scale), logicalWaylandPixels(targetRows*cellH, scale))
+	}
 	// The first call to Resize confirms the window is mapped and ready.
 	// This is the correct place to trigger the initial draw.
 	if FrameManager != nil {
-		FrameManager.Redraw()
+		if pixelSizeChanged {
+			// The new backing buffer is blank. Force every cell to be painted
+			// again instead of relying on the renderer's dirty-cell shadow.
+			FrameManager.HardRefresh()
+		} else {
+			FrameManager.Redraw()
+		}
 	}
+}
+
+func waylandScaleFromDimensions(width, height, pwidth, pheight int32) int {
+	scale := int32(1)
+	if width > 0 && pwidth >= width {
+		scale = max(scale, pwidth/width)
+	}
+	if height > 0 && pheight >= height {
+		scale = max(scale, pheight/height)
+	}
+	return int(scale)
+}
+
+func logicalWaylandPixels(physical, scale int) int32 {
+	if scale < 1 {
+		scale = 1
+	}
+	return int32((physical + scale - 1) / scale)
+}
+
+func (h *WaylandHost) updateScaleLocked(scale int) bool {
+	if scale < 1 || h.scale == scale {
+		return false
+	}
+	face, cellW, cellH := loadBestFont(h.fontName, h.fontSize, 72.0*float64(scale))
+	h.scale = scale
+	h.cellW = cellW
+	h.cellH = cellH
+	if h.renderer != nil {
+		h.renderer.setFace(face)
+	}
+	if h.screen != nil {
+		h.screen.Graphics().SetCellSize(cellW, cellH)
+	}
+	return true
 }
 
 func (h *WaylandHost) Redraw(widget *window.Widget) {
@@ -202,6 +263,8 @@ func (h *WaylandHost) Close() {
 // -- Pointer & Keyboard Handlers --
 
 func (h *WaylandHost) Enter(w *window.Widget, input *window.Input, x float32, y float32) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	h.mouseX, h.mouseY = int(x), int(y)
 }
 func (h *WaylandHost) Leave(w *window.Widget, input *window.Input) {
@@ -211,14 +274,18 @@ func (h *WaylandHost) Leave(w *window.Widget, input *window.Input) {
 }
 
 func (h *WaylandHost) Motion(w *window.Widget, input *window.Input, time uint32, x float32, y float32) int {
+	h.mu.Lock()
 	h.mouseX, h.mouseY = int(x), int(y)
+	mouseX, mouseY := h.mouseCellLocked()
+	mouseBtn := h.mouseBtn
+	h.mu.Unlock()
 	if h.reader != nil {
 		h.reader.EventChan <- &vtinput.InputEvent{
 			Type:            vtinput.MouseEventType,
-			MouseX:          int16(h.mouseX / h.cellW),
-			MouseY:          int16(h.mouseY / h.cellH),
+			MouseX:          int16(mouseX),
+			MouseY:          int16(mouseY),
 			MouseEventFlags: vtinput.MouseMoved,
-			ButtonState:     h.mouseBtn,
+			ButtonState:     mouseBtn,
 			ControlKeyState: h.getMods(input),
 		}
 	}
@@ -239,7 +306,10 @@ func (h *WaylandHost) Button(w *window.Widget, input *window.Input, time uint32,
 		bs = vtinput.FromLeft2ndButtonPressed // BTN_MIDDLE
 	}
 
+	h.mu.Lock()
 	h.mouseBtn = bs
+	mouseX, mouseY := h.mouseCellLocked()
+	h.mu.Unlock()
 	if !isDown {
 		bs = 0
 	}
@@ -248,12 +318,19 @@ func (h *WaylandHost) Button(w *window.Widget, input *window.Input, time uint32,
 		h.reader.EventChan <- &vtinput.InputEvent{
 			Type:            vtinput.MouseEventType,
 			KeyDown:         isDown,
-			MouseX:          int16(h.mouseX / h.cellW),
-			MouseY:          int16(h.mouseY / h.cellH),
+			MouseX:          int16(mouseX),
+			MouseY:          int16(mouseY),
 			ButtonState:     bs,
 			ControlKeyState: h.getMods(input),
 		}
 	}
+}
+
+func (h *WaylandHost) mouseCellLocked() (int, int) {
+	if h.cellW <= 0 || h.cellH <= 0 {
+		return 0, 0
+	}
+	return h.mouseX * h.scale / h.cellW, h.mouseY * h.scale / h.cellH
 }
 
 func (h *WaylandHost) AxisDiscrete(w *window.Widget, input *window.Input, axis uint32, discrete int32) {
