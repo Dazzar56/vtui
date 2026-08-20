@@ -48,6 +48,26 @@ func TestWaylandScaleFromDimensions(t *testing.T) {
 	}
 }
 
+func TestHasWaylandPixelSize(t *testing.T) {
+	tests := []struct {
+		name                           string
+		width, height, pwidth, pheight int32
+		want                           bool
+	}{
+		{name: "valid", width: 1000, height: 690, pwidth: 1500, pheight: 1035, want: true},
+		{name: "zero logical width", width: 0, height: 690, pwidth: 0, pheight: 1035, want: false},
+		{name: "zero physical height", width: 1000, height: 690, pwidth: 1500, pheight: 0, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := hasWaylandPixelSize(tt.width, tt.height, tt.pwidth, tt.pheight); got != tt.want {
+				t.Errorf("hasWaylandPixelSize(%d, %d, %d, %d) = %v, want %v", tt.width, tt.height, tt.pwidth, tt.pheight, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestLogicalWaylandPixelsRoundsUp(t *testing.T) {
 	if got := logicalWaylandPixels(1001, 2); got != 501 {
 		t.Errorf("logicalWaylandPixels(1001, 2) = %d, want 501", got)

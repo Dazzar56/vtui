@@ -130,6 +130,15 @@ func runInWaylandWindow(cols, rows int, fontName string, fontSize float64, setup
 // -- window.WidgetHandler Implementation --
 
 func (h *WaylandHost) Resize(widget *window.Widget, width int32, height int32, pwidth int32, pheight int32) {
+	// xdg_toplevel is allowed to send an initial 0x0 configure while the
+	// surface is being mapped. It is not a usable pixel size: accepting it
+	// would replace the backing image with an empty one and permanently zero
+	// the terminal grid before the first real configure arrives.
+	if !hasWaylandPixelSize(width, height, pwidth, pheight) {
+		DebugLog("WAYLAND: ignoring zero-sized configure logical=%dx%d pixels=%dx%d", width, height, pwidth, pheight)
+		return
+	}
+
 	h.mu.Lock()
 	targetCols, targetRows := h.cols, h.rows
 	scaleChanged := h.updateScaleLocked(waylandScaleFromDimensions(width, height, pwidth, pheight))
@@ -167,6 +176,10 @@ func (h *WaylandHost) Resize(widget *window.Widget, width int32, height int32, p
 			FrameManager.Redraw()
 		}
 	}
+}
+
+func hasWaylandPixelSize(width, height, pwidth, pheight int32) bool {
+	return width > 0 && height > 0 && pwidth > 0 && pheight > 0
 }
 
 func waylandScaleFromDimensions(width, height, pwidth, pheight int32) float64 {
