@@ -43,9 +43,9 @@ var (
 	procGetDC              = user32.NewProc("GetDC")
 	procReleaseDC          = user32.NewProc("ReleaseDC")
 
-	gdi32DLL              = syscall.NewLazyDLL("gdi32.dll")
-	procSetDIBitsToDevice = gdi32DLL.NewProc("SetDIBitsToDevice")
-	procGetDeviceCaps     = gdi32DLL.NewProc("GetDeviceCaps")
+	gdi32DLL          = syscall.NewLazyDLL("gdi32.dll")
+	procStretchDIBits = gdi32DLL.NewProc("StretchDIBits")
+	procGetDeviceCaps = gdi32DLL.NewProc("GetDeviceCaps")
 
 	shell32DLL          = syscall.NewLazyDLL("shell32.dll")
 	procDragAcceptFiles = shell32DLL.NewProc("DragAcceptFiles")
@@ -158,6 +158,7 @@ func (h *Win32GuiHost) Invalidate() {
 	h.mu.Unlock()
 	if hwnd != 0 {
 		procInvalidateRect.Call(uintptr(hwnd), 0, 0)
+		procPostMessageW.Call(uintptr(hwnd), 0, 0, 0)
 	}
 }
 
@@ -265,15 +266,16 @@ func (h *Win32GuiHost) handleMessage(hwnd syscall.Handle, msg uint32, wParam, lP
 				w, ht, ok := h.renderer.syncBGRA()
 				if ok && w > 0 && ht > 0 {
 					bmi := makeTopDownDIBInfo(w, ht)
-					procSetDIBitsToDevice.Call(
+					procStretchDIBits.Call(
 						hdc,
 						0, 0,
 						uintptr(w), uintptr(ht),
 						0, 0,
-						0, uintptr(ht),
+						uintptr(w), uintptr(ht),
 						uintptr(unsafe.Pointer(&h.renderer.bgraBuf[0])),
 						uintptr(unsafe.Pointer(&bmi)),
 						dibRGBColors,
+						srcCopy,
 					)
 				}
 			}
