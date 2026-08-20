@@ -1849,6 +1849,12 @@ func (fm *frameManager) Resize(width, height int) {
 		return
 	}
 	if width == fm.scr.width && height == fm.scr.height {
+		// A pixel renderer can replace its backing buffer without changing the
+		// terminal grid (for example after a Wayland fractional-scale update).
+		// Frames still need to recalculate their geometry in that case; a plain
+		// redraw leaves the startup layout sized for the old backing buffer.
+		fm.ResizeAllScreens()
+		fm.Redraw()
 		return
 	}
 	fm.scr.AllocBuf(width, height)

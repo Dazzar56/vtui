@@ -1122,6 +1122,22 @@ func TestFrameManager_ResizeAllScreens(t *testing.T) {
 	}
 }
 
+func TestFrameManager_ResizeSameGridReflowsFrames(t *testing.T) {
+	fm := &frameManager{}
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(100, 30)
+	fm.Init(scr)
+
+	frame := &mockFrame{}
+	fm.Push(frame)
+	frame.resizedW, frame.resizedH = 0, 0
+
+	fm.Resize(100, 30)
+	if frame.resizedW != 100 || frame.resizedH != 30 {
+		t.Fatalf("same-grid Resize() did not reflow frame: got %dx%d, want 100x30", frame.resizedW, frame.resizedH)
+	}
+}
+
 func TestFrameManager_SizePolling(t *testing.T) {
 	oldGetSize := GetTerminalSize
 	defer func() { GetTerminalSize = oldGetSize }()
