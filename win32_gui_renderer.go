@@ -40,6 +40,15 @@ type Win32GuiRenderer struct {
 
 	blinkState    bool
 	lastBlinkTime time.Time
+
+	// Windows-only double-buffer handles (GDI memory DC + compatible
+	// bitmap). Typed as uintptr, not syscall.Handle, so this struct stays
+	// buildable on every platform: this file has no build tag, only
+	// win32_gui_windows.go (which does) touches these as GDI handles.
+	// See blitTo() in win32_gui_windows.go and f4 issue #514.
+	memDC      uintptr
+	memBitmap  uintptr
+	memW, memH int
 }
 
 func NewWin32GuiRenderer(host *Win32GuiHost, face font.Face, cellW, cellH int) *Win32GuiRenderer {

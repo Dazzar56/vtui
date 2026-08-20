@@ -44,10 +44,18 @@ var (
 	procReleaseDC          = user32.NewProc("ReleaseDC")
 	procFillRect           = user32.NewProc("FillRect")
 
-	gdi32DLL           = syscall.NewLazyDLL("gdi32.dll")
-	procStretchDIBits  = gdi32DLL.NewProc("StretchDIBits")
-	procGetDeviceCaps  = gdi32DLL.NewProc("GetDeviceCaps")
-	procGetStockObject = gdi32DLL.NewProc("GetStockObject")
+	gdi32DLL            = syscall.NewLazyDLL("gdi32.dll")
+	procStretchDIBits   = gdi32DLL.NewProc("StretchDIBits")
+	procGetDeviceCaps   = gdi32DLL.NewProc("GetDeviceCaps")
+	procGetStockObject  = gdi32DLL.NewProc("GetStockObject")
+	procCreateCompatDC  = gdi32DLL.NewProc("CreateCompatibleDC")
+	procCreateCompatBmp = gdi32DLL.NewProc("CreateCompatibleBitmap")
+	procSelectObject    = gdi32DLL.NewProc("SelectObject")
+	procSetDIBits       = gdi32DLL.NewProc("SetDIBits")
+	procBitBlt          = gdi32DLL.NewProc("BitBlt")
+	procDeleteDC        = gdi32DLL.NewProc("DeleteDC")
+	procDeleteObject    = gdi32DLL.NewProc("DeleteObject")
+	procGdiFlush        = gdi32DLL.NewProc("GdiFlush")
 
 	shell32DLL          = syscall.NewLazyDLL("shell32.dll")
 	procDragAcceptFiles = shell32DLL.NewProc("DragAcceptFiles")
@@ -586,12 +594,25 @@ func fillRectBlack(hdc uintptr, rc *win32Rect) {
 	procFillRect.Call(hdc, uintptr(unsafe.Pointer(rc)), uintptr(hbr))
 }
 
-// blitTo converts the composed frame to BGRA and blits it into hdc, holding
-// the renderer lock across both steps: a concurrent Render() may reallocate
-// imgBuf/bgraBuf on resize, and GDI must not be handed a pointer to a buffer
-// whose size no longer matches the BITMAPINFO describing it.
+// blitTo composes the frame into the offscreen memory-DC bitmap and BitBlts
+// it into hdc, holding the renderer lock across the whole sequence (a
+// concurrent Render() may resize imgBuf/bgraBuf, and the sizes must stay
+// consistent with the DIB/bitmap being built from them).
 //
-// It reports whether pixels actually reached the DC. A false return means the
+// This goes through an off-screen compatible bitmap (SetDIBits into a memory
+// DC, then BitBlt from that memory DC into hdc) rather than calling
+// StretchDIBits directly on the window's own HDC. A direct StretchDIBits into
+// a DWM-composited window HDC is known to be unreliable on real Windows: it
+// can report success (return the number of scanlines copied) while the
+// desktop compositor never picks up the new content, leaving the window
+// black/blank -- intermittently, and worse right after a resize, when DWM is
+// also rebuilding the window's redirection surface. Wine's own presentation
+// path doesn't have this failure mode, which is why the backend "works
+// perfectly" under Wine while flaking on native Windows 7/8/10. Going through
+// a plain GDI memory DC + BitBlt is the standard, reliable pattern for
+// presenting a software-rendered bitmap into a window. See f4 issue #514.
+//
+// It reports whether pixels were handed to the DC. A false return means the
 // caller must keep the paint pending rather than treat the window as drawn.
 func (r *Win32GuiRenderer) blitTo(hdc uintptr) bool {
 	r.mu.Lock()
@@ -602,22 +623,61 @@ func (r *Win32GuiRenderer) blitTo(hdc uintptr) bool {
 		return false
 	}
 
+	if r.memDC == 0 || r.memW != w || r.memH != h {
+		r.releaseMemDCLocked()
+		memDC, _, _ := procCreateCompatDC.Call(hdc)
+		if memDC == 0 {
+			return false
+		}
+		bmp, _, _ := procCreateCompatBmp.Call(hdc, uintptr(w), uintptr(h))
+		if bmp == 0 {
+			procDeleteDC.Call(memDC)
+			return false
+		}
+		procSelectObject.Call(memDC, bmp)
+		r.memDC, r.memBitmap = memDC, bmp
+		r.memW, r.memH = w, h
+	}
+
 	bmi := makeTopDownDIBInfo(w, h)
-	ret, _, _ := procStretchDIBits.Call(
-		hdc,
-		0, 0,
-		uintptr(w), uintptr(h),
-		0, 0,
-		uintptr(w), uintptr(h),
+	linesSet, _, _ := procSetDIBits.Call(
+		r.memDC,
+		r.memBitmap,
+		0, uintptr(h),
 		uintptr(unsafe.Pointer(&r.bgraBuf[0])),
 		uintptr(unsafe.Pointer(&bmi)),
 		dibRGBColors,
-		srcCopy,
 	)
-	// StretchDIBits returns the number of scan lines copied, or 0/GDI_ERROR
-	// on failure.
-	const gdiError = 0xFFFFFFFF
-	return ret != 0 && ret != gdiError
+	if linesSet == 0 {
+		return false
+	}
+
+	const srcCopyRop = srcCopy
+	ret, _, _ := procBitBlt.Call(hdc, 0, 0, uintptr(w), uintptr(h), r.memDC, 0, 0, srcCopyRop)
+	procGdiFlush.Call()
+	return ret != 0
+}
+
+// releaseMemDCLocked frees the offscreen memory DC and bitmap. Caller must
+// hold r.mu.
+func (r *Win32GuiRenderer) releaseMemDCLocked() {
+	if r.memBitmap != 0 {
+		procDeleteObject.Call(r.memBitmap)
+		r.memBitmap = 0
+	}
+	if r.memDC != 0 {
+		procDeleteDC.Call(r.memDC)
+		r.memDC = 0
+	}
+	r.memW, r.memH = 0, 0
+}
+
+// releaseGDIResources frees GDI handles owned by the renderer. Called from
+// Win32GuiHost.Close() to avoid leaking a memory DC/bitmap per window.
+func (r *Win32GuiRenderer) releaseGDIResources() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.releaseMemDCLocked()
 }
 
 func (h *Win32GuiHost) Close() {
@@ -628,8 +688,12 @@ func (h *Win32GuiHost) Close() {
 	}
 	hwnd := h.hwnd
 	h.hwnd = 0
+	renderer := h.renderer
 	h.reader = nil
 	h.mu.Unlock()
+	if renderer != nil {
+		renderer.releaseGDIResources()
+	}
 	if hwnd != 0 {
 		win32GuiActiveHosts.Delete(hwnd)
 		procDestroyWindow.Call(uintptr(hwnd))
