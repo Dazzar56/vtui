@@ -2122,6 +2122,40 @@ func (fm *frameManager) Run(readers ...*vtinput.Reader) {
 		}
 	}
 
+	// Real ANSI/VT terminals are excluded from the heartbeat above because
+	// they blink their own cursor with zero help needed -- but GTK/VTE-based
+	// emulators (GNOME Terminal and other GNOME/Cinnamon desktop terminals
+	// built on the same widget) freeze that blink, typically cursor-visible,
+	// after a "gtk-cursor-blink-timeout" number of idle seconds with no
+	// terminal output at all. A very infrequent keepalive that re-sends the
+	// unchanged cursor escape sequence (invisible: same position, visibility
+	// and shape) resets that timer without the redundant-poking problem the
+	// heartbeat above was excluded to avoid -- it fires far too rarely to
+	// disturb any terminal's own blink cadence. See f4 issue #518.
+	if fm.scr != nil {
+		if _, ok := fm.scr.Renderer.(ansiCursorKeepaliveRenderer); ok {
+			go func() {
+				const ansiCursorKeepaliveInterval = 5 * time.Second
+				tmr := time.NewTimer(ansiCursorKeepaliveInterval)
+				defer tmr.Stop()
+				for {
+					select {
+					case <-tmr.C:
+						fm.PostTask(func() {
+							if fm.scr != nil {
+								fm.scr.TouchCursorKeepalive()
+							}
+							fm.Redraw()
+						})
+						tmr.Reset(ansiCursorKeepaliveInterval)
+					case <-done:
+						return
+					}
+				}
+			}()
+		}
+	}
+
 	go func() {
 		tmr := time.NewTimer(33 * time.Millisecond)
 		if !tmr.Stop() {

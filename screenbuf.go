@@ -504,6 +504,27 @@ func (s *ScreenBuf) SetCursorVisible(visible bool) {
 		s.cursorDirty = true
 	}
 }
+
+// ansiCursorKeepaliveRenderer is implemented by renderers that can be asked
+// to resend an unchanged cursor escape sequence to keep GTK/VTE-based
+// terminals from freezing their own blink after a period of no output.
+// See AnsiRenderer.TouchCursorForBlinkKeepalive.
+type ansiCursorKeepaliveRenderer interface {
+	TouchCursorForBlinkKeepalive()
+}
+
+// TouchCursorKeepalive asks the active renderer to resend the cursor escape
+// sequence on the next Flush, if it supports doing so. A no-op for renderers
+// that don't need it (GUI-pixel backends, the Win32 console API backend).
+func (s *ScreenBuf) TouchCursorKeepalive() {
+	s.mu.Lock()
+	r := s.Renderer
+	s.mu.Unlock()
+	if t, ok := r.(ansiCursorKeepaliveRenderer); ok {
+		t.TouchCursorForBlinkKeepalive()
+	}
+}
+
 func (s *ScreenBuf) SetCursorShape(shape CursorShape) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -928,6 +949,27 @@ func (r *AnsiRenderer) SetCursor(x, y int, vis bool, shape CursorShape) {
 	r.cursorY = y
 	r.cursorVis = vis
 	r.cursorShape = shape
+}
+
+// TouchCursorForBlinkKeepalive forces the next PrepareFlush to resend the
+// current cursor position/visibility/shape escape sequence even though
+// nothing about it actually changed.
+//
+// Real terminal cursor blinking is normally left entirely to the terminal
+// emulator (see the idle-heartbeat exclusion in framemanager.Run), and that
+// is correct for terminals whose blink timer runs independently forever.
+// But GTK/VTE-based emulators (GNOME Terminal, and other GNOME/Cinnamon
+// desktop terminals using the same widget) honor a "gtk-cursor-blink-timeout"
+// setting that freezes the cursor -- typically in its visible phase -- after
+// a fixed number of seconds with no terminal activity at all, regardless of
+// whether the application is otherwise idle by design. Re-sending the exact
+// same escape sequence periodically is invisible (same position, same
+// visibility, same shape -- nothing on screen actually changes) but counts
+// as activity to the terminal, resetting that timeout indefinitely.
+//
+// See https://github.com/unxed/f4/issues/518.
+func (r *AnsiRenderer) TouchCursorForBlinkKeepalive() {
+	r.termCursorInvalid = true
 }
 
 // writeCursorPos emits CSI Y;X H without allocating.

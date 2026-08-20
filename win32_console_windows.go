@@ -3,9 +3,16 @@
 package vtui
 
 import (
+	"errors"
 	"sync"
 	"syscall"
 	"unsafe"
+)
+
+var (
+	errConsoleHandleInvalid   = errors.New("vtui: win32 console handle invalid")
+	errConsoleSizeQueryFailed = errors.New("vtui: GetConsoleScreenBufferInfo failed")
+	errConsoleSizeInvalid     = errors.New("vtui: win32 console reported non-positive window size")
 )
 
 var (
@@ -150,7 +157,49 @@ func NewWin32ConsoleRenderer(parent *ScreenBuf) *Win32ConsoleRenderer {
 	activeWin32ConsoleRenderer = r
 	activeWin32ConsoleMu.Unlock()
 
+	// Every other renderer (x11, wayland, gogpu, ebiten, win32 GUI) points
+	// the shared GetTerminalSize at its own live surface when it takes over.
+	// This one didn't: the package default queries os.Stdout's handle, which
+	// is hStdOut -- the buffer this renderer just made inactive by switching
+	// the console to its own hFarOut. hStdOut's window rect is a snapshot
+	// from before the switch and is never updated by the OS while it isn't
+	// the active buffer, so every resize from here on read a stale size
+	// instead of hFarOut's real, live, currently-resized one. Normally the
+	// two stay close enough (the OS keeps a freshly created buffer's initial
+	// window rect near the host window's actual size) that this goes
+	// unnoticed; it stops being close once inactive hStdOut and active
+	// hFarOut are allowed to diverge -- e.g. a shortcut with an explicit,
+	// different screen-buffer size and "wrap text output on resize"
+	// unchecked, matching the repro narrowed in f4 issue #397.
+	GetTerminalSize = func() (int, int, error) {
+		return r.terminalSize()
+	}
+
 	return r
+}
+
+// terminalSize reads the window rectangle of this renderer's own active
+// screen buffer (hFarOut, falling back to hStdOut if the dedicated buffer
+// could not be created) instead of whatever os.Stdout happens to point at.
+func (r *Win32ConsoleRenderer) terminalSize() (int, int, error) {
+	handle := r.hFarOut
+	if handle == 0 {
+		handle = r.hStdOut
+	}
+	if handle == 0 || handle == syscall.InvalidHandle {
+		return 0, 0, errConsoleHandleInvalid
+	}
+	var csbi consoleScreenBufferInfo
+	ok, _, _ := procGetConsoleScreenBufferInfo.Call(uintptr(handle), uintptr(unsafe.Pointer(&csbi)))
+	if ok == 0 {
+		return 0, 0, errConsoleSizeQueryFailed
+	}
+	w := int(csbi.srWindow.Right-csbi.srWindow.Left) + 1
+	h := int(csbi.srWindow.Bottom-csbi.srWindow.Top) + 1
+	if w <= 0 || h <= 0 {
+		return 0, 0, errConsoleSizeInvalid
+	}
+	return w, h, nil
 }
 
 func (r *Win32ConsoleRenderer) Close() error {
