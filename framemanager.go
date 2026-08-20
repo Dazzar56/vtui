@@ -1168,7 +1168,13 @@ func (fm *frameManager) Shutdown() {
 	fm.capturedFrame = nil
 	if fm.scr != nil {
 		fm.scr.SetCursorVisible(true)
-		fm.scr.Flush()
+		// If a Suspend already restored the terminal (quit path), this flush
+		// would paint a full frame -- including the theme palette OSC 4 dump
+		// -- onto the user's shell screen, and the Suspend() below is a
+		// no-op that never resets it back.
+		if _, ansi := fm.scr.Renderer.(*AnsiRenderer); !ansi || IsPrepared() {
+			fm.scr.Flush()
+		}
 	}
 	Suspend()
 	CleanupStderrLog()
@@ -2076,7 +2082,13 @@ func (fm *frameManager) Run(readers ...*vtinput.Reader) {
 		fm.running = false
 		if fm.scr != nil {
 			fm.scr.SetCursorVisible(true)
-			fm.scr.Flush()
+			// Skip the flush if Suspend already restored the terminal: this
+			// defer runs after the quit path's Suspend(), and a frame written
+			// now lands on the user's shell screen and re-applies the theme
+			// palette OSC 4 that Suspend's OSC 104 just reset.
+			if _, ansi := fm.scr.Renderer.(*AnsiRenderer); !ansi || IsPrepared() {
+				fm.scr.Flush()
+			}
 		}
 		CleanupStderrLog()
 	}()
