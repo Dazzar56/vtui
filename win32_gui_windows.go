@@ -42,10 +42,12 @@ var (
 	procScreenToClient     = user32.NewProc("ScreenToClient")
 	procGetDC              = user32.NewProc("GetDC")
 	procReleaseDC          = user32.NewProc("ReleaseDC")
+	procFillRect           = user32.NewProc("FillRect")
 
-	gdi32DLL          = syscall.NewLazyDLL("gdi32.dll")
-	procStretchDIBits = gdi32DLL.NewProc("StretchDIBits")
-	procGetDeviceCaps = gdi32DLL.NewProc("GetDeviceCaps")
+	gdi32DLL           = syscall.NewLazyDLL("gdi32.dll")
+	procStretchDIBits  = gdi32DLL.NewProc("StretchDIBits")
+	procGetDeviceCaps  = gdi32DLL.NewProc("GetDeviceCaps")
+	procGetStockObject = gdi32DLL.NewProc("GetStockObject")
 
 	shell32DLL          = syscall.NewLazyDLL("shell32.dll")
 	procDragAcceptFiles = shell32DLL.NewProc("DragAcceptFiles")
@@ -98,10 +100,14 @@ type win32Msg struct {
 	pt      struct{ x, y int32 }
 }
 
+type win32Rect struct {
+	left, top, right, bottom int32
+}
+
 type win32PaintStruct struct {
 	hdc         syscall.Handle
 	fErase      int32
-	rcPaint     struct{ left, top, right, bottom int32 }
+	rcPaint     win32Rect
 	fRestore    int32
 	fIncUpdate  int32
 	rgbReserved [32]byte
@@ -126,6 +132,21 @@ type Win32GuiHost struct {
 	mouseBtn     uint32
 	closeChan    chan struct{}
 	closed       bool
+
+	// paintPending is set by Invalidate() and cleared only by a WM_PAINT
+	// that actually put pixels on the screen. BeginPaint() validates the
+	// update region unconditionally, so a WM_PAINT served before the first
+	// frame exists (or one whose StretchDIBits fails) would otherwise throw
+	// the invalidation away for good: the renderer only invalidates when a
+	// row changes, so nothing would ever ask for that paint again and the
+	// window would stay unpainted -- i.e. white -- forever. Flush() re-arms
+	// the invalidation while this is set. See f4 issue #514.
+	paintPending bool
+	// everPainted records whether a frame has ever reached the window. Until
+	// it has, WM_ERASEBKGND is left to DefWindowProc so the class background
+	// brush (black) is used instead of the undefined -- in practice white --
+	// initial content of the window's redirection surface.
+	everPainted bool
 }
 
 func (h *Win32GuiHost) AcceptsDrops() bool { return true }
@@ -155,11 +176,24 @@ func (h *Win32GuiHost) ResizeGrid(cols, rows int) {
 func (h *Win32GuiHost) Invalidate() {
 	h.mu.Lock()
 	hwnd := h.hwnd
+	if hwnd != 0 {
+		h.paintPending = true
+	}
 	h.mu.Unlock()
 	if hwnd != 0 {
 		procInvalidateRect.Call(uintptr(hwnd), 0, 0)
 		procPostMessageW.Call(uintptr(hwnd), 0, 0, 0)
 	}
+}
+
+// paintOutstanding reports that an invalidation was issued but no frame has
+// reached the window since. The renderer's Flush() re-issues the invalidation
+// while this holds, which makes a dropped or empty WM_PAINT self-healing on
+// the next frame instead of permanent.
+func (h *Win32GuiHost) paintOutstanding() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.paintPending && h.hwnd != 0
 }
 
 func (h *Win32GuiHost) PostQuit() {
@@ -256,30 +290,42 @@ func win32GuiWndProc(hwnd syscall.Handle, msg uint32, wParam, lParam uintptr) ui
 func (h *Win32GuiHost) handleMessage(hwnd syscall.Handle, msg uint32, wParam, lParam uintptr) uintptr {
 	switch msg {
 	case wmEraseBkgnd:
-		return 1 // Suppress GDI background erasure to eliminate flicker
+		// Suppressing the erase eliminates flicker, but only once there is a
+		// frame to cover the window with. Before the first successful blit,
+		// let DefWindowProc erase with the class brush so the window shows
+		// black rather than the uninitialised white of a fresh redirection
+		// surface.
+		h.mu.Lock()
+		painted := h.everPainted
+		h.mu.Unlock()
+		if painted {
+			return 1
+		}
+		r, _, _ := procDefWindowProcW.Call(uintptr(hwnd), uintptr(msg), wParam, lParam)
+		return r
 
 	case wmPaint:
 		var ps win32PaintStruct
 		hdc, _, _ := procBeginPaint.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&ps)))
+		painted := false
 		if hdc != 0 {
 			if h.renderer != nil {
-				w, ht, ok := h.renderer.syncBGRA()
-				if ok && w > 0 && ht > 0 {
-					bmi := makeTopDownDIBInfo(w, ht)
-					procStretchDIBits.Call(
-						hdc,
-						0, 0,
-						uintptr(w), uintptr(ht),
-						0, 0,
-						uintptr(w), uintptr(ht),
-						uintptr(unsafe.Pointer(&h.renderer.bgraBuf[0])),
-						uintptr(unsafe.Pointer(&bmi)),
-						dibRGBColors,
-						srcCopy,
-					)
-				}
+				painted = h.renderer.blitTo(hdc)
+			}
+			if !painted {
+				// BeginPaint has already validated the update region, so
+				// leaving it untouched would show whatever the surface
+				// happened to contain. Paint it black and keep paintPending
+				// set so the next Flush() asks for this paint again.
+				fillRectBlack(hdc, &ps.rcPaint)
 			}
 			procEndPaint.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&ps)))
+		}
+		if painted {
+			h.mu.Lock()
+			h.paintPending = false
+			h.everPainted = true
+			h.mu.Unlock()
 		}
 		return 0
 
@@ -521,6 +567,59 @@ func (h *Win32GuiHost) handleMessage(hwnd syscall.Handle, msg uint32, wParam, lP
 	return r
 }
 
+// blackStockBrush returns the BLACK_BRUSH stock object. Stock objects are
+// owned by GDI and must not be deleted, so the handle can be reused freely.
+func blackStockBrush() syscall.Handle {
+	const blackBrush = 4
+	hbr, _, _ := procGetStockObject.Call(blackBrush)
+	return syscall.Handle(hbr)
+}
+
+// fillRectBlack paints rc with the black stock brush. Used when there is no
+// frame to blit yet, so that a validated-but-unpainted region reads as an
+// empty terminal rather than a white rectangle.
+func fillRectBlack(hdc uintptr, rc *win32Rect) {
+	hbr := blackStockBrush()
+	if hbr == 0 {
+		return
+	}
+	procFillRect.Call(hdc, uintptr(unsafe.Pointer(rc)), uintptr(hbr))
+}
+
+// blitTo converts the composed frame to BGRA and blits it into hdc, holding
+// the renderer lock across both steps: a concurrent Render() may reallocate
+// imgBuf/bgraBuf on resize, and GDI must not be handed a pointer to a buffer
+// whose size no longer matches the BITMAPINFO describing it.
+//
+// It reports whether pixels actually reached the DC. A false return means the
+// caller must keep the paint pending rather than treat the window as drawn.
+func (r *Win32GuiRenderer) blitTo(hdc uintptr) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	w, h, ok := r.syncBGRALocked()
+	if !ok || w <= 0 || h <= 0 {
+		return false
+	}
+
+	bmi := makeTopDownDIBInfo(w, h)
+	ret, _, _ := procStretchDIBits.Call(
+		hdc,
+		0, 0,
+		uintptr(w), uintptr(h),
+		0, 0,
+		uintptr(w), uintptr(h),
+		uintptr(unsafe.Pointer(&r.bgraBuf[0])),
+		uintptr(unsafe.Pointer(&bmi)),
+		dibRGBColors,
+		srcCopy,
+	)
+	// StretchDIBits returns the number of scan lines copied, or 0/GDI_ERROR
+	// on failure.
+	const gdiError = 0xFFFFFFFF
+	return ret != 0 && ret != gdiError
+}
+
 func (h *Win32GuiHost) Close() {
 	h.mu.Lock()
 	if !h.closed {
@@ -589,6 +688,7 @@ func RunWin32GuiHost(cols, rows int, fontName string, fontSize float64, setupApp
 			lpfnWndProc:   syscall.NewCallback(win32GuiWndProc),
 			hInstance:     syscall.Handle(hInst),
 			hCursor:       host.hCursor,
+			hbrBackground: blackStockBrush(),
 			lpszClassName: className,
 		}
 		ret, _, err := procRegisterClassExW.Call(uintptr(unsafe.Pointer(&wc)))

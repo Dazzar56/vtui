@@ -121,6 +121,10 @@ func (r *Win32GuiRenderer) Render(buf, shadow []CharInfo, w, h int, forceRedraw 
 		r.imgBuf = image.NewRGBA(image.Rect(0, 0, pixW, pixH))
 		r.bgraBuf = make([]byte, pixW*pixH*4)
 		forceRedraw = true
+		// A brand-new bitmap always has to reach the window, even if the
+		// row loop below finds nothing to draw (an all-blank screen at
+		// startup compares equal to a blank shadow buffer).
+		r.dirty = true
 	}
 	r.cols, r.rows = w, h
 	img := r.imgBuf
@@ -331,7 +335,17 @@ func (r *Win32GuiRenderer) Flush() {
 	r.dirty = false
 	r.mu.Unlock()
 
-	if dirty && r.host != nil {
+	if r.host == nil {
+		return
+	}
+	// Re-invalidate while a previous invalidation has not yet produced a
+	// painted frame. Without this the backend gets exactly one chance per
+	// content change: BeginPaint validates the update region whether or not
+	// anything was blitted, and an idle UI never changes a row again, so a
+	// single lost or empty WM_PAINT leaves the window blank until the next
+	// keystroke -- or forever. FrameManager already ticks this renderer at
+	// ~250ms via the software-blink heartbeat, so recovery is automatic.
+	if dirty || r.host.paintOutstanding() {
 		r.host.Invalidate()
 	}
 }
@@ -339,7 +353,13 @@ func (r *Win32GuiRenderer) Flush() {
 func (r *Win32GuiRenderer) syncBGRA() (w, h int, ok bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	return r.syncBGRALocked()
+}
 
+// syncBGRALocked converts the composed RGBA frame into the BGRA scratch buffer
+// GDI expects. The caller must hold r.mu, and must keep holding it for as long
+// as it uses bgraBuf: Render() reallocates both buffers when the grid resizes.
+func (r *Win32GuiRenderer) syncBGRALocked() (w, h int, ok bool) {
 	if r.imgBuf == nil || len(r.imgBuf.Pix) == 0 {
 		return 0, 0, false
 	}
