@@ -2381,6 +2381,13 @@ func (fm *frameManager) renderPhase() {
 		}
 
 		// 2. Отрисовываем стэк экранов от базового до текущего
+		isTopFrame := func(sIdx int, frame Frame) bool {
+			if sIdx != fm.ActiveIdx {
+				return false
+			}
+			top := fm.GetActiveFrames(sIdx)
+			return len(top) > 0 && top[len(top)-1] == frame
+		}
 		for sIdx := baseIdx; sIdx <= fm.ActiveIdx; sIdx++ {
 			frames := fm.GetActiveFrames(sIdx)
 			for _, frame := range frames {
@@ -2393,6 +2400,21 @@ func (fm *frameManager) renderPhase() {
 					}
 				}
 				frame.Show(fm.scr)
+
+				// Only the topmost frame owns the caret. Frames are
+				// painted bottom-up, and a frame under the top one has no
+				// way of knowing something was pushed over it: it keeps
+				// setting the screen cursor from its own state (an editor
+				// at its caret, a panel at its command line). Normally the
+				// frame above overwrites that with its own focused input
+				// field, so nothing shows -- but a top frame whose focus
+				// sits on a control with no caret of its own (a checkbox,
+				// a button, a DropdownOnly combobox) overwrites nothing,
+				// and the caret from below stays on screen, painted in
+				// whatever the dialog is covering. See f4 issue #518.
+				if !isTopFrame(sIdx, frame) {
+					fm.scr.SetCursorVisible(false)
+				}
 			}
 		}
 
