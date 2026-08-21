@@ -36,6 +36,13 @@ type WaylandHost struct {
 	mouseY   int
 	mouseBtn uint32
 
+	axisValue             [2]float64
+	axisDiscrete          [2]int32
+	axisValue120          [2]int32
+	axisStopped           [2]bool
+	axisPixelRemainder    [2]float64
+	axisValue120Remainder [2]int32
+
 	isRepeating    bool
 	repeatVK       uint16
 	repeatChar     rune
@@ -304,6 +311,7 @@ func (h *WaylandHost) Motion(w *window.Widget, input *window.Input, time uint32,
 	if h.reader != nil {
 		h.reader.EventChan <- &vtinput.InputEvent{
 			Type:            vtinput.MouseEventType,
+			KeyDown:         mouseBtn != 0,
 			MouseX:          int16(mouseX),
 			MouseY:          int16(mouseY),
 			MouseEventFlags: vtinput.MouseMoved,
@@ -329,12 +337,14 @@ func (h *WaylandHost) Button(w *window.Widget, input *window.Input, time uint32,
 	}
 
 	h.mu.Lock()
-	h.mouseBtn = bs
+	if isDown {
+		h.mouseBtn |= bs
+	} else {
+		h.mouseBtn &^= bs
+	}
+	bs = h.mouseBtn
 	mouseX, mouseY := h.mouseCellLocked()
 	h.mu.Unlock()
-	if !isDown {
-		bs = 0
-	}
 
 	if h.reader != nil {
 		h.reader.EventChan <- &vtinput.InputEvent{
@@ -356,20 +366,25 @@ func (h *WaylandHost) mouseCellLocked() (int, int) {
 }
 
 func (h *WaylandHost) AxisDiscrete(w *window.Widget, input *window.Input, axis uint32, discrete int32) {
-	dir := 0
-	// Wayland axis 0 is vertical scroll.
-	if discrete < 0 {
-		dir = 1 // Up
-	} else if discrete > 0 {
-		dir = -1 // Down
+	if axis >= uint32(len(h.axisDiscrete)) {
+		return
 	}
+	h.mu.Lock()
+	h.axisDiscrete[axis] += discrete
+	h.mu.Unlock()
+}
 
-	if dir != 0 && h.reader != nil {
-		h.reader.EventChan <- &vtinput.InputEvent{
-			Type:           vtinput.MouseEventType,
-			WheelDirection: dir,
-		}
+// AxisValue120 receives high-resolution wheel information from wl_pointer
+// version 8 and newer. It is an optional extension exposed by the Wayland
+// window package, so older window versions and non-wheel devices continue to
+// work through AxisDiscrete or Axis respectively.
+func (h *WaylandHost) AxisValue120(w *window.Widget, input *window.Input, axis uint32, value120 int32) {
+	if axis >= uint32(len(h.axisValue120)) {
+		return
 	}
+	h.mu.Lock()
+	h.axisValue120[axis] += value120
+	h.mu.Unlock()
 }
 
 func (h *WaylandHost) Key(win *window.Window, input *window.Input, timeMs uint32, key uint32, notUnicode uint32, state wl.KeyboardKeyState, handler window.WidgetHandler) {
@@ -490,7 +505,80 @@ func (h *WaylandHost) TouchMotion(w *window.Widget, i *window.Input, time uint32
 func (h *WaylandHost) TouchFrame(w *window.Widget, i *window.Input)            {}
 func (h *WaylandHost) TouchCancel(w *window.Widget, width int32, height int32) {}
 func (h *WaylandHost) Axis(w *window.Widget, i *window.Input, time uint32, axis uint32, value float32) {
+	if axis >= uint32(len(h.axisValue)) {
+		return
+	}
+	h.mu.Lock()
+	h.axisValue[axis] += float64(value)
+	h.mu.Unlock()
 }
-func (h *WaylandHost) AxisSource(w *window.Widget, i *window.Input, source uint32)          {}
-func (h *WaylandHost) AxisStop(w *window.Widget, i *window.Input, time uint32, axis uint32) {}
-func (h *WaylandHost) PointerFrame(w *window.Widget, i *window.Input)                       {}
+func (h *WaylandHost) AxisSource(w *window.Widget, i *window.Input, source uint32) {}
+func (h *WaylandHost) AxisStop(w *window.Widget, i *window.Input, time uint32, axis uint32) {
+	if axis >= uint32(len(h.axisStopped)) {
+		return
+	}
+	h.mu.Lock()
+	h.axisStopped[axis] = true
+	h.mu.Unlock()
+}
+
+func (h *WaylandHost) PointerFrame(w *window.Widget, input *window.Input) {
+	const verticalAxis = int(wl.PointerAxisVerticalScroll)
+
+	h.mu.Lock()
+	raw := h.axisValue[verticalAxis]
+	discrete := h.axisDiscrete[verticalAxis]
+	value120 := h.axisValue120[verticalAxis]
+	stopped := h.axisStopped[verticalAxis]
+	for axis := range h.axisValue {
+		h.axisValue[axis] = 0
+		h.axisDiscrete[axis] = 0
+		h.axisValue120[axis] = 0
+		h.axisStopped[axis] = false
+	}
+
+	steps := 0
+	if value120 != 0 {
+		h.axisValue120Remainder[verticalAxis] += value120
+		steps = int(h.axisValue120Remainder[verticalAxis] / 120)
+		h.axisValue120Remainder[verticalAxis] -= int32(steps * 120)
+	} else if discrete != 0 {
+		steps = int(discrete)
+	} else if raw != 0 {
+		threshold := float64(h.cellH) / h.scale
+		if threshold < 1 {
+			threshold = 1
+		}
+		h.axisPixelRemainder[verticalAxis] += raw
+		steps = int(h.axisPixelRemainder[verticalAxis] / threshold)
+		h.axisPixelRemainder[verticalAxis] -= float64(steps) * threshold
+	}
+	if stopped {
+		h.axisPixelRemainder[verticalAxis] = 0
+	}
+	mouseX, mouseY := h.mouseCellLocked()
+	mouseBtn := h.mouseBtn
+	reader := h.reader
+	h.mu.Unlock()
+
+	if steps == 0 || reader == nil {
+		return
+	}
+	direction := -1
+	if steps < 0 {
+		direction = 1
+		steps = -steps
+	}
+	mods := h.getMods(input)
+	for range steps {
+		reader.EventChan <- &vtinput.InputEvent{
+			Type:            vtinput.MouseEventType,
+			KeyDown:         mouseBtn != 0,
+			MouseX:          int16(mouseX),
+			MouseY:          int16(mouseY),
+			ButtonState:     mouseBtn,
+			WheelDirection:  direction,
+			ControlKeyState: mods,
+		}
+	}
+}
