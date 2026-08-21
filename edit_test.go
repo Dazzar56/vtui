@@ -642,6 +642,42 @@ func TestEdit_WordSelection_FarSpec(t *testing.T) {
 		t.Errorf("Selection fail: expected [0:12], got [%d:%d]", e.selStart, e.selEnd)
 	}
 }
+
+func TestEdit_WordSelection_FromFullValuePreservesWholeWord(t *testing.T) {
+	SetDefaultPalette()
+
+	e := NewEdit(0, 0, 20, "syslog")
+	e.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode:  vtinput.VK_LEFT,
+		ControlKeyState: vtinput.LeftCtrlPressed | vtinput.ShiftPressed,
+	})
+
+	if e.selStart != 0 || e.selEnd != len(e.text) {
+		t.Fatalf("Ctrl+Shift+Left cleared the initial full selection: [%d:%d]", e.selStart, e.selEnd)
+	}
+
+	e.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: '1'})
+	if got := e.GetText(); got != "1" {
+		t.Fatalf("typing after Ctrl+Shift+Left produced %q, want %q", got, "1")
+	}
+}
+
+func TestEdit_WordSelection_FromFullValueKeepsDividerBoundary(t *testing.T) {
+	SetDefaultPalette()
+
+	e := NewEdit(0, 0, 20, "syslog.2.gz")
+	e.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode:  vtinput.VK_LEFT,
+		ControlKeyState: vtinput.LeftCtrlPressed | vtinput.ShiftPressed,
+	})
+
+	if e.selStart != 0 || e.selEnd != len([]rune("syslog.2.")) {
+		t.Fatalf("Ctrl+Shift+Left changed the divider boundary: [%d:%d]", e.selStart, e.selEnd)
+	}
+}
+
 func TestEdit_WordJumps_DifferentDividers(t *testing.T) {
 	// A change of divider kind is not a word boundary in far2l, so plain
 	// Ctrl+Right crosses the whole run at once (issue #280).

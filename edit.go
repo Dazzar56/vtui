@@ -585,6 +585,10 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 		return e.FireAction(e.OnAction, nil)
 
 	case vtinput.VK_LEFT:
+		// zoin-bot: A full edit selection starts at the right edge. When
+		// Ctrl+Shift+Left reaches the beginning of an undivided value, keep
+		// that full selection so the next character replaces the value.
+		fullSelectionAtEnd := e.selStart == 0 && e.selEnd == len(e.text) && e.curPos == len(e.text)
 		isAtStart := false
 		var cmap CaretMap
 		if DefaultBidiMode == BidiFull {
@@ -637,6 +641,11 @@ func (e *Edit) ProcessKey(event *vtinput.InputEvent) bool {
 		}
 		if shift {
 			e.endSelection()
+			if ctrl && fullSelectionAtEnd && e.curPos == 0 {
+				e.selStart = 0
+				e.selEnd = len(e.text)
+				e.selAnchor = 0
+			}
 		}
 		e.clearFlag = false
 		return true
