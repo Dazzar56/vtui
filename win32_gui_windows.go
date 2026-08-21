@@ -34,6 +34,7 @@ var (
 	procInvalidateRect     = user32.NewProc("InvalidateRect")
 	procGetClientRect      = user32.NewProc("GetClientRect")
 	procAdjustWindowRectEx = user32.NewProc("AdjustWindowRectEx")
+	procSetWindowPos       = user32.NewProc("SetWindowPos")
 	procLoadCursorW        = user32.NewProc("LoadCursorW")
 	procSetCursor          = user32.NewProc("SetCursor")
 	procSetCapture         = user32.NewProc("SetCapture")
@@ -128,20 +129,21 @@ type win32Point struct {
 }
 
 type Win32GuiHost struct {
-	mu           sync.Mutex
-	hwnd         syscall.Handle
-	hCursor      syscall.Handle
-	renderer     *Win32GuiRenderer
-	reader       *vtinput.Reader
-	scr          *ScreenBuf
-	cols, rows   int
-	cellW, cellH int
-	scale        int
-	winW, winH   int
-	mouseBtn     uint32
-	closeChan    chan struct{}
-	closed       bool
-	pendingDrag  *win32DragRequest
+	mu                                   sync.Mutex
+	hwnd                                 syscall.Handle
+	hCursor                              syscall.Handle
+	renderer                             *Win32GuiRenderer
+	reader                               *vtinput.Reader
+	scr                                  *ScreenBuf
+	cols, rows                           int
+	cellW, cellH                         int
+	scale                                int
+	winW, winH                           int
+	mouseBtn                             uint32
+	closeChan                            chan struct{}
+	closed                               bool
+	pendingDrag                          *win32DragRequest
+	pendingResizeCols, pendingResizeRows int
 
 	// dropTarget is the IDropTarget registered for this window, held as the
 	// bare interface pointer so this struct stays free of a type that only
@@ -217,10 +219,27 @@ func (h *Win32GuiHost) SetTitle(title string) {
 }
 
 func (h *Win32GuiHost) ResizeGrid(cols, rows int) {
+	if h == nil || cols <= 0 || rows <= 0 {
+		return
+	}
 	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.cols = cols
-	h.rows = rows
+	hwnd := h.hwnd
+	if hwnd == 0 {
+		// This path keeps the renderer testable before a native window exists.
+		h.cols = cols
+		h.rows = rows
+		h.mu.Unlock()
+		return
+	}
+	h.pendingResizeCols = cols
+	h.pendingResizeRows = rows
+	h.mu.Unlock()
+
+	// The Win32 window and its message pump live on the locked GUI thread,
+	// while FrameManager dispatches actions from its own goroutine. Post the
+	// resize just like DoDragDrop is posted, so SetWindowPos and the resulting
+	// WM_SIZE are handled by the window's owning thread.
+	procPostMessageW.Call(uintptr(hwnd), wmPerformResize, 0, 0)
 }
 
 func (h *Win32GuiHost) Invalidate() {
@@ -348,6 +367,44 @@ func (h *Win32GuiHost) handleMessage(hwnd syscall.Handle, msg uint32, wParam, lP
 			action, err := win32DoDragDrop(req.paths, req.allowed)
 			req.done <- win32DragResult{action: action, err: err}
 		}
+		return 0
+
+	case wmPerformResize:
+		h.mu.Lock()
+		cols, rows := h.pendingResizeCols, h.pendingResizeRows
+		h.pendingResizeCols, h.pendingResizeRows = 0, 0
+		cellW, cellH := h.cellW, h.cellH
+		h.mu.Unlock()
+		if cols <= 0 || rows <= 0 || cellW <= 0 || cellH <= 0 {
+			return 0
+		}
+
+		// ResizeGrid takes logical cells, but SetWindowPos takes the outer
+		// window size. Use the exact same style/ex-style pair as creation so
+		// the requested client area remains cols*cellW by rows*cellH.
+		var rc win32Rect
+		rc.right = int32(cols * cellW)
+		rc.bottom = int32(rows * cellH)
+		procAdjustWindowRectEx.Call(
+			uintptr(unsafe.Pointer(&rc)),
+			uintptr(wsOverlappedWindow),
+			0,
+			uintptr(wsExAcceptFiles|wsExAppWindow),
+		)
+		outerW := rc.right - rc.left
+		outerH := rc.bottom - rc.top
+		if outerW <= 0 || outerH <= 0 {
+			return 0
+		}
+		procSetWindowPos.Call(
+			uintptr(hwnd),
+			0,
+			0,
+			0,
+			uintptr(outerW),
+			uintptr(outerH),
+			swpNoMove|swpNoZOrder|swpNoActivate,
+		)
 		return 0
 
 	case wmEraseBkgnd:

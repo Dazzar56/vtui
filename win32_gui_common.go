@@ -72,6 +72,13 @@ const (
 	wmMouseMove       = 0x0200
 	wmMouseWheel      = 0x020A
 	wmPerformDragDrop = 0x0400 + 101
+	wmPerformResize   = wmPerformDragDrop + 1
+)
+
+const (
+	swpNoMove     = 0x0002
+	swpNoZOrder   = 0x0004
+	swpNoActivate = 0x0010
 )
 
 // Win32 DIB and GDI Constants
