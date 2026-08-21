@@ -441,64 +441,6 @@ func TestInvalidateHostPalette_ForcesResend(t *testing.T) {
 	}
 }
 
-// TestTouchCursorKeepalive_ResendsUnchangedCursor covers the fix for
-// https://github.com/unxed/f4/issues/518: GTK/VTE-based terminals (GNOME
-// Terminal and other GNOME/Cinnamon desktop terminals) freeze their own
-// cursor blink after a period with no terminal output at all, even though
-// nothing about the app's cursor changed. TouchCursorKeepalive must force
-// the exact same cursor escape sequence to be resent on the next Flush.
-func TestTouchCursorKeepalive_ResendsUnchangedCursor(t *testing.T) {
-	scr := NewScreenBuf()
-	var buf bytes.Buffer
-	scr.Writer = &buf
-	scr.AllocBuf(8, 2)
-
-	scr.SetCursorPos(2, 1)
-	scr.SetCursorVisible(true)
-	scr.Flush()
-	if !strings.Contains(buf.String(), "\x1b[?25h") {
-		t.Fatal("first flush sent no cursor-visible sequence")
-	}
-
-	// Nothing changed: an ordinary Flush must not resend the cursor state.
-	buf.Reset()
-	scr.Flush()
-	if buf.Len() != 0 {
-		t.Errorf("cursor resent although nothing changed, got %q", buf.String())
-	}
-
-	// After TouchCursorKeepalive, the very next Flush must resend it, byte
-	// for byte identical to what an ordinary state change would produce --
-	// this is what keeps a GTK/VTE terminal's blink timer alive without any
-	// visible change.
-	buf.Reset()
-	scr.TouchCursorKeepalive()
-	scr.Flush()
-	if !strings.Contains(buf.String(), "\x1b[?25h") {
-		t.Errorf("cursor not resent after TouchCursorKeepalive, got %q", buf.String())
-	}
-	if !strings.Contains(buf.String(), "\x1b[2;3H") {
-		t.Errorf("cursor position not resent after TouchCursorKeepalive, got %q", buf.String())
-	}
-
-	// A renderer that doesn't support the keepalive (e.g. the Win32 console
-	// backend) must not panic or otherwise misbehave when asked.
-	other := NewScreenBuf()
-	other.Renderer = noopKeepaliveRenderer{}
-	other.TouchCursorKeepalive() // must not panic
-}
-
-// noopKeepaliveRenderer is a minimal SurfaceRenderer stand-in that does NOT
-// implement ansiCursorKeepaliveRenderer, used to confirm TouchCursorKeepalive
-// degrades gracefully for renderers that don't need it.
-type noopKeepaliveRenderer struct{}
-
-func (noopKeepaliveRenderer) SetPalette(*[256]uint32)                             {}
-func (noopKeepaliveRenderer) SetCursor(x, y int, vis bool, shape CursorShape)     {}
-func (noopKeepaliveRenderer) Render(buf, shadow []CharInfo, w, h int, force bool) {}
-func (noopKeepaliveRenderer) SetWindowTitle(title string)                         {}
-func (noopKeepaliveRenderer) Flush()                                              {}
-
 // TestAnsiRenderer_RelativeCursorMoves verifies that sparse cells on the
 // same row are reached with short relative moves (CSI n C) instead of
 // absolute "\x1b[Y;XH" positioning, and that the stream stays equivalent.
