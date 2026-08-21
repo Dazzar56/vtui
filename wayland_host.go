@@ -32,9 +32,12 @@ type WaylandHost struct {
 	screen     *ScreenBuf
 	renderer   *WaylandRenderer
 
-	mouseX   int
-	mouseY   int
-	mouseBtn uint32
+	mouseX         int
+	mouseY         int
+	mouseBtn       uint32
+	lastMouseCellX int
+	lastMouseCellY int
+	mouseCellKnown bool
 
 	axisValue             [2]float64
 	axisDiscrete          [2]int32
@@ -307,11 +310,20 @@ func (h *WaylandHost) Motion(w *window.Widget, input *window.Input, time uint32,
 	h.mouseX, h.mouseY = int(x), int(y)
 	mouseX, mouseY := h.mouseCellLocked()
 	mouseBtn := h.mouseBtn
+	moved := !h.mouseCellKnown || mouseX != h.lastMouseCellX || mouseY != h.lastMouseCellY
+	if mouseBtn != 0 && moved {
+		h.lastMouseCellX, h.lastMouseCellY = mouseX, mouseY
+		h.mouseCellKnown = true
+	}
 	h.mu.Unlock()
-	if h.reader != nil {
+
+	// VTUI consumes mouse coordinates in cells. Sending every pixel-level
+	// Wayland motion can fill the input queue faster than a drag can be drawn,
+	// so only report a held-button move after the pointer enters another cell.
+	if h.reader != nil && mouseBtn != 0 && moved {
 		h.reader.EventChan <- &vtinput.InputEvent{
 			Type:            vtinput.MouseEventType,
-			KeyDown:         mouseBtn != 0,
+			KeyDown:         true,
 			MouseX:          int16(mouseX),
 			MouseY:          int16(mouseY),
 			MouseEventFlags: vtinput.MouseMoved,
@@ -344,6 +356,8 @@ func (h *WaylandHost) Button(w *window.Widget, input *window.Input, time uint32,
 	}
 	bs = h.mouseBtn
 	mouseX, mouseY := h.mouseCellLocked()
+	h.lastMouseCellX, h.lastMouseCellY = mouseX, mouseY
+	h.mouseCellKnown = true
 	h.mu.Unlock()
 
 	if h.reader != nil {

@@ -54,6 +54,15 @@ func nextWaylandMouseEvent(t *testing.T, host *WaylandHost) *vtinput.InputEvent 
 	}
 }
 
+func assertNoWaylandMouseEvent(t *testing.T, host *WaylandHost) {
+	t.Helper()
+	select {
+	case event := <-host.reader.EventChan:
+		t.Fatalf("unexpected Wayland mouse event: %+v", event)
+	case <-time.After(20 * time.Millisecond):
+	}
+}
+
 func TestWaylandButtonReleaseClearsMotionState(t *testing.T) {
 	host := newWaylandPointerTestHost(t)
 
@@ -70,10 +79,7 @@ func TestWaylandButtonReleaseClearsMotionState(t *testing.T) {
 	}
 
 	host.Motion(nil, nil, 0, 30, 40)
-	hover := nextWaylandMouseEvent(t, host)
-	if hover.KeyDown || hover.ButtonState != 0 {
-		t.Fatalf("hover after release = KeyDown:%v ButtonState:%d", hover.KeyDown, hover.ButtonState)
-	}
+	assertNoWaylandMouseEvent(t, host)
 }
 
 func TestWaylandMotionReportsHeldButton(t *testing.T) {
@@ -89,6 +95,31 @@ func TestWaylandMotionReportsHeldButton(t *testing.T) {
 	}
 	if drag.MouseX != 3 || drag.MouseY != 2 {
 		t.Fatalf("drag cell = %d,%d, want 3,2", drag.MouseX, drag.MouseY)
+	}
+}
+
+func TestWaylandMotionReportsOnlyCellChanges(t *testing.T) {
+	host := newWaylandPointerTestHost(t)
+
+	host.Button(nil, nil, 0, 272, wl.PointerButtonStatePressed, nil)
+	_ = nextWaylandMouseEvent(t, host)
+
+	host.Motion(nil, nil, 0, 9, 19)
+	assertNoWaylandMouseEvent(t, host)
+
+	host.Motion(nil, nil, 0, 10, 19)
+	firstCell := nextWaylandMouseEvent(t, host)
+	if firstCell.MouseX != 1 || firstCell.MouseY != 0 {
+		t.Fatalf("first drag cell = %d,%d, want 1,0", firstCell.MouseX, firstCell.MouseY)
+	}
+
+	host.Motion(nil, nil, 0, 19, 19)
+	assertNoWaylandMouseEvent(t, host)
+
+	host.Motion(nil, nil, 0, 19, 20)
+	secondCell := nextWaylandMouseEvent(t, host)
+	if secondCell.MouseX != 1 || secondCell.MouseY != 1 {
+		t.Fatalf("second drag cell = %d,%d, want 1,1", secondCell.MouseX, secondCell.MouseY)
 	}
 }
 
