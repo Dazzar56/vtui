@@ -610,7 +610,12 @@ func (h *Win32GuiHost) handleMessage(hwnd syscall.Handle, msg uint32, wParam, lP
 		return 0
 
 	case wmSetCursor:
-		if h.hCursor != 0 {
+		// lParam's low word is the hit-test result Windows computed for the
+		// pointer. Over the non-client frame (the resizeable edges/corners)
+		// we must let DefWindowProc set the matching resize cursor, so only
+		// override the cursor when the hit is inside the client area.
+		const htClient = 1
+		if int(lParam&0xFFFF) == htClient && h.hCursor != 0 {
 			procSetCursor.Call(uintptr(h.hCursor))
 			return 1
 		}
