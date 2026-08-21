@@ -101,3 +101,44 @@ func TestWin32DnD_DataObjectAndDropSourceLifecycle(t *testing.T) {
 		t.Errorf("QueryContinueDrag with LBUTTON held returned hr=0x%X, want S_OK", hr)
 	}
 }
+
+func TestWin32DnD_EnumeratorSurvivesBeingHandedOut(t *testing.T) {
+	// EnumFormatEtc hands its result to a caller that lives outside Go. The
+	// only thing keeping that object alive is the pin registry, so the pin
+	// has to exist while the enumerator is in flight and be gone once its
+	// reference count reaches zero -- otherwise a collection mid-drag turns
+	// the enumerator into whatever happens to occupy its address next.
+	before := comLiveCount()
+
+	dataObj := newComDataObject([]string{"C:\\file.txt"})
+	var pEnum uintptr
+	if hr := comDataObjectEnumFormatEtc(dataObj.toIUnknown(), dataDirGet, &pEnum); hr != sOK {
+		t.Fatalf("EnumFormatEtc returned hr=0x%X, want S_OK", hr)
+	}
+	if pEnum == 0 {
+		t.Fatal("EnumFormatEtc handed out a null enumerator")
+	}
+	if comLiveCount() != before+2 {
+		t.Fatalf("live COM objects = %d, want %d (data object plus enumerator)",
+			comLiveCount(), before+2)
+	}
+
+	var fetched uint32
+	var got formatEtc
+	if hr := comEnumFormatEtcNext(pEnum, 1, &got, &fetched); hr != sOK || fetched != 1 {
+		t.Fatalf("Next returned hr=0x%X fetched=%d, want S_OK and 1", hr, fetched)
+	}
+	if got.cfFormat != cfHDROP {
+		t.Errorf("first advertised format = %d, want CF_HDROP", got.cfFormat)
+	}
+
+	if n := comEnumFormatEtcRelease(pEnum); n != 0 {
+		t.Errorf("enumerator refCount after release = %d, want 0", n)
+	}
+	if n := comDataObjectRelease(dataObj.toIUnknown()); n != 0 {
+		t.Errorf("data object refCount after release = %d, want 0", n)
+	}
+	if comLiveCount() != before {
+		t.Errorf("live COM objects = %d after both releases, want %d", comLiveCount(), before)
+	}
+}

@@ -30,6 +30,52 @@ func oleInit() {
 	})
 }
 
+// Every COM object below is an ordinary Go value, and OLE is handed nothing
+// but its address, which the garbage collector cannot see. The enumerator
+// returned by IDataObject::EnumFormatEtc shows the hole at its sharpest: it
+// is allocated inside a callback, its address is written into caller-owned
+// memory, and it is unreachable from Go the instant that callback returns,
+// so the collector may reuse it while the drop target is still walking it.
+// The target then finds no CF_HDROP and refuses the drop, which is the "no"
+// cursor. The data object and the drop source have the same hole for any
+// drag that outlives the frame which created them.
+//
+// comLive is the Go reference COM cannot provide: an object enters it when
+// it is born with a reference count of one and leaves it when that count
+// reaches zero, which is exactly the lifetime COM promises. runtime.Pinner
+// is deliberately not used here -- a Pinner collected without Unpin panics,
+// so a client that never releases to zero would take the process down
+// instead of merely leaking one object.
+var (
+	comLiveMu sync.Mutex
+	comLive   = map[uintptr]any{}
+)
+
+// comRetain makes obj reachable from Go for as long as OLE holds it, and
+// returns the address OLE will know it by.
+func comRetain(this uintptr, obj any) uintptr {
+	comLiveMu.Lock()
+	comLive[this] = obj
+	comLiveMu.Unlock()
+	return this
+}
+
+// comReleaseFinal drops the last Go reference to an object whose reference
+// count has just reached zero. After this the address may be reused, so no
+// caller may touch the object again.
+func comReleaseFinal(this uintptr) {
+	comLiveMu.Lock()
+	delete(comLive, this)
+	comLiveMu.Unlock()
+}
+
+// comLiveCount reports how many objects are still held. Only tests need it.
+func comLiveCount() int {
+	comLiveMu.Lock()
+	defer comLiveMu.Unlock()
+	return len(comLive)
+}
+
 func initComVtables() {
 	initComVtablesOnce.Do(func() {
 		globalDropSourceVtbl = &dropSourceVtbl{
@@ -265,10 +311,12 @@ type comDropSource struct {
 
 func newComDropSource() *comDropSource {
 	initComVtables()
-	return &comDropSource{
+	s := &comDropSource{
 		lpVtbl:   globalDropSourceVtbl,
 		refCount: 1,
 	}
+	comRetain(uintptr(unsafe.Pointer(s)), s)
+	return s
 }
 
 func (s *comDropSource) toIUnknown() uintptr {
@@ -300,6 +348,9 @@ func comDropSourceAddRef(this uintptr) uintptr {
 func comDropSourceRelease(this uintptr) uintptr {
 	s := (*comDropSource)(unsafe.Pointer(this))
 	count := atomic.AddInt32(&s.refCount, -1)
+	if count <= 0 {
+		comReleaseFinal(this)
+	}
 	return uintptr(count)
 }
 
@@ -345,11 +396,13 @@ type comDataObject struct {
 
 func newComDataObject(paths []string) *comDataObject {
 	initComVtables()
-	return &comDataObject{
+	d := &comDataObject{
 		lpVtbl:   globalDataObjectVtbl,
 		refCount: 1,
 		paths:    paths,
 	}
+	comRetain(uintptr(unsafe.Pointer(d)), d)
+	return d
 }
 
 func (d *comDataObject) toIUnknown() uintptr {
@@ -381,6 +434,9 @@ func comDataObjectAddRef(this uintptr) uintptr {
 func comDataObjectRelease(this uintptr) uintptr {
 	d := (*comDataObject)(unsafe.Pointer(this))
 	count := atomic.AddInt32(&d.refCount, -1)
+	if count <= 0 {
+		comReleaseFinal(this)
+	}
 	return uintptr(count)
 }
 
@@ -508,12 +564,14 @@ type comEnumFormatEtc struct {
 
 func newComEnumFormatEtc(formats []formatEtc) *comEnumFormatEtc {
 	initComVtables()
-	return &comEnumFormatEtc{
+	e := &comEnumFormatEtc{
 		lpVtbl:   globalEnumFormatEtcVtbl,
 		refCount: 1,
 		formats:  formats,
 		index:    0,
 	}
+	comRetain(uintptr(unsafe.Pointer(e)), e)
+	return e
 }
 
 func (e *comEnumFormatEtc) toIUnknown() uintptr {
@@ -545,6 +603,9 @@ func comEnumFormatEtcAddRef(this uintptr) uintptr {
 func comEnumFormatEtcRelease(this uintptr) uintptr {
 	e := (*comEnumFormatEtc)(unsafe.Pointer(this))
 	count := atomic.AddInt32(&e.refCount, -1)
+	if count <= 0 {
+		comReleaseFinal(this)
+	}
 	return uintptr(count)
 }
 
