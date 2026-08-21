@@ -14,20 +14,54 @@ var (
 	ole32DLL          = syscall.NewLazyDLL("ole32.dll")
 	procOleInitialize = ole32DLL.NewProc("OleInitialize")
 	procDoDragDrop    = ole32DLL.NewProc("DoDragDrop")
-
-	procGlobalAlloc  = kernel32.NewProc("GlobalAlloc")
-	procGlobalLock   = kernel32.NewProc("GlobalLock")
-	procGlobalUnlock = kernel32.NewProc("GlobalUnlock")
-	procGlobalFree   = kernel32.NewProc("GlobalFree")
 )
 
 var (
-	oleInitOnce sync.Once
+	oleInitOnce             sync.Once
+	initComVtablesOnce      sync.Once
+	globalDropSourceVtbl    *dropSourceVtbl
+	globalDataObjectVtbl    *dataObjectVtbl
+	globalEnumFormatEtcVtbl *enumFormatEtcVtbl
 )
 
 func oleInit() {
 	oleInitOnce.Do(func() {
 		procOleInitialize.Call(0)
+	})
+}
+
+func initComVtables() {
+	initComVtablesOnce.Do(func() {
+		globalDropSourceVtbl = &dropSourceVtbl{
+			QueryInterface:    syscall.NewCallback(comDropSourceQueryInterface),
+			AddRef:            syscall.NewCallback(comDropSourceAddRef),
+			Release:           syscall.NewCallback(comDropSourceRelease),
+			QueryContinueDrag: syscall.NewCallback(comDropSourceQueryContinueDrag),
+			GiveFeedback:      syscall.NewCallback(comDropSourceGiveFeedback),
+		}
+		globalDataObjectVtbl = &dataObjectVtbl{
+			QueryInterface:        syscall.NewCallback(comDataObjectQueryInterface),
+			AddRef:                syscall.NewCallback(comDataObjectAddRef),
+			Release:               syscall.NewCallback(comDataObjectRelease),
+			GetData:               syscall.NewCallback(comDataObjectGetData),
+			GetDataHere:           syscall.NewCallback(comDataObjectGetDataHere),
+			QueryGetData:          syscall.NewCallback(comDataObjectQueryGetData),
+			GetCanonicalFormatEtc: syscall.NewCallback(comDataObjectGetCanonicalFormatEtc),
+			SetData:               syscall.NewCallback(comDataObjectSetData),
+			EnumFormatEtc:         syscall.NewCallback(comDataObjectEnumFormatEtc),
+			DAdvise:               syscall.NewCallback(comDataObjectDAdvise),
+			DUnadvise:             syscall.NewCallback(comDataObjectDUnadvise),
+			EnumDAdvise:           syscall.NewCallback(comDataObjectEnumDAdvise),
+		}
+		globalEnumFormatEtcVtbl = &enumFormatEtcVtbl{
+			QueryInterface: syscall.NewCallback(comEnumFormatEtcQueryInterface),
+			AddRef:         syscall.NewCallback(comEnumFormatEtcAddRef),
+			Release:        syscall.NewCallback(comEnumFormatEtcRelease),
+			Next:           syscall.NewCallback(comEnumFormatEtcNext),
+			Skip:           syscall.NewCallback(comEnumFormatEtcSkip),
+			Reset:          syscall.NewCallback(comEnumFormatEtcReset),
+			Clone:          syscall.NewCallback(comEnumFormatEtcClone),
+		}
 	})
 }
 
@@ -190,15 +224,8 @@ type comDropSource struct {
 	refCount int32
 }
 
-var globalDropSourceVtbl = &dropSourceVtbl{
-	QueryInterface:    syscall.NewCallback(comDropSourceQueryInterface),
-	AddRef:            syscall.NewCallback(comDropSourceAddRef),
-	Release:           syscall.NewCallback(comDropSourceRelease),
-	QueryContinueDrag: syscall.NewCallback(comDropSourceQueryContinueDrag),
-	GiveFeedback:      syscall.NewCallback(comDropSourceGiveFeedback),
-}
-
 func newComDropSource() *comDropSource {
+	initComVtables()
 	return &comDropSource{
 		lpVtbl:   globalDropSourceVtbl,
 		refCount: 1,
@@ -275,22 +302,8 @@ type comDataObject struct {
 	paths    []string
 }
 
-var globalDataObjectVtbl = &dataObjectVtbl{
-	QueryInterface:        syscall.NewCallback(comDataObjectQueryInterface),
-	AddRef:                syscall.NewCallback(comDataObjectAddRef),
-	Release:               syscall.NewCallback(comDataObjectRelease),
-	GetData:               syscall.NewCallback(comDataObjectGetData),
-	GetDataHere:           syscall.NewCallback(comDataObjectGetDataHere),
-	QueryGetData:          syscall.NewCallback(comDataObjectQueryGetData),
-	GetCanonicalFormatEtc: syscall.NewCallback(comDataObjectGetCanonicalFormatEtc),
-	SetData:               syscall.NewCallback(comDataObjectSetData),
-	EnumFormatEtc:         syscall.NewCallback(comDataObjectEnumFormatEtc),
-	DAdvise:               syscall.NewCallback(comDataObjectDAdvise),
-	DUnadvise:             syscall.NewCallback(comDataObjectDUnadvise),
-	EnumDAdvise:           syscall.NewCallback(comDataObjectEnumDAdvise),
-}
-
 func newComDataObject(paths []string) *comDataObject {
+	initComVtables()
 	return &comDataObject{
 		lpVtbl:   globalDataObjectVtbl,
 		refCount: 1,
@@ -427,17 +440,8 @@ type comEnumFormatEtc struct {
 	index    int
 }
 
-var globalEnumFormatEtcVtbl = &enumFormatEtcVtbl{
-	QueryInterface: syscall.NewCallback(comEnumFormatEtcQueryInterface),
-	AddRef:         syscall.NewCallback(comEnumFormatEtcAddRef),
-	Release:        syscall.NewCallback(comEnumFormatEtcRelease),
-	Next:           syscall.NewCallback(comEnumFormatEtcNext),
-	Skip:           syscall.NewCallback(comEnumFormatEtcSkip),
-	Reset:          syscall.NewCallback(comEnumFormatEtcReset),
-	Clone:          syscall.NewCallback(comEnumFormatEtcClone),
-}
-
 func newComEnumFormatEtc(formats []formatEtc) *comEnumFormatEtc {
+	initComVtables()
 	return &comEnumFormatEtc{
 		lpVtbl:   globalEnumFormatEtcVtbl,
 		refCount: 1,
