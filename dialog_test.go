@@ -5,6 +5,54 @@ import (
 	"testing"
 )
 
+func TestCenteredDialogScrollsToItsFocusedControlInAShortViewport(t *testing.T) {
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(40, 8)
+	FrameManager.Init(scr)
+
+	dialog := NewCenteredDialog(30, 14, "Panel settings")
+	first := NewButton(dialog.X1+2, dialog.Y1+2, "First")
+	last := NewButton(dialog.X1+2, dialog.Y1+11, "Last")
+	last.IsDefault = true
+	dialog.AddItem(first)
+	dialog.AddItem(last)
+	dialog.Show(scr)
+
+	if dialog.Y1 != 0 || dialog.Y2 != 7 {
+		t.Fatalf("visible dialog bounds = (%d,%d), want (0,7)", dialog.Y1, dialog.Y2)
+	}
+	if dialog.scrollMax == 0 {
+		t.Fatal("short dialog viewport did not enable scrolling")
+	}
+
+	dialog.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_NEXT})
+	_, _, _, lastY := last.GetPosition()
+	if lastY > dialog.Y2-1 {
+		t.Fatalf("default button stayed below viewport at row %d (bottom %d)", lastY, dialog.Y2-1)
+	}
+}
+
+func TestCenteredDialogScrollsWithMouseWheelInAShortViewport(t *testing.T) {
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(40, 8)
+	FrameManager.Init(scr)
+
+	dialog := NewCenteredDialog(30, 14, "Panel settings")
+	last := NewButton(dialog.X1+2, dialog.Y1+11, "Last")
+	dialog.AddItem(last)
+	dialog.Show(scr)
+
+	for range 8 {
+		if !dialog.ProcessMouse(&vtinput.InputEvent{Type: vtinput.MouseEventType, WheelDirection: -1}) {
+			t.Fatal("mouse wheel was not handled by a short modal dialog")
+		}
+	}
+	_, _, _, lastY := last.GetPosition()
+	if lastY > dialog.Y2-1 {
+		t.Fatalf("mouse wheel did not reveal the last control: row %d, bottom %d", lastY, dialog.Y2-1)
+	}
+}
+
 func TestDialog_HotkeyCaseInsensitivity(t *testing.T) {
 	d := NewDialog(0, 0, 40, 10, "Case Test")
 	btn := NewButton(1, 1, "&File")
