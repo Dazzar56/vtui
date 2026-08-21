@@ -44,33 +44,34 @@ const (
 
 // Win32 Window Messages
 const (
-	wmDestroy       = 0x0002
-	wmSize          = 0x0005
-	wmSetFocus      = 0x0007
-	wmKillFocus     = 0x0008
-	wmPaint         = 0x000F
-	wmClose         = 0x0010
-	wmQuit          = 0x0012
-	wmEraseBkgnd    = 0x0014
-	wmSetCursor     = 0x0020
-	wmDropFiles     = 0x0233
-	wmKeyDown       = 0x0100
-	wmKeyUp         = 0x0101
-	wmChar          = 0x0102
-	wmSysKeyDown    = 0x0104
-	wmSysKeyUp      = 0x0105
-	wmSysChar       = 0x0106
-	wmLButtonDown   = 0x0201
-	wmLButtonUp     = 0x0202
-	wmLButtonDblClk = 0x0203
-	wmRButtonDown   = 0x0204
-	wmRButtonUp     = 0x0205
-	wmRButtonDblClk = 0x0206
-	wmMButtonDown   = 0x0207
-	wmMButtonUp     = 0x0208
-	wmMButtonDblClk = 0x0209
-	wmMouseMove     = 0x0200
-	wmMouseWheel    = 0x020A
+	wmDestroy         = 0x0002
+	wmSize            = 0x0005
+	wmSetFocus        = 0x0007
+	wmKillFocus       = 0x0008
+	wmPaint           = 0x000F
+	wmClose           = 0x0010
+	wmQuit            = 0x0012
+	wmEraseBkgnd      = 0x0014
+	wmSetCursor       = 0x0020
+	wmDropFiles       = 0x0233
+	wmKeyDown         = 0x0100
+	wmKeyUp           = 0x0101
+	wmChar            = 0x0102
+	wmSysKeyDown      = 0x0104
+	wmSysKeyUp        = 0x0105
+	wmSysChar         = 0x0106
+	wmLButtonDown     = 0x0201
+	wmLButtonUp       = 0x0202
+	wmLButtonDblClk   = 0x0203
+	wmRButtonDown     = 0x0204
+	wmRButtonUp       = 0x0205
+	wmRButtonDblClk   = 0x0206
+	wmMButtonDown     = 0x0207
+	wmMButtonUp       = 0x0208
+	wmMButtonDblClk   = 0x0209
+	wmMouseMove       = 0x0200
+	wmMouseWheel      = 0x020A
+	wmPerformDragDrop = 0x0400 + 101
 )
 
 // Win32 DIB and GDI Constants

@@ -141,6 +141,7 @@ type Win32GuiHost struct {
 	mouseBtn     uint32
 	closeChan    chan struct{}
 	closed       bool
+	pendingDrag  *win32DragRequest
 
 	// paintPending is set by Invalidate() and cleared only by a WM_PAINT
 	// that actually put pixels on the screen. BeginPaint() validates the
@@ -158,12 +159,44 @@ type Win32GuiHost struct {
 	everPainted bool
 }
 
+type win32DragRequest struct {
+	paths   []string
+	allowed DropAction
+	done    chan win32DragResult
+}
+
+type win32DragResult struct {
+	action DropAction
+	err    error
+}
+
 func (h *Win32GuiHost) AcceptsDrops() bool { return true }
 func (h *Win32GuiHost) StartDrag(payload DragPayload, allowed DropAction) (DropAction, error) {
-	DebugLog("WIN32_DND: StartDrag called with %d path(s): %q, allowed=%s", len(payload.Paths), payload.Paths, allowed)
-	action, err := win32DoDragDrop(payload.Paths, allowed)
-	DebugLog("WIN32_DND: StartDrag finished -> action=%s, err=%v", action, err)
-	return action, err
+	if len(payload.Paths) == 0 {
+		return DropNone, ErrDragNoData
+	}
+	h.mu.Lock()
+	hwnd := h.hwnd
+	h.mu.Unlock()
+	if hwnd == 0 {
+		return DropNone, ErrDragUnsupported
+	}
+
+	DebugLog("WIN32_DND: StartDrag queuing to main thread with %d path(s): %q, allowed=%s", len(payload.Paths), payload.Paths, allowed)
+	req := &win32DragRequest{
+		paths:   payload.Paths,
+		allowed: allowed,
+		done:    make(chan win32DragResult, 1),
+	}
+
+	h.mu.Lock()
+	h.pendingDrag = req
+	h.mu.Unlock()
+
+	procPostMessageW.Call(uintptr(hwnd), wmPerformDragDrop, 0, 0)
+	res := <-req.done
+	DebugLog("WIN32_DND: StartDrag finished -> action=%s, err=%v", res.action, res.err)
+	return res.action, res.err
 }
 
 func (h *Win32GuiHost) SetTitle(title string) {
@@ -301,6 +334,17 @@ func win32GuiWndProc(hwnd syscall.Handle, msg uint32, wParam, lParam uintptr) ui
 
 func (h *Win32GuiHost) handleMessage(hwnd syscall.Handle, msg uint32, wParam, lParam uintptr) uintptr {
 	switch msg {
+	case wmPerformDragDrop:
+		h.mu.Lock()
+		req := h.pendingDrag
+		h.pendingDrag = nil
+		h.mu.Unlock()
+		if req != nil {
+			action, err := win32DoDragDrop(req.paths, req.allowed)
+			req.done <- win32DragResult{action: action, err: err}
+		}
+		return 0
+
 	case wmEraseBkgnd:
 		// Suppressing the erase eliminates flicker, but only once there is a
 		// frame to cover the window with. Before the first successful blit,
