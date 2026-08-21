@@ -24,8 +24,8 @@ func TestWaylandHost_KeyRepeatLogic(t *testing.T) {
 		t.Error("Expected isRepeating to be true")
 	}
 
-	// Note: full integration test of Redraw() spin loop requires mocking window.Widget
-	// which is deeply integrated with the C Wayland library in windowtrace.
+	// Note: full integration test of Redraw() spin loop requires mocking window.Widget,
+	// which is deeply integrated with the Wayland protocol implementation.
 }
 
 func newWaylandPointerTestHost(t *testing.T) *WaylandHost {

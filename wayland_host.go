@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	window "github.com/neurlang/wayland/windowtrace"
+	"github.com/neurlang/wayland/window"
 	"github.com/neurlang/wayland/wl"
 	"github.com/unxed/vtinput"
 )
