@@ -20,6 +20,22 @@ type mockFrame struct {
 	resizedW, resizedH int
 }
 
+type closeVetoFrame struct {
+	mockFrame
+	allowClose        bool
+	confirmCloseCalls int
+	closeCalls        int
+}
+
+func (f *closeVetoFrame) ConfirmClose() bool {
+	f.confirmCloseCalls++
+	return f.allowClose
+}
+
+func (f *closeVetoFrame) Close() {
+	f.closeCalls++
+}
+
 func (m *mockFrame) ResizeConsole(w, h int) {
 	m.resizedW, m.resizedH = w, h
 }
@@ -2653,6 +2669,150 @@ func TestFrameManager_CloseActiveScreen_Shifting(t *testing.T) {
 		t.Errorf("Expected W2 to be active, got %q", fm.Screens[fm.ActiveIdx].GetTitle())
 	}
 }
+
+func TestFrameManager_CloseScreenVeto(t *testing.T) {
+	fm := &frameManager{}
+	fm.Init(NewSilentScreenBuf())
+	fm.Push(newMockFrame(0, 0, 10, 10, false))
+	vetoer := &closeVetoFrame{}
+	fm.AddScreen(vetoer)
+
+	target := fm.Screens[fm.ActiveIdx]
+	fm.CloseScreen(fm.ActiveIdx)
+
+	if len(fm.Screens) != 2 {
+		t.Fatalf("CloseScreen left %d workspaces, want 2 after veto", len(fm.Screens))
+	}
+	if fm.Screens[fm.ActiveIdx] != target {
+		t.Fatal("CloseScreen changed the active workspace after veto")
+	}
+	if vetoer.confirmCloseCalls != 1 {
+		t.Fatalf("ConfirmClose called %d times, want 1", vetoer.confirmCloseCalls)
+	}
+	if vetoer.closeCalls != 0 {
+		t.Fatalf("Close called %d times before veto, want 0", vetoer.closeCalls)
+	}
+}
+
+func TestFrameManager_CloseScreenAllowedByVetoer(t *testing.T) {
+	fm := &frameManager{}
+	fm.Init(NewSilentScreenBuf())
+	fm.Push(newMockFrame(0, 0, 10, 10, false))
+	vetoer := &closeVetoFrame{allowClose: true}
+	fm.AddScreen(vetoer)
+
+	fm.CloseScreen(fm.ActiveIdx)
+
+	if len(fm.Screens) != 1 {
+		t.Fatalf("CloseScreen left %d workspaces, want 1", len(fm.Screens))
+	}
+	if vetoer.confirmCloseCalls != 1 {
+		t.Fatalf("ConfirmClose called %d times, want 1", vetoer.confirmCloseCalls)
+	}
+	if vetoer.closeCalls != 1 {
+		t.Fatalf("Close called %d times, want 1", vetoer.closeCalls)
+	}
+}
+
+func TestFrameManager_CloseScreenFindsVetoerUnderDialog(t *testing.T) {
+	fm := &frameManager{}
+	fm.Init(NewSilentScreenBuf())
+	fm.Push(newMockFrame(0, 0, 10, 10, false))
+	vetoer := &closeVetoFrame{}
+	fm.AddScreen(vetoer)
+	dialog := newMockFrame(0, 0, 5, 5, true)
+	fm.Push(dialog)
+
+	fm.CloseScreen(fm.ActiveIdx)
+
+	if len(fm.Screens) != 2 {
+		t.Fatalf("CloseScreen left %d workspaces, want 2 after underlying frame veto", len(fm.Screens))
+	}
+	if vetoer.confirmCloseCalls != 1 {
+		t.Fatalf("underlying frame ConfirmClose called %d times, want 1", vetoer.confirmCloseCalls)
+	}
+	if vetoer.closeCalls != 0 {
+		t.Fatalf("underlying frame Close called %d times before veto, want 0", vetoer.closeCalls)
+	}
+	if dialog.IsDone() {
+		t.Fatal("dialog was closed before underlying frame veto")
+	}
+}
+
+func TestFrameManager_WorkspaceCloseRoutesRespectVeto(t *testing.T) {
+	newManager := func() (*frameManager, *closeVetoFrame) {
+		SetDefaultPalette()
+		scr := NewSilentScreenBuf()
+		scr.AllocBuf(80, 10)
+		fm := &frameManager{}
+		fm.Init(scr)
+		fm.Push(newMockFrame(0, 0, 20, 5, false))
+		vetoer := &closeVetoFrame{}
+		fm.AddScreen(vetoer)
+		fm.SwitchScreen(0)
+		return fm, vetoer
+	}
+
+	t.Run("Ctrl+W fallback", func(t *testing.T) {
+		fm, vetoer := newManager()
+		fm.SwitchScreen(1)
+
+		fm.dispatchEvent(&vtinput.InputEvent{
+			Type:            vtinput.KeyEventType,
+			KeyDown:         true,
+			VirtualKeyCode:  vtinput.VK_W,
+			ControlKeyState: vtinput.LeftCtrlPressed,
+		}, false)
+
+		if len(fm.Screens) != 2 || fm.ActiveIdx != 1 {
+			t.Fatal("Ctrl+W fallback closed a vetoed workspace or changed the active workspace")
+		}
+		if vetoer.confirmCloseCalls != 1 || vetoer.closeCalls != 0 {
+			t.Fatalf("Ctrl+W ConfirmClose calls = %d, Close calls = %d; want 1, 0", vetoer.confirmCloseCalls, vetoer.closeCalls)
+		}
+	})
+
+	t.Run("middle click", func(t *testing.T) {
+		fm, vetoer := newManager()
+		active := fm.Screens[fm.ActiveIdx]
+		fm.drawWorkspaceTabs()
+		target := fm.workspaceTabHits[1]
+
+		fm.dispatchEvent(&vtinput.InputEvent{
+			Type:        vtinput.MouseEventType,
+			KeyDown:     true,
+			MouseX:      int16(target.x1 + 1),
+			MouseY:      0,
+			ButtonState: vtinput.FromLeft2ndButtonPressed,
+		}, false)
+
+		if len(fm.Screens) != 2 || fm.Screens[fm.ActiveIdx] != active {
+			t.Fatal("middle-click closed a vetoed workspace or changed the active workspace")
+		}
+		if vetoer.confirmCloseCalls != 1 || vetoer.closeCalls != 0 {
+			t.Fatalf("middle-click ConfirmClose calls = %d, Close calls = %d; want 1, 0", vetoer.confirmCloseCalls, vetoer.closeCalls)
+		}
+	})
+
+	t.Run("semantic action", func(t *testing.T) {
+		fm, vetoer := newManager()
+		handled := fm.HandleSemanticAction(map[string]any{
+			"action": "workspace.close",
+			"index":  1,
+		})
+
+		if !handled {
+			t.Fatal("semantic workspace.close was not handled")
+		}
+		if len(fm.Screens) != 2 {
+			t.Fatalf("semantic workspace.close left %d workspaces, want 2 after veto", len(fm.Screens))
+		}
+		if vetoer.confirmCloseCalls != 1 || vetoer.closeCalls != 0 {
+			t.Fatalf("semantic close ConfirmClose calls = %d, Close calls = %d; want 1, 0", vetoer.confirmCloseCalls, vetoer.closeCalls)
+		}
+	})
+}
+
 func TestFrameManager_CloseActiveScreen_CancelsTasks(t *testing.T) {
 	fm := &frameManager{}
 	fm.Init(NewSilentScreenBuf())
