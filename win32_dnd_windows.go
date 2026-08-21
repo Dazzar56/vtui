@@ -84,10 +84,49 @@ const (
 	dropEffectMove = 2
 	dropEffectLink = 4
 
-	cfHDROP      = 15
-	tymedHGLOBAL = 1
-	dataDirGet   = 1
+	cfText        = 1
+	cfUnicodeText = 13
+	cfHDROP       = 15
+	tymedHGLOBAL  = 1
+	dataDirGet    = 1
 )
+
+func buildUnicodeText(paths []string) (uintptr, error) {
+	if len(paths) == 0 {
+		return 0, ErrDragNoData
+	}
+	text := ""
+	for i, p := range paths {
+		if i > 0 {
+			text += "\r\n"
+		}
+		text += p
+	}
+	u16, err := syscall.UTF16FromString(text)
+	if err != nil {
+		return 0, err
+	}
+	totalBytes := uintptr(len(u16) * 2)
+
+	const gmemMoveable = 0x0002
+	const gmemZeroInit = 0x0040
+	hGlobal, _, _ := procGlobalAlloc.Call(gmemMoveable|gmemZeroInit, totalBytes)
+	if hGlobal == 0 {
+		return 0, fmt.Errorf("GlobalAlloc failed for %d bytes", totalBytes)
+	}
+
+	ptr, _, _ := procGlobalLock.Call(hGlobal)
+	if ptr == 0 {
+		procGlobalFree.Call(hGlobal)
+		return 0, fmt.Errorf("GlobalLock failed")
+	}
+
+	destSlice := unsafe.Slice((*uint16)(unsafe.Pointer(ptr)), len(u16))
+	copy(destSlice, u16)
+
+	procGlobalUnlock.Call(hGlobal)
+	return hGlobal, nil
+}
 
 type guid struct {
 	Data1 uint32
@@ -350,25 +389,39 @@ func comDataObjectGetData(this uintptr, pFormatEtcIn *formatEtc, pMedium *stgMed
 		return ePointer
 	}
 	DebugLog("WIN32_DND_COM: IDataObject.GetData requested cfFormat=%d, tymed=%d", pFormatEtcIn.cfFormat, pFormatEtcIn.tymed)
-	if pFormatEtcIn.cfFormat != cfHDROP {
-		return dvEFormatEtc
-	}
 	if pFormatEtcIn.tymed&tymedHGLOBAL == 0 {
 		return dvETymed
 	}
 
 	d := (*comDataObject)(unsafe.Pointer(this))
-	hGlobal, err := buildHDROP(d.paths)
-	if err != nil {
-		DebugLog("WIN32_DND_COM: IDataObject.GetData buildHDROP failed: %v", err)
-		return eOutOfMemory
+
+	if pFormatEtcIn.cfFormat == cfHDROP {
+		hGlobal, err := buildHDROP(d.paths)
+		if err != nil {
+			DebugLog("WIN32_DND_COM: IDataObject.GetData buildHDROP failed: %v", err)
+			return eOutOfMemory
+		}
+		pMedium.tymed = tymedHGLOBAL
+		pMedium.handle = hGlobal
+		pMedium.pUnkForRelease = 0
+		DebugLog("WIN32_DND_COM: IDataObject.GetData supplied CF_HDROP for %d path(s)", len(d.paths))
+		return sOK
 	}
 
-	pMedium.tymed = tymedHGLOBAL
-	pMedium.handle = hGlobal
-	pMedium.pUnkForRelease = 0
-	DebugLog("WIN32_DND_COM: IDataObject.GetData supplied HDROP for %d path(s)", len(d.paths))
-	return sOK
+	if pFormatEtcIn.cfFormat == cfUnicodeText {
+		hGlobal, err := buildUnicodeText(d.paths)
+		if err != nil {
+			DebugLog("WIN32_DND_COM: IDataObject.GetData buildUnicodeText failed: %v", err)
+			return eOutOfMemory
+		}
+		pMedium.tymed = tymedHGLOBAL
+		pMedium.handle = hGlobal
+		pMedium.pUnkForRelease = 0
+		DebugLog("WIN32_DND_COM: IDataObject.GetData supplied CF_UNICODETEXT for %d path(s)", len(d.paths))
+		return sOK
+	}
+
+	return dvEFormatEtc
 }
 
 func comDataObjectGetDataHere(this uintptr, pFormatEtc *formatEtc, pMedium *stgMedium) uintptr {
@@ -379,7 +432,8 @@ func comDataObjectQueryGetData(this uintptr, pFormatEtc *formatEtc) uintptr {
 	if pFormatEtc == nil {
 		return ePointer
 	}
-	if pFormatEtc.cfFormat == cfHDROP && (pFormatEtc.tymed&tymedHGLOBAL) != 0 {
+	DebugLog("WIN32_DND_COM: IDataObject.QueryGetData cfFormat=%d, tymed=%d", pFormatEtc.cfFormat, pFormatEtc.tymed)
+	if (pFormatEtc.cfFormat == cfHDROP || pFormatEtc.cfFormat == cfUnicodeText) && (pFormatEtc.tymed&tymedHGLOBAL) != 0 {
 		return sOK
 	}
 	return dvEFormatEtc
@@ -397,6 +451,7 @@ func comDataObjectEnumFormatEtc(this uintptr, dwDirection uintptr, ppEnumFormatE
 	if ppEnumFormatEtc == nil {
 		return ePointer
 	}
+	DebugLog("WIN32_DND_COM: IDataObject.EnumFormatEtc dwDirection=%d", dwDirection)
 	if dwDirection != dataDirGet {
 		return eNotImpl
 	}
@@ -404,6 +459,12 @@ func comDataObjectEnumFormatEtc(this uintptr, dwDirection uintptr, ppEnumFormatE
 	formats := []formatEtc{
 		{
 			cfFormat: cfHDROP,
+			dwAspect: 1, // DVASPECT_CONTENT
+			lindex:   -1,
+			tymed:    tymedHGLOBAL,
+		},
+		{
+			cfFormat: cfUnicodeText,
 			dwAspect: 1, // DVASPECT_CONTENT
 			lindex:   -1,
 			tymed:    tymedHGLOBAL,
