@@ -79,6 +79,13 @@ type Frame interface {
 	GetProgress() int // Returns 0-100, or -1 if no progress
 }
 
+// CloseVetoer lets a frame veto workspace closing. ConfirmClose is consulted
+// before frames are closed; returning false aborts the close, and the frame may
+// have pushed its own confirmation dialog.
+type CloseVetoer interface {
+	ConfirmClose() bool
+}
+
 // AppScreen represents an isolated workspace with its own frame stack.
 type AppScreen struct {
 	Number        int // Stable workspace number; never changes during its lifetime.
@@ -625,17 +632,22 @@ func (fm *frameManager) CloseScreen(idx int) {
 	if idx < 0 || idx >= len(fm.Screens) {
 		return
 	}
+	fm.SyncCurrentScreen()
+	screenToClose := fm.Screens[idx]
+	for _, frame := range screenToClose.Frames {
+		if vetoer, ok := frame.(CloseVetoer); ok && !vetoer.ConfirmClose() {
+			return
+		}
+	}
 	if len(fm.Screens) <= 1 {
 		fm.EmitCommand(CmQuit, nil)
 		return
 	}
 
 	oldInset := fm.WorkspaceTopInset()
-	fm.SyncCurrentScreen()
 	closedIdx := idx
 	activeScreen := fm.Screens[fm.ActiveIdx]
 	closingActive := closedIdx == fm.ActiveIdx
-	screenToClose := fm.Screens[closedIdx]
 	for i := len(screenToClose.Frames) - 1; i >= 0; i-- {
 		screenToClose.Frames[i].Close()
 	}
