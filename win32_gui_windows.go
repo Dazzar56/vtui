@@ -160,7 +160,10 @@ type Win32GuiHost struct {
 
 func (h *Win32GuiHost) AcceptsDrops() bool { return true }
 func (h *Win32GuiHost) StartDrag(payload DragPayload, allowed DropAction) (DropAction, error) {
-	return win32DoDragDrop(payload.Paths, allowed)
+	DebugLog("WIN32_DND: StartDrag called with %d path(s): %q, allowed=%s", len(payload.Paths), payload.Paths, allowed)
+	action, err := win32DoDragDrop(payload.Paths, allowed)
+	DebugLog("WIN32_DND: StartDrag finished -> action=%s, err=%v", action, err)
+	return action, err
 }
 
 func (h *Win32GuiHost) SetTitle(title string) {
@@ -533,10 +536,12 @@ func (h *Win32GuiHost) handleMessage(hwnd syscall.Handle, msg uint32, wParam, lP
 		procDragFinish.Call(uintptr(hDrop))
 
 		if len(paths) > 0 {
+			DebugLog("WIN32_DND: WM_DROPFILES at cell (%d,%d), count=%d: %q", cellX, cellY, len(paths), paths)
 			payload := DragPayload{Paths: paths}
 			mods := h.getModifiers()
+			var lastAction DropAction
 			for _, phase := range []DragPhase{DragEnter, DragOver, DragDrop} {
-				DeliverDragEvent(&DragEvent{
+				lastAction = DeliverDragEvent(&DragEvent{
 					Phase:     phase,
 					X:         cellX,
 					Y:         cellY,
@@ -546,6 +551,7 @@ func (h *Win32GuiHost) handleMessage(hwnd syscall.Handle, msg uint32, wParam, lP
 					Payload:   payload,
 				})
 			}
+			DebugLog("WIN32_DND: WM_DROPFILES delivery result -> %s", lastAction)
 		}
 		return 0
 

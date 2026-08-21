@@ -266,10 +266,12 @@ func comDropSourceRelease(this uintptr) uintptr {
 
 func comDropSourceQueryContinueDrag(this uintptr, fEscapePressed uintptr, grfKeyState uintptr) uintptr {
 	if fEscapePressed != 0 {
+		DebugLog("WIN32_DND_COM: QueryContinueDrag -> ESC pressed, cancel")
 		return dragDropSCancel
 	}
 	// MK_LBUTTON (0x0001) or MK_RBUTTON (0x0002) released -> drop
 	if (grfKeyState & 0x0003) == 0 {
+		DebugLog("WIN32_DND_COM: QueryContinueDrag -> mouse released, drop")
 		return dragDropSDrop
 	}
 	return sOK
@@ -347,6 +349,7 @@ func comDataObjectGetData(this uintptr, pFormatEtcIn *formatEtc, pMedium *stgMed
 	if pFormatEtcIn == nil || pMedium == nil {
 		return ePointer
 	}
+	DebugLog("WIN32_DND_COM: IDataObject.GetData requested cfFormat=%d, tymed=%d", pFormatEtcIn.cfFormat, pFormatEtcIn.tymed)
 	if pFormatEtcIn.cfFormat != cfHDROP {
 		return dvEFormatEtc
 	}
@@ -357,12 +360,14 @@ func comDataObjectGetData(this uintptr, pFormatEtcIn *formatEtc, pMedium *stgMed
 	d := (*comDataObject)(unsafe.Pointer(this))
 	hGlobal, err := buildHDROP(d.paths)
 	if err != nil {
+		DebugLog("WIN32_DND_COM: IDataObject.GetData buildHDROP failed: %v", err)
 		return eOutOfMemory
 	}
 
 	pMedium.tymed = tymedHGLOBAL
 	pMedium.handle = hGlobal
 	pMedium.pUnkForRelease = 0
+	DebugLog("WIN32_DND_COM: IDataObject.GetData supplied HDROP for %d path(s)", len(d.paths))
 	return sOK
 }
 
@@ -548,12 +553,14 @@ func win32DoDragDrop(paths []string, allowed DropAction) (DropAction, error) {
 	dwOKEffects := dropActionToDropEffect(allowed)
 	var dwEffect uint32
 
+	DebugLog("WIN32_DND: calling ole32!DoDragDrop with %d path(s), dwOKEffects=0x%X...", len(paths), dwOKEffects)
 	r1, _, _ := procDoDragDrop.Call(
 		dataObj.toIUnknown(),
 		dropSrc.toIUnknown(),
 		uintptr(dwOKEffects),
 		uintptr(unsafe.Pointer(&dwEffect)),
 	)
+	DebugLog("WIN32_DND: ole32!DoDragDrop returned hr=0x%08X, dwEffect=0x%X", uint32(r1), dwEffect)
 
 	// Release COM objects
 	comDataObjectRelease(dataObj.toIUnknown())
