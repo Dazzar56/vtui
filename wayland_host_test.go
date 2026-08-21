@@ -68,11 +68,14 @@ func TestHasWaylandPixelSize(t *testing.T) {
 	}
 }
 
-func TestLogicalWaylandPixelsRoundsUp(t *testing.T) {
+func TestLogicalWaylandPixelsRoundsToNearest(t *testing.T) {
 	if got := logicalWaylandPixels(1001, 2); got != 501 {
 		t.Errorf("logicalWaylandPixels(1001, 2) = %d, want 501", got)
 	}
-	if got := logicalWaylandPixels(1400, 1.5); got != 934 {
-		t.Errorf("logicalWaylandPixels(1400, 1.5) = %d, want 934", got)
+	if got := logicalWaylandPixels(1400, 1.5); got != 933 {
+		t.Errorf("logicalWaylandPixels(1400, 1.5) = %d, want 933", got)
+	}
+	if got := logicalWaylandPixels(1, 3); got != 1 {
+		t.Errorf("logicalWaylandPixels(1, 3) = %d, want 1", got)
 	}
 }

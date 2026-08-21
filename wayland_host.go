@@ -200,7 +200,11 @@ func logicalWaylandPixels(physical int, scale float64) int32 {
 	if scale <= 0 {
 		scale = 1
 	}
-	return int32(math.Ceil(float64(physical) / scale))
+	logical := int32(math.Round(float64(physical) / scale))
+	if physical > 0 && logical < 1 {
+		return 1
+	}
+	return logical
 }
 
 func (h *WaylandHost) updateScaleLocked(scale float64) bool {
