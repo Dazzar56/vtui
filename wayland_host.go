@@ -452,7 +452,7 @@ func (h *WaylandHost) Key(win *window.Window, input *window.Input, timeMs uint32
 	mods := h.getMods(input)
 
 	h.mu.Lock()
-	if isDown {
+	if isDown && waylandKeyCanRepeat(vk) {
 		h.isRepeating = true
 		h.repeatVK = vk
 		h.repeatChar = char
@@ -460,8 +460,8 @@ func (h *WaylandHost) Key(win *window.Window, input *window.Input, timeMs uint32
 		h.repeatNext = time.Now().Add(400 * time.Millisecond)
 		// Force an immediate redraw to start the spin loop
 		h.widget.ScheduleRedraw()
-	} else {
-		h.isRepeating = false
+	} else if !isDown && h.repeatVK == vk {
+		h.stopKeyRepeatLocked()
 	}
 	h.mu.Unlock()
 
@@ -474,6 +474,27 @@ func (h *WaylandHost) Key(win *window.Window, input *window.Input, timeMs uint32
 			ControlKeyState: mods,
 		}
 	}
+}
+
+func waylandKeyCanRepeat(vk uint16) bool {
+	switch vk {
+	case vtinput.VK_LCONTROL, vtinput.VK_RCONTROL,
+		vtinput.VK_LMENU, vtinput.VK_RMENU,
+		vtinput.VK_LSHIFT, vtinput.VK_RSHIFT,
+		vtinput.VK_LWIN, vtinput.VK_RWIN,
+		vtinput.VK_CAPITAL, vtinput.VK_NUMLOCK, vtinput.VK_SCROLL:
+		return false
+	default:
+		return true
+	}
+}
+
+func (h *WaylandHost) stopKeyRepeatLocked() {
+	h.isRepeating = false
+	h.repeatVK = 0
+	h.repeatChar = 0
+	h.repeatMods = 0
+	h.repeatNext = time.Time{}
 }
 
 func (h *WaylandHost) getMods(input *window.Input) vtinput.ControlKeyState {
@@ -508,8 +529,24 @@ func (h *WaylandHost) getMods(input *window.Input) vtinput.ControlKeyState {
 	return mods
 }
 
+func (h *WaylandHost) Focus(w *window.Window, device *window.Input) {
+	if device != nil {
+		return
+	}
+
+	// Wayland does not send key releases to a surface after keyboard focus has
+	// left it. Drop all locally tracked state so a held modifier or repeat key
+	// cannot remain active indefinitely when the window later regains focus.
+	h.mu.Lock()
+	h.stopKeyRepeatLocked()
+	h.currentMods = 0
+	h.lCtrl, h.rCtrl = false, false
+	h.lAlt, h.rAlt = false, false
+	h.lShift, h.rShift = false, false
+	h.mu.Unlock()
+}
+
 // Unused Handlers to satisfy interface
-func (h *WaylandHost) Focus(w *window.Window, device *window.Input) {}
 func (h *WaylandHost) TouchUp(w *window.Widget, i *window.Input, serial uint32, time uint32, id int32) {
 }
 func (h *WaylandHost) TouchDown(w *window.Widget, i *window.Input, serial uint32, time uint32, id int32, x float32, y float32) {

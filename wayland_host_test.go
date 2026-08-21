@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/neurlang/wayland/window"
 	"github.com/neurlang/wayland/wl"
 	"github.com/unxed/vtinput"
 )
@@ -26,6 +27,61 @@ func TestWaylandHost_KeyRepeatLogic(t *testing.T) {
 
 	// Note: full integration test of Redraw() spin loop requires mocking window.Widget,
 	// which is deeply integrated with the Wayland protocol implementation.
+}
+
+func TestWaylandFocusLossClearsKeyboardState(t *testing.T) {
+	host := &WaylandHost{
+		isRepeating: true,
+		repeatVK:    vtinput.VK_LMENU,
+		repeatChar:  'x',
+		repeatMods:  vtinput.LeftAltPressed,
+		repeatNext:  time.Now().Add(time.Second),
+		currentMods: vtinput.LeftAltPressed,
+		lCtrl:       true,
+		rCtrl:       true,
+		lAlt:        true,
+		rAlt:        true,
+		lShift:      true,
+		rShift:      true,
+	}
+
+	// Gaining focus must not discard state established by a subsequent key
+	// event; only the nil-device notification denotes focus loss.
+	host.Focus(nil, &window.Input{})
+	if !host.isRepeating || !host.lAlt {
+		t.Fatal("focus gain unexpectedly cleared keyboard state")
+	}
+
+	host.Focus(nil, nil)
+
+	host.mu.Lock()
+	defer host.mu.Unlock()
+	if host.isRepeating || host.repeatVK != 0 || host.repeatChar != 0 || host.repeatMods != 0 || !host.repeatNext.IsZero() {
+		t.Fatalf("repeat state not cleared: active=%v vk=%d char=%q mods=%d next=%v",
+			host.isRepeating, host.repeatVK, host.repeatChar, host.repeatMods, host.repeatNext)
+	}
+	if host.currentMods != 0 || host.lCtrl || host.rCtrl || host.lAlt || host.rAlt || host.lShift || host.rShift {
+		t.Fatalf("modifier state not cleared: mods=%d ctrl=%v/%v alt=%v/%v shift=%v/%v",
+			host.currentMods, host.lCtrl, host.rCtrl, host.lAlt, host.rAlt, host.lShift, host.rShift)
+	}
+}
+
+func TestWaylandModifierKeysDoNotRepeat(t *testing.T) {
+	modifiers := []uint16{
+		vtinput.VK_LCONTROL, vtinput.VK_RCONTROL,
+		vtinput.VK_LMENU, vtinput.VK_RMENU,
+		vtinput.VK_LSHIFT, vtinput.VK_RSHIFT,
+		vtinput.VK_LWIN, vtinput.VK_RWIN,
+		vtinput.VK_CAPITAL, vtinput.VK_NUMLOCK, vtinput.VK_SCROLL,
+	}
+	for _, vk := range modifiers {
+		if waylandKeyCanRepeat(vk) {
+			t.Errorf("modifier/toggle key %#x unexpectedly repeats", vk)
+		}
+	}
+	if !waylandKeyCanRepeat(vtinput.VK_A) {
+		t.Error("ordinary key unexpectedly does not repeat")
+	}
 }
 
 func newWaylandPointerTestHost(t *testing.T) *WaylandHost {
