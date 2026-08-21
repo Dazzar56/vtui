@@ -115,8 +115,7 @@
     │   │   └── main.go
     │   ├── test-app
     │   │   ├── main.go
-    │   │   ├── main_test.go
-    │   │   └── test-app.exe
+    │   │   └── main_test.go
     │   ├── vtui-cast
     │   │   ├── main.go
     │   │   └── main_test.go
@@ -274,6 +273,7 @@
     ├── multilineedit_test.go
     ├── OPTIMIZATIONS.md
     ├── painter.go
+    ├── palette_batch_test.go
     ├── palette.go
     ├── palette_test.go
     ├── panic_bridge.go
@@ -349,6 +349,7 @@
     ├── UX_GUIDELINES.md
     ├── validator.go
     ├── validator_test.go
+    ├── vmenu_cancel_test.go
     ├── vmenu.go
     ├── vmenu_test.go
     ├── vocabulary.json
@@ -408,4 +409,4 @@
     ├── xlat_tables.go
     └── xlat_test.go
     
-    48 directories, 359 files
+    48 directories, 360 files
