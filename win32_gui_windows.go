@@ -143,6 +143,11 @@ type Win32GuiHost struct {
 	closed       bool
 	pendingDrag  *win32DragRequest
 
+	// dropTarget is the IDropTarget registered for this window, held as the
+	// bare interface pointer so this struct stays free of a type that only
+	// exists on the architectures which implement it.
+	dropTarget uintptr
+
 	// paintPending is set by Invalidate() and cleared only by a WM_PAINT
 	// that actually put pixels on the screen. BeginPaint() validates the
 	// update region unconditionally, so a WM_PAINT served before the first
@@ -580,8 +585,13 @@ func (h *Win32GuiHost) handleMessage(hwnd syscall.Handle, msg uint32, wParam, lP
 		procDragFinish.Call(uintptr(hDrop))
 
 		if len(paths) > 0 {
+			// This is the fallback for sources that do not speak OLE. When
+			// a drop target is registered the drop arrives through it
+			// instead, with real enter / over phases; here the whole
+			// gesture has already happened by the time we hear about it,
+			// so the three phases are synthesised back to back.
 			DebugLog("WIN32_DND: WM_DROPFILES at cell (%d,%d), count=%d: %q", cellX, cellY, len(paths), paths)
-			payload := DragPayload{Paths: paths}
+			payload := DragPayload{Kinds: []string{"text/uri-list"}, Paths: paths}
 			mods := h.getModifiers()
 			var lastAction DropAction
 			for _, phase := range []DragPhase{DragEnter, DragOver, DragDrop} {
@@ -624,6 +634,7 @@ func (h *Win32GuiHost) handleMessage(hwnd syscall.Handle, msg uint32, wParam, lP
 		return 0
 
 	case wmDestroy:
+		win32RevokeDropTarget(h, hwnd)
 		win32GuiActiveHosts.Delete(hwnd)
 		procPostQuitMessage.Call(0)
 		return 0
@@ -866,6 +877,10 @@ func RunWin32GuiHost(cols, rows int, fontName string, fontSize float64, setupApp
 	host.hwnd = syscall.Handle(hwndRet)
 	win32GuiActiveHosts.Store(host.hwnd, host)
 	procDragAcceptFiles.Call(hwndRet, 1)
+	// This thread is the one that called OleInitialize and the one that
+	// pumps this window's messages, which is exactly where a drop target
+	// has to be registered.
+	win32RegisterDropTarget(host, host.hwnd)
 
 	scr := NewScreenBuf()
 	scr.AllocBuf(cols, rows)
