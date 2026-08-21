@@ -160,7 +160,7 @@ type Win32GuiHost struct {
 
 func (h *Win32GuiHost) AcceptsDrops() bool { return true }
 func (h *Win32GuiHost) StartDrag(payload DragPayload, allowed DropAction) (DropAction, error) {
-	return DropNone, ErrDragUnsupported
+	return win32DoDragDrop(payload.Paths, allowed)
 }
 
 func (h *Win32GuiHost) SetTitle(title string) {
@@ -722,6 +722,8 @@ func (h *Win32GuiHost) Close() {
 func RunWin32GuiHost(cols, rows int, fontName string, fontSize float64, setupApp func()) error {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
+
+	oleInit()
 
 	if fontSize <= 0 {
 		fontSize = 18.0
