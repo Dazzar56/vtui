@@ -3,9 +3,11 @@
 package vtui
 
 import (
+	"io"
 	"testing"
 	"time"
 
+	"github.com/neurlang/wayland/wl"
 	"github.com/unxed/vtinput"
 )
 
@@ -24,6 +26,100 @@ func TestWaylandHost_KeyRepeatLogic(t *testing.T) {
 
 	// Note: full integration test of Redraw() spin loop requires mocking window.Widget
 	// which is deeply integrated with the C Wayland library in windowtrace.
+}
+
+func newWaylandPointerTestHost(t *testing.T) *WaylandHost {
+	t.Helper()
+	pr, pw := io.Pipe()
+	t.Cleanup(func() {
+		_ = pr.Close()
+		_ = pw.Close()
+	})
+	return &WaylandHost{
+		reader: vtinput.NewReader(pr, true),
+		cellW:  10,
+		cellH:  20,
+		scale:  1,
+	}
+}
+
+func nextWaylandMouseEvent(t *testing.T, host *WaylandHost) *vtinput.InputEvent {
+	t.Helper()
+	select {
+	case event := <-host.reader.EventChan:
+		return event
+	case <-time.After(250 * time.Millisecond):
+		t.Fatal("timed out waiting for Wayland mouse event")
+		return nil
+	}
+}
+
+func TestWaylandButtonReleaseClearsMotionState(t *testing.T) {
+	host := newWaylandPointerTestHost(t)
+
+	host.Button(nil, nil, 0, 272, wl.PointerButtonStatePressed, nil)
+	press := nextWaylandMouseEvent(t, host)
+	if !press.KeyDown || press.ButtonState != vtinput.FromLeft1stButtonPressed {
+		t.Fatalf("press = KeyDown:%v ButtonState:%d", press.KeyDown, press.ButtonState)
+	}
+
+	host.Button(nil, nil, 0, 272, wl.PointerButtonStateReleased, nil)
+	release := nextWaylandMouseEvent(t, host)
+	if release.KeyDown || release.ButtonState != 0 {
+		t.Fatalf("release = KeyDown:%v ButtonState:%d", release.KeyDown, release.ButtonState)
+	}
+
+	host.Motion(nil, nil, 0, 30, 40)
+	hover := nextWaylandMouseEvent(t, host)
+	if hover.KeyDown || hover.ButtonState != 0 {
+		t.Fatalf("hover after release = KeyDown:%v ButtonState:%d", hover.KeyDown, hover.ButtonState)
+	}
+}
+
+func TestWaylandMotionReportsHeldButton(t *testing.T) {
+	host := newWaylandPointerTestHost(t)
+
+	host.Button(nil, nil, 0, 272, wl.PointerButtonStatePressed, nil)
+	_ = nextWaylandMouseEvent(t, host)
+	host.Motion(nil, nil, 0, 30, 40)
+	drag := nextWaylandMouseEvent(t, host)
+
+	if !drag.KeyDown || drag.ButtonState != vtinput.FromLeft1stButtonPressed {
+		t.Fatalf("drag = KeyDown:%v ButtonState:%d", drag.KeyDown, drag.ButtonState)
+	}
+	if drag.MouseX != 3 || drag.MouseY != 2 {
+		t.Fatalf("drag cell = %d,%d, want 3,2", drag.MouseX, drag.MouseY)
+	}
+}
+
+func TestWaylandPointerFramePrefersValue120OverRawAxis(t *testing.T) {
+	host := newWaylandPointerTestHost(t)
+
+	host.Axis(nil, nil, 0, wl.PointerAxisVerticalScroll, 15)
+	host.AxisValue120(nil, nil, wl.PointerAxisVerticalScroll, 120)
+	host.PointerFrame(nil, nil)
+
+	wheel := nextWaylandMouseEvent(t, host)
+	if wheel.WheelDirection != -1 {
+		t.Fatalf("wheel direction = %d, want -1", wheel.WheelDirection)
+	}
+	select {
+	case extra := <-host.reader.EventChan:
+		t.Fatalf("raw axis duplicated value120 event: %+v", extra)
+	case <-time.After(20 * time.Millisecond):
+	}
+}
+
+func TestWaylandPointerFrameSupportsSmoothAxis(t *testing.T) {
+	host := newWaylandPointerTestHost(t)
+
+	host.Axis(nil, nil, 0, wl.PointerAxisVerticalScroll, 25)
+	host.PointerFrame(nil, nil)
+
+	wheel := nextWaylandMouseEvent(t, host)
+	if wheel.WheelDirection != -1 {
+		t.Fatalf("smooth wheel direction = %d, want -1", wheel.WheelDirection)
+	}
 }
 
 func TestWaylandScaleFromDimensions(t *testing.T) {
