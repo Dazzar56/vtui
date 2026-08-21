@@ -483,12 +483,29 @@ func (s *ScreenBuf) FillRect(x1, y1, x2, y2 int, char rune, attributes uint64) {
 	}
 }
 
+// SetCursorPos moves the caret. It deliberately says nothing about whether
+// the caret is visible: that is SetCursorVisible's business, and callers
+// disagree on the order they call the two in (Edit shows then positions,
+// EditorView and MultiLineEdit position then show), so a position setter
+// that also hid the caret produced different results in different widgets
+// for the same out-of-range coordinate. Out-of-range positions are clamped
+// to the screen instead; a caret cannot be placed off-screen, but asking
+// for that no longer silently turns it off. See f4 issue #518.
 func (s *ScreenBuf) SetCursorPos(x, y int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.width <= 0 || s.height <= 0 || x < 0 || x >= s.width || y < 0 || y >= s.height {
-		s.cursorVisible = false
+	if s.width <= 0 || s.height <= 0 {
 		return
+	}
+	if x < 0 {
+		x = 0
+	} else if x >= s.width {
+		x = s.width - 1
+	}
+	if y < 0 {
+		y = 0
+	} else if y >= s.height {
+		y = s.height - 1
 	}
 	if s.cursorX != x || s.cursorY != y {
 		s.cursorX, s.cursorY = x, y
@@ -1089,14 +1106,29 @@ func (r *AnsiRenderer) write(s string) {
 	}
 	// Hand large frames over in chunks so a relay reading the tty (WSL,
 	// ConPTY) can keep up; a byte lost mid-frame becomes U+FFFD on screen.
+	//
+	// Advance by what was actually written, not by what was offered: a
+	// short write used to drop the rest of its chunk silently, and since
+	// every painted frame opens with ESC[?25l and only restores the caret
+	// with ESC[?25h at the very end, a frame truncated in the middle left
+	// the caret hidden until something changed its state again. Give up on
+	// a hard error rather than spinning on a dead tty. See f4 issue #518.
 	const writeChunk = 8192
 	for len(s) > 0 {
 		n := len(s)
 		if n > writeChunk {
 			n = writeChunk
 		}
-		io.WriteString(w, s[:n])
-		s = s[n:]
+		written, err := io.WriteString(w, s[:n])
+		if written > 0 {
+			s = s[written:]
+		}
+		if err != nil {
+			return
+		}
+		if written == 0 {
+			return
+		}
 	}
 }
 
