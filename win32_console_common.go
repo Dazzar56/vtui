@@ -99,6 +99,15 @@ func attrToWin32Attr(attr uint64, activePal *[256]uint32) uint16 {
 		res |= Win32CommonLvbReverseVideo
 	}
 
+	// Workaround for Wine conhost bug (conhost.c set_tty_attr):
+	// Wine emits "\x1b[m" when FG is 7 (Light Gray), which inadvertently
+	// resets the terminal background to black. If the cell has a non-black
+	// background, promote FG from 7 (Light Gray) to 15 (Bright White) so Wine
+	// emits "\x1b[97m" instead of "\x1b[m", keeping the background intact.
+	if isWineOS() && (res&0x00F0) != 0 && (res&0x000F) == (Win32FgRed|Win32FgGreen|Win32FgBlue) {
+		res |= Win32FgIntensity
+	}
+
 	return res
 }
 

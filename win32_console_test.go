@@ -213,3 +213,30 @@ func TestFrameManager_GetBackendName_Win32(t *testing.T) {
 		t.Errorf("GetBackendName() = %q, want 'Console (ANSI)'", name)
 	}
 }
+func TestWin32AttrMapping_WineWorkaround(t *testing.T) {
+	// Light Gray (7) on Blue (4)
+	attr := SetIndexBoth(0, 7, 4)
+	win32Attr := attrToWin32Attr(attr, nil)
+
+	if isWineOS() {
+		// Under Wine, FG 7 on non-black BG must be promoted to FG 15 (Bright White)
+		want := Win32FgRed | Win32FgGreen | Win32FgBlue | Win32FgIntensity | Win32BgBlue
+		if win32Attr != want {
+			t.Errorf("attrToWin32Attr() under Wine = %#04x, want %#04x (promoted to bright white)", win32Attr, want)
+		}
+	} else {
+		// On native Windows, FG 7 is preserved
+		want := Win32FgRed | Win32FgGreen | Win32FgBlue | Win32BgBlue
+		if win32Attr != want {
+			t.Errorf("attrToWin32Attr() on native Windows = %#04x, want %#04x", win32Attr, want)
+		}
+	}
+
+	// Light Gray (7) on Black (0) is never promoted
+	blackBgAttr := SetIndexBoth(0, 7, 0)
+	win32Black := attrToWin32Attr(blackBgAttr, nil)
+	wantBlack := Win32FgRed | Win32FgGreen | Win32FgBlue
+	if win32Black != wantBlack {
+		t.Errorf("attrToWin32Attr() with black BG = %#04x, want %#04x", win32Black, wantBlack)
+	}
+}

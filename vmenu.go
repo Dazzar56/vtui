@@ -23,10 +23,10 @@ type MenuItem struct {
 // VMenu implements a vertical menu with navigation support.
 type VMenu struct {
 	ScrollView
-	title      string
-	Items      []MenuItem
-	done       bool
-	exitCode   int
+	title    string
+	Items    []MenuItem
+	done     bool
+	exitCode int
 	// selectAtOpen is SelectPos as of the last ClearDone. Browsing moves
 	// SelectPos live (arrows, mouse hover), so cancelling has to put it
 	// back: dialogs read SelectPos as the confirmed choice, and without the
@@ -36,7 +36,7 @@ type VMenu struct {
 	OnAction     func(int)
 	OnKeyDown    func(*vtinput.InputEvent) bool
 	HideShadow   bool
-	BoxType    int
+	BoxType      int
 
 	// Palette entries the menu paints with. They default to the Menu.* group;
 	// a ComboBox points them at Dialog.Combo.* so its dropdown stands apart
