@@ -27,9 +27,15 @@ type VMenu struct {
 	Items      []MenuItem
 	done       bool
 	exitCode   int
-	OnAction   func(int)
-	OnKeyDown  func(*vtinput.InputEvent) bool
-	HideShadow bool
+	// selectAtOpen is SelectPos as of the last ClearDone. Browsing moves
+	// SelectPos live (arrows, mouse hover), so cancelling has to put it
+	// back: dialogs read SelectPos as the confirmed choice, and without the
+	// restore an Esc'd dropdown silently commits whatever row the user
+	// happened to stop on.
+	selectAtOpen int
+	OnAction     func(int)
+	OnKeyDown    func(*vtinput.InputEvent) bool
+	HideShadow   bool
 	BoxType    int
 
 	// Palette entries the menu paints with. They default to the Menu.* group;
@@ -219,6 +225,8 @@ func (m *VMenu) SetExitCode(code int) {
 	m.done = true
 	m.exitCode = code
 	if code == -1 {
+		// Cancelled: undo the browsing highlight (see selectAtOpen).
+		m.SetSelectPos(m.selectAtOpen)
 		FrameManager.EmitCommand(CmMenuClose, nil)
 	}
 }
@@ -238,6 +246,7 @@ func (m *VMenu) HasShadow() bool       { return !m.HideShadow }
 func (m *VMenu) ClearDone() {
 	m.done = false
 	m.exitCode = -1
+	m.selectAtOpen = m.SelectPos
 }
 
 // ProcessMouse handles mouse wheel scrolling, menu item hover, and clicks.
