@@ -70,8 +70,13 @@ func far2lPlacementValid(p *ImagePlacement) bool {
 		return false
 	}
 	_, _, sw, sh := p.Source()
-	return sw > 0 && sh > 0 && sw <= int(^uint32(0)) && sh <= int(^uint32(0)) &&
-		uint64(sw)*uint64(sh) <= uint64(^uint32(0))/4
+	// Compared in uint64 rather than int: int(^uint32(0)) is a constant
+	// conversion, so where int is 32 bits it does not compile at all. sw and sh
+	// are known positive by the time they are widened.
+	const maxDimension = uint64(^uint32(0))
+	return sw > 0 && sh > 0 &&
+		uint64(sw) <= maxDimension && uint64(sh) <= maxDimension &&
+		uint64(sw)*uint64(sh) <= maxDimension/4
 }
 
 func far2lImageIdentity(id uint32) string {
