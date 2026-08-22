@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hajimehoshi/ebiten/v2"
 	"golang.org/x/image/font"
 	"golang.org/x/image/math/fixed"
 )
@@ -406,6 +407,19 @@ func (r *EbitenRenderer) ResizeWindow(cols, rows int) {
 	if host != nil && cw > 0 && ch > 0 {
 		host.requestSize(cols*cw, rows*ch)
 	}
+}
+
+// WindowPosition returns the current desktop position of the Ebitengine
+// window. Ebitengine owns the native window, so the query is delegated to
+// its platform-aware API.
+func (r *EbitenRenderer) WindowPosition() (x, y int, ok bool) {
+	x, y = ebiten.WindowPosition()
+	return x, y, true
+}
+
+// SetWindowPosition moves the Ebitengine window without changing its size.
+func (r *EbitenRenderer) SetWindowPosition(x, y int) {
+	ebiten.SetWindowPosition(x, y)
 }
 
 // takeFrame hands the current framebuffer to the game loop and reports
