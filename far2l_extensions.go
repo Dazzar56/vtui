@@ -33,7 +33,7 @@ func Far2lInteractTimeout(stk *vtinput.Far2lStack, wait bool, timeout time.Durat
 
 	id, payload := far2lInteractionPayloadLocked(stk)
 	DebugLog("VTUI_FAR2L_INTERACT: Sending ID=%d, payload_len=%d, wait=%v", id, len(payload), wait)
-	os.Stdout.Write(payload)
+	_, _ = os.Stdout.Write(payload)
 
 	if wait && FrameManager != nil {
 		return FrameManager.WaitFar2lResponse(id, timeout)

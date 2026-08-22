@@ -92,17 +92,17 @@ func (e *far2lEncoder) set(out *byteBuffer, p *ImagePlacement) {
 	// IMAGE_SET documentation: data, dimensions, area, flags, identity,
 	// subcommand, category.
 	stk.PushBytes(cropped.Pix)
-	stk.PushU32(uint32(cropped.Height))
-	stk.PushU32(uint32(cropped.Width))
-	stk.PushU16(uint16(bottom))
-	stk.PushU16(uint16(right))
-	stk.PushU16(uint16(p.Row))
-	stk.PushU16(uint16(p.Col))
+	stk.PushU32(uint32(cropped.Height)) //nolint:gosec // far2lPlacementValid bounds the dimensions
+	stk.PushU32(uint32(cropped.Width))  //nolint:gosec // far2lPlacementValid bounds the dimensions
+	stk.PushU16(uint16(bottom))         //nolint:gosec // far2lPlacementValid bounds the area
+	stk.PushU16(uint16(right))          //nolint:gosec // far2lPlacementValid bounds the area
+	stk.PushU16(uint16(p.Row))          //nolint:gosec // far2lPlacementValid bounds the area
+	stk.PushU16(uint16(p.Col))          //nolint:gosec // far2lPlacementValid bounds the area
 	stk.PushU64(far2lImageRGBA)
 	stk.PushString(far2lImageIdentity(p.ID))
 	stk.PushU8(far2lImageSet)
 	stk.PushU8(far2lImageCategory)
-	out.Write(far2lInteractionPayload(stk))
+	_, _ = out.Write(far2lInteractionPayload(stk))
 }
 
 func (e *far2lEncoder) delete(out *byteBuffer, id uint32) {
@@ -110,5 +110,5 @@ func (e *far2lEncoder) delete(out *byteBuffer, id uint32) {
 	stk.PushString(far2lImageIdentity(id))
 	stk.PushU8(far2lImageDelete)
 	stk.PushU8(far2lImageCategory)
-	out.Write(far2lInteractionPayload(stk))
+	_, _ = out.Write(far2lInteractionPayload(stk))
 }
