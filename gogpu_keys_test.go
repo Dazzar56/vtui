@@ -89,6 +89,8 @@ func TestGogpuKeyToVK_Numpad(t *testing.T) {
 		// Lock keys themselves were unmapped too.
 		{"numlock key", gpucontext.KeyNumLock, off, vtinput.VK_NUMLOCK},
 		{"capslock key", gpucontext.KeyCapsLock, off, vtinput.VK_CAPITAL},
+		{"pause key", gpucontext.KeyPause, off, vtinput.VK_PAUSE},
+		{"cancel key", gpucontext.KeyCancel, vtinput.LeftCtrlPressed, vtinput.VK_CANCEL},
 	}
 
 	for _, tt := range tests {
