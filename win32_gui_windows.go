@@ -36,7 +36,6 @@ var (
 	procGetWindowRect      = user32.NewProc("GetWindowRect")
 	procSetWindowPos       = user32.NewProc("SetWindowPos")
 	procAdjustWindowRectEx = user32.NewProc("AdjustWindowRectEx")
-	procSetWindowPos       = user32.NewProc("SetWindowPos")
 	procLoadCursorW        = user32.NewProc("LoadCursorW")
 	procSetCursor          = user32.NewProc("SetCursor")
 	procSetCapture         = user32.NewProc("SetCapture")
