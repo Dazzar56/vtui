@@ -450,6 +450,7 @@ func (h *WaylandHost) Key(win *window.Window, input *window.Input, timeMs uint32
 	h.mu.Unlock()
 
 	mods := h.getMods(input)
+	mods |= enhancedKeyForX11Keysym(notUnicode)
 
 	h.mu.Lock()
 	if isDown && waylandKeyCanRepeat(vk) {

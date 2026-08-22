@@ -33,8 +33,9 @@ var (
 	procEndPaint           = user32.NewProc("EndPaint")
 	procInvalidateRect     = user32.NewProc("InvalidateRect")
 	procGetClientRect      = user32.NewProc("GetClientRect")
-	procAdjustWindowRectEx = user32.NewProc("AdjustWindowRectEx")
+	procGetWindowRect      = user32.NewProc("GetWindowRect")
 	procSetWindowPos       = user32.NewProc("SetWindowPos")
+	procAdjustWindowRectEx = user32.NewProc("AdjustWindowRectEx")
 	procLoadCursorW        = user32.NewProc("LoadCursorW")
 	procSetCursor          = user32.NewProc("SetCursor")
 	procSetCapture         = user32.NewProc("SetCapture")
@@ -240,6 +241,56 @@ func (h *Win32GuiHost) ResizeGrid(cols, rows int) {
 	// resize just like DoDragDrop is posted, so SetWindowPos and the resulting
 	// WM_SIZE are handled by the window's owning thread.
 	procPostMessageW.Call(uintptr(hwnd), wmPerformResize, 0, 0)
+}
+
+// WindowPosition returns the top-left screen position of the native window.
+// The bool is false while the host has not created a window or when Windows
+// cannot provide its rectangle.
+func (h *Win32GuiHost) WindowPosition() (x, y int, ok bool) {
+	h.mu.Lock()
+	hwnd := h.hwnd
+	h.mu.Unlock()
+	if hwnd == 0 {
+		return 0, 0, false
+	}
+
+	var rect win32Rect
+	ret, _, _ := procGetWindowRect.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&rect)))
+	if ret == 0 {
+		return 0, 0, false
+	}
+	return int(rect.left), int(rect.top), true
+}
+
+// SetWindowPosition moves the native window without resizing or activating
+// it. The call is also safe before the window is shown, which lets callers
+// restore a saved position during GUI startup.
+func (h *Win32GuiHost) SetWindowPosition(x, y int) {
+	h.mu.Lock()
+	hwnd := h.hwnd
+	h.mu.Unlock()
+	if hwnd == 0 {
+		return
+	}
+	procSetWindowPos.Call(
+		uintptr(hwnd), 0,
+		uintptr(uint32(int32(x))), uintptr(uint32(int32(y))),
+		0, 0,
+		uintptr(swpNoSize|swpNoZOrder|swpNoActivate),
+	)
+}
+
+func (r *Win32GuiRenderer) WindowPosition() (x, y int, ok bool) {
+	if r == nil || r.host == nil {
+		return 0, 0, false
+	}
+	return r.host.WindowPosition()
+}
+
+func (r *Win32GuiRenderer) SetWindowPosition(x, y int) {
+	if r != nil && r.host != nil {
+		r.host.SetWindowPosition(x, y)
+	}
 }
 
 func (h *Win32GuiHost) Invalidate() {

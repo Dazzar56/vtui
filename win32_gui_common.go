@@ -77,6 +77,7 @@ const (
 
 const (
 	swpNoMove     = 0x0002
+	swpNoSize     = 0x0001
 	swpNoZOrder   = 0x0004
 	swpNoActivate = 0x0010
 )
