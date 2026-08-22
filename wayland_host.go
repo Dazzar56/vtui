@@ -14,6 +14,57 @@ import (
 	"github.com/unxed/vtinput"
 )
 
+// waylandPresentWake coalesces redraw requests until the Wayland event loop
+// has processed a sync callback. Flush can be called by FrameManager's
+// goroutine, while ScheduleRedraw must run on the DisplayRun goroutine.
+type waylandPresentWake struct {
+	mu          sync.Mutex
+	pending     bool
+	wakePending bool
+	closed      bool
+}
+
+func (w *waylandPresentWake) request(send func() error) {
+	w.mu.Lock()
+	if w.closed {
+		w.mu.Unlock()
+		return
+	}
+	w.pending = true
+	if w.wakePending {
+		w.mu.Unlock()
+		return
+	}
+	w.wakePending = true
+	w.mu.Unlock()
+
+	if err := send(); err != nil {
+		w.mu.Lock()
+		w.wakePending = false
+		w.mu.Unlock()
+	}
+}
+
+func (w *waylandPresentWake) done() bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.closed {
+		return false
+	}
+	w.wakePending = false
+	pending := w.pending
+	w.pending = false
+	return pending
+}
+
+func (w *waylandPresentWake) close() {
+	w.mu.Lock()
+	w.closed = true
+	w.pending = false
+	w.wakePending = false
+	w.mu.Unlock()
+}
+
 // WaylandHost encapsulates the connection to the Wayland compositor.
 type WaylandHost struct {
 	mu      sync.Mutex
@@ -21,6 +72,7 @@ type WaylandHost struct {
 	win     *window.Window
 	widget  *window.Widget
 	reader  *vtinput.Reader
+	present waylandPresentWake
 
 	imgBuf     *image.RGBA
 	cols, rows int
@@ -290,6 +342,56 @@ func (h *WaylandHost) Close() {
 	h.mu.Lock()
 	h.reader = nil
 	h.mu.Unlock()
+	h.present.close()
+}
+
+// requestPresent asks the compositor to send a callback. The callback wakes
+// DisplayRun from its blocking socket read and schedules the deferred redraw
+// on the display goroutine, avoiding a cross-goroutine toolkit call.
+func (h *WaylandHost) requestPresent() {
+	h.mu.Lock()
+	var display *wl.Display
+	if h.display != nil {
+		display = h.display.Display
+	}
+	h.mu.Unlock()
+	if display == nil {
+		return
+	}
+
+	h.present.request(func() error {
+		ctx := display.Context()
+		if ctx == nil {
+			return wl.ErrContextNil
+		}
+		callback := wl.NewCallback(ctx)
+		// Register before sending the request: DisplayRun may receive the
+		// callback as soon as the compositor processes the sync request.
+		callback.AddDoneHandler(h)
+		if err := ctx.SendRequest(display, 0, callback); err != nil {
+			callback.RemoveDoneHandler(h)
+			callback.Unregister()
+			return err
+		}
+		return nil
+	})
+}
+
+// HandleCallbackDone implements wl.CallbackDoneHandler.
+func (h *WaylandHost) HandleCallbackDone(event wl.CallbackDoneEvent) {
+	if event.C != nil {
+		event.C.Unregister()
+	}
+	if !h.present.done() {
+		return
+	}
+
+	h.mu.Lock()
+	widget := h.widget
+	h.mu.Unlock()
+	if widget != nil {
+		widget.ScheduleRedraw()
+	}
 }
 
 // -- Pointer & Keyboard Handlers --

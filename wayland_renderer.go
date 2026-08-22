@@ -332,8 +332,10 @@ func (r *WaylandRenderer) drawCustomChar(img *image.RGBA, char rune, px, py, cw,
 
 func (r *WaylandRenderer) Flush() {
 	start := time.Now()
-	// Trigger the Wayland host to push the buffer to the compositor
-	r.host.widget.ScheduleRedraw()
+	// Wake DisplayRun and let its callback schedule the deferred redraw on
+	// the Wayland goroutine. Direct ScheduleRedraw from FrameManager's
+	// goroutine can leave the queued redraw invisible until another event.
+	r.host.requestPresent()
 	r.stats.totalFlush += time.Since(start)
 	r.stats.frameCount++
 }
