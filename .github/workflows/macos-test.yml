@@ -9,6 +9,8 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-go@v5
         with:
@@ -17,11 +19,18 @@ jobs:
       - name: Build
         run: go build ./...
 
-      # go vet is deliberately not run as its own step: the repo has
-      # pre-existing vet findings (test_main_test.go unreachable code) that
-      # would keep CI red. go test still applies its own vet subset. The race
-      # detector is off for the same reason: the far2l and framemanager tests
-      # have pre-existing data races; turn it back on once those are fixed.
+      - name: Vet
+        run: go vet ./...
+
+      - name: Incremental golangci-lint
+        uses: golangci/golangci-lint-action@v9.3.0
+        with:
+          version: v2.13.1
+          args: --new-from-rev=origin/main
+
+      # The race detector remains disabled until the existing Far2l,
+      # frame-manager and protocol teardown races are fixed. Enabling it here
+      # before that would make this workflow fail for the current baseline.
       #
       # The two skipped tests drive fm.Run with a reader on os.Stdin and rely
       # on Run returning when stdin hits EOF. That holds on Windows, but on
