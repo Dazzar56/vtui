@@ -1,4 +1,6 @@
 github.com/BurntSushi/xgb v0.0.0-20160522181843-27f122750802/go.mod h1:IVnqGOEym/WlBOVXweHU+Q+/VP0lqqI8lqeDx9IjBqo=
+github.com/Zoinen/keytrans v0.0.0-20260822041013-227b3d517c1a h1:MCk8nNHTWm8MrwNmdTZZ3R3MXwGdCjmF9PgkKIESjDk=
+github.com/Zoinen/keytrans v0.0.0-20260822041013-227b3d517c1a/go.mod h1:rBB4IN6grB7BjyRuNmy8Kxlsu1P6Nf4pchLHvPmFpGg=
 github.com/ebitengine/gomobile v0.0.0-20260211053922-3d992dae95d1 h1:U8WldvN7/4cgo65U2fr2urv43/yhqYOK5FegFPPfI4M=
 github.com/ebitengine/gomobile v0.0.0-20260211053922-3d992dae95d1/go.mod h1:J7sDBRQG9pJGMa9Z+h8l3flwk0yEKDzWeR57vA1LI5U=
 github.com/emmansun/base64 v0.9.0 h1:92dLrE7iro6g/yWuPsd7M9TzJpe9fEeqKH0H7MApDtE=
@@ -39,8 +41,6 @@ github.com/soniakeys/quant v1.0.0 h1:N1um9ktjbkZVcywBVAAYpZYSHxEfJGzshHCxx/DaI0Y
 github.com/soniakeys/quant v1.0.0/go.mod h1:HI1k023QuVbD4H8i9YdfZP2munIHU4QpjsImz6Y6zds=
 github.com/spaolacci/murmur3 v1.1.0 h1:7c1g84S4BPRrfL5Xrdp6fOJ206sU9y293DDHaoy0bLI=
 github.com/spaolacci/murmur3 v1.1.0/go.mod h1:JwIasOWyU6f++ZhiEuf87xNszmSA2myDM2Kzu9HwQUA=
-github.com/unxed/keytrans v0.1.31 h1:Vk26zByEJkZAx3ZhgHGipO/wyiPj3LMn0wjy0BMBvO0=
-github.com/unxed/keytrans v0.1.31/go.mod h1:rBB4IN6grB7BjyRuNmy8Kxlsu1P6Nf4pchLHvPmFpGg=
 github.com/unxed/kiwi-go v0.1.0 h1:JTZb5mZSrzevswnL3OxCgN8oODkbPLHX7LXxJnpJ9YU=
 github.com/unxed/kiwi-go v0.1.0/go.mod h1:9nseXE0X7yf8SPvY4N2KOD2FiPwa+uNBDztt1kqf0aY=
 github.com/unxed/pureffi v0.1.14 h1:KLtaNZyGH+P5Yz7gZvViJO9q6P841jRozEP6koeFBDo=

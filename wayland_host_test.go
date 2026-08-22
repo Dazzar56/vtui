@@ -29,6 +29,15 @@ func TestWaylandHost_KeyRepeatLogic(t *testing.T) {
 	// which is deeply integrated with the Wayland protocol implementation.
 }
 
+func TestWaylandEnhancedKeyMapping(t *testing.T) {
+	if got := enhancedKeyForX11Keysym(0xffff); got != vtinput.EnhancedKey {
+		t.Fatalf("XK_Delete flag = %v, want EnhancedKey", got)
+	}
+	if got := enhancedKeyForX11Keysym(0xff9f); got != 0 {
+		t.Fatalf("XK_KP_Delete flag = %v, want no EnhancedKey", got)
+	}
+}
+
 func TestWaylandFocusLossClearsKeyboardState(t *testing.T) {
 	host := &WaylandHost{
 		isRepeating: true,
