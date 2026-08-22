@@ -1,4 +1,4 @@
-//go:build (linux || windows || darwin) && !arm && !mips && !mipsle && !mips64 && !mips64le && !riscv64 && !loong64 && !ppc64 && !ppc64le
+//go:build (linux || windows || darwin) && (amd64 || arm64)
 
 package vtui
 
@@ -9,16 +9,6 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/unxed/vtinput"
 )
-
-// mkGrid builds a buf/shadow pair of w*h cells filled with ch and attributes.
-func mkGrid(w, h int, ch uint64, attr uint64) (buf, shadow []CharInfo) {
-	buf = make([]CharInfo, w*h)
-	shadow = make([]CharInfo, w*h)
-	for i := range buf {
-		buf[i] = CharInfo{Char: ch, Attributes: attr}
-	}
-	return buf, shadow
-}
 
 func TestEbitenRenderer_AllocatesFramebufferForGrid(t *testing.T) {
 	r := NewEbitenRenderer(nil, nil, 8, 16, 1)

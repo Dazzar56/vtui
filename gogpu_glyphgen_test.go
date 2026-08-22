@@ -1,3 +1,5 @@
+//go:build !freebsd && !dragonfly && !openbsd && !netbsd && !illumos && !solaris && (amd64 || arm64)
+
 package vtui
 
 // Glyph drawing tests + table tooling.
