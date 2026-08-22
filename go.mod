@@ -48,7 +48,3 @@ require (
 replace github.com/ebitengine/purego => github.com/unxed/pureffi v0.1.14
 
 replace github.com/ebitengine/hideconsole => ./internal/hideconsole
-
-// Use the immutable keytrans revision that preserves EnhancedKey for the
-// physical X11/Wayland navigation cluster while unxed/keytrans#4 is reviewed.
-replace github.com/unxed/keytrans => github.com/Zoinen/keytrans v0.0.0-20260822041013-227b3d517c1a
