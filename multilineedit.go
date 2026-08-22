@@ -4,7 +4,6 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/mattn/go-runewidth"
 	"github.com/unxed/vtinput"
 )
 
@@ -12,8 +11,10 @@ import (
 // It's the natural companion to Edit for dialog fields whose content
 // spans several lines (a stack of commands, a description paragraph,
 // etc.). Model: lines are stored as [][]rune, one row per string; the
-// cursor is (curRow, curCol) in rune coordinates. Rendering scrolls
-// horizontally per active row and vertically over the whole buffer.
+// cursor is (curRow, curCol) in logical rune coordinates. Rendering and
+// navigation use grapheme clusters, and BidiFull maps the logical cursor to
+// the visual order shown on screen. Rendering scrolls horizontally per
+// active row and vertically over the whole buffer.
 //
 // Not in scope for the initial cut:
 //   - selection (Shift+arrows)
@@ -152,13 +153,107 @@ func (m *MultiLineEdit) viewWidth() int {
 	return w
 }
 
-// runesWidth measures the on-screen width of a rune slice.
-func runesWidth(runes []rune) int {
-	w := 0
-	for _, r := range runes {
-		w += runewidth.RuneWidth(r)
+type multiLineCluster struct {
+	text       string
+	width      int
+	logicalPos int
+	logicalEnd int
+}
+
+func logicalClusters(runes []rune) []multiLineCluster {
+	text := string(runes)
+	clusters := make([]multiLineCluster, 0, len(runes))
+	ForEachClusterAt(text, func(cluster string, width, _, runeIndex int) {
+		clusters = append(clusters, multiLineCluster{
+			text:       cluster,
+			width:      width,
+			logicalPos: runeIndex,
+			logicalEnd: runeIndex + len([]rune(cluster)),
+		})
+	})
+	return clusters
+}
+
+// visualClusters returns the display order. BidiDisplay deliberately keeps
+// the old logical cursor semantics; BidiFull is the mode that makes editing
+// follow the visual order too.
+func visualClusters(runes []rune) []multiLineCluster {
+	logical := logicalClusters(runes)
+	if DefaultBidiMode != BidiFull || !HasRTL(string(runes)) {
+		return logical
 	}
-	return w
+
+	byLogical := make(map[int]multiLineCluster, len(logical))
+	for _, cluster := range logical {
+		byLogical[cluster.logicalPos] = cluster
+	}
+	visualText, logicalPositions := VisualStringWithRuneMap(string(runes))
+	visual := make([]multiLineCluster, 0, len(logical))
+	index := 0
+	ForEachClusterAt(visualText, func(cluster string, width, _, _ int) {
+		if index >= len(logicalPositions) {
+			return
+		}
+		logicalPos := logicalPositions[index]
+		original, ok := byLogical[logicalPos]
+		if !ok {
+			index++
+			return
+		}
+		original.text = cluster
+		original.width = width
+		visual = append(visual, original)
+		index++
+	})
+	return visual
+}
+
+func (m *MultiLineEdit) currentVisualPos() int {
+	line := m.lines[m.curRow]
+	if DefaultBidiMode == BidiFull && HasRTL(string(line)) {
+		caret := BuildCaretMap(string(line))
+		if m.curCol >= 0 && m.curCol < len(caret.LogicalToVisual) {
+			return caret.LogicalToVisual[m.curCol]
+		}
+	}
+	clusters := visualClusters(line)
+	for i, cluster := range clusters {
+		if cluster.logicalPos >= m.curCol {
+			return i
+		}
+	}
+	return len(clusters)
+}
+
+func (m *MultiLineEdit) visualPosToLogical(visualPos int) int {
+	line := m.lines[m.curRow]
+	if DefaultBidiMode == BidiFull && HasRTL(string(line)) {
+		caret := BuildCaretMap(string(line))
+		if visualPos >= 0 && visualPos < len(caret.VisualToLogical) {
+			return caret.VisualToLogical[visualPos]
+		}
+	}
+	clusters := visualClusters(line)
+	if visualPos <= 0 || len(clusters) == 0 {
+		return 0
+	}
+	if visualPos >= len(clusters) {
+		return len(line)
+	}
+	return clusters[visualPos].logicalPos
+}
+
+func (m *MultiLineEdit) visualColumn() int {
+	clusters := visualClusters(m.lines[m.curRow])
+	pos := m.currentVisualPos()
+	if pos > len(clusters) {
+		pos = len(clusters)
+	}
+	width := 0
+	for _, cluster := range clusters[:pos] {
+		width += cluster.width
+	}
+	return width
 }
 
 // ensureVisible scrolls topPos / leftPos so the cursor is on screen.
@@ -189,17 +284,23 @@ func (m *MultiLineEdit) ensureVisible() {
 		m.topPos = 0
 	}
 
-	// Horizontal scroll for the CURRENT row only. Long lines scroll
-	// under the cursor; other rows show their visible slice starting
-	// at leftPos too, so long lines aren't invisibly clipped.
+	// Horizontal scroll for the CURRENT row only. leftPos is a visual
+	// grapheme-cluster index, not a logical rune index.
 	vw := m.viewWidth()
-	if m.curCol < m.leftPos {
-		m.leftPos = m.curCol
+	clusters := visualClusters(line)
+	if m.leftPos > len(clusters) {
+		m.leftPos = len(clusters)
 	}
-	// Measure width from leftPos up to (and including) the cursor.
-	width := runesWidth(line[m.leftPos:m.curCol])
-	for m.leftPos < m.curCol && width >= vw {
-		width -= runewidth.RuneWidth(line[m.leftPos])
+	visualPos := m.currentVisualPos()
+	if visualPos < m.leftPos {
+		m.leftPos = visualPos
+	}
+	width := 0
+	for _, cluster := range clusters[m.leftPos:visualPos] {
+		width += cluster.width
+	}
+	for m.leftPos < visualPos && width >= vw {
+		width -= clusters[m.leftPos].width
 		m.leftPos++
 	}
 }
@@ -212,8 +313,12 @@ func (m *MultiLineEdit) Show(scr *ScreenBuf) {
 	if m.IsFocused() {
 		scr.SetCursorVisible(true)
 		scr.SetCursorShape(CursorShapeUnderline)
-		line := m.lines[m.curRow]
-		off := runesWidth(line[m.leftPos:m.curCol])
+		off := 0
+		clusters := visualClusters(m.lines[m.curRow])
+		visualPos := m.currentVisualPos()
+		for _, cluster := range clusters[m.leftPos:visualPos] {
+			off += cluster.width
+		}
 		scr.SetCursorPos(m.X1+off, m.Y1+m.curRow-m.topPos)
 	}
 }
@@ -238,22 +343,23 @@ func (m *MultiLineEdit) DisplayObject(scr *ScreenBuf) {
 		if idx >= len(m.lines) {
 			break
 		}
-		line := m.lines[idx]
+		clusters := visualClusters(m.lines[idx])
 		start := m.leftPos
-		if start > len(line) {
+		if start > len(clusters) {
 			continue
 		}
 		x := 0
-		for i := start; i < len(line); i++ {
-			w := runewidth.RuneWidth(line[i])
+		for i := start; i < len(clusters); i++ {
+			cluster := clusters[i]
+			w := cluster.width
 			if x+w > vw {
 				break
 			}
 			cAttr := attr
-			if m.isSelected(idx, i) {
+			if m.isSelectedRange(idx, cluster.logicalPos, cluster.logicalEnd) {
 				cAttr = selAttr
 			}
-			scr.Write(m.X1+x, m.Y1+row, StringToCharInfo(string(line[i]), cAttr))
+			scr.Write(m.X1+x, m.Y1+row, AppendCluster(nil, cluster.text, w, cAttr))
 			x += w
 		}
 	}
@@ -321,8 +427,11 @@ func (m *MultiLineEdit) ProcessKey(event *vtinput.InputEvent) bool {
 			return false
 		}
 		m.handleNav(shift)
-		if m.curCol > 0 {
-			m.curCol--
+		visualPos := m.currentVisualPos()
+		if DefaultBidiMode == BidiFull && HasRTL(string(m.lines[m.curRow])) && visualPos > 0 {
+			m.curCol = m.visualPosToLogical(visualPos - 1)
+		} else if m.curCol > 0 {
+			m.curCol = previousClusterBoundary(m.lines[m.curRow], m.curCol)
 		} else if m.curRow > 0 {
 			m.curRow--
 			m.curCol = len(m.lines[m.curRow])
@@ -335,8 +444,12 @@ func (m *MultiLineEdit) ProcessKey(event *vtinput.InputEvent) bool {
 		}
 		m.handleNav(shift)
 		line := m.lines[m.curRow]
-		if m.curCol < len(line) {
-			m.curCol++
+		clusters := visualClusters(line)
+		visualPos := m.currentVisualPos()
+		if DefaultBidiMode == BidiFull && HasRTL(string(line)) && visualPos < len(clusters) {
+			m.curCol = m.visualPosToLogical(visualPos + 1)
+		} else if m.curCol < len(line) {
+			m.curCol = nextClusterBoundary(line, m.curCol)
 		} else if m.curRow+1 < len(m.lines) {
 			m.curRow++
 			m.curCol = 0
@@ -470,13 +583,14 @@ func (m *MultiLineEdit) ProcessMouse(event *vtinput.InputEvent) bool {
 		m.curRow = row
 		// Walk the row measuring widths until we reach x.
 		line := m.lines[m.curRow]
-		col := m.leftPos
+		clusters := visualClusters(line)
+		visualPos := m.leftPos
 		acc := 0
-		for col < len(line) && acc+runewidth.RuneWidth(line[col]) <= x {
-			acc += runewidth.RuneWidth(line[col])
-			col++
+		for visualPos < len(clusters) && acc+clusters[visualPos].width <= x {
+			acc += clusters[visualPos].width
+			visualPos++
 		}
-		m.curCol = col
+		m.curCol = m.visualPosToLogical(visualPos)
 		m.ensureVisible()
 		return true
 	}
@@ -579,10 +693,21 @@ func (m *MultiLineEdit) backspace() {
 		m.DeleteSelection()
 		return
 	}
+	line := m.lines[m.curRow]
+	visualPos := m.currentVisualPos()
+	clusters := visualClusters(line)
+	if DefaultBidiMode == BidiFull && HasRTL(string(line)) && visualPos > 0 {
+		cluster := clusters[visualPos-1]
+		m.removeRange(cluster.logicalPos, cluster.logicalEnd)
+		m.curCol = cluster.logicalPos
+		m.ensureVisible()
+		m.notifyChange()
+		return
+	}
 	if m.curCol > 0 {
-		line := m.lines[m.curRow]
-		m.lines[m.curRow] = append(line[:m.curCol-1], line[m.curCol:]...)
-		m.curCol--
+		start := previousClusterBoundary(line, m.curCol)
+		m.lines[m.curRow] = append(line[:start], line[m.curCol:]...)
+		m.curCol = start
 		m.ensureVisible()
 		m.notifyChange()
 		return
@@ -608,8 +733,17 @@ func (m *MultiLineEdit) deleteForward() {
 		return
 	}
 	line := m.lines[m.curRow]
+	visualPos := m.currentVisualPos()
+	clusters := visualClusters(line)
+	if DefaultBidiMode == BidiFull && HasRTL(string(line)) && visualPos < len(clusters) {
+		cluster := clusters[visualPos]
+		m.removeRange(cluster.logicalPos, cluster.logicalEnd)
+		m.notifyChange()
+		return
+	}
 	if m.curCol < len(line) {
-		m.lines[m.curRow] = append(line[:m.curCol], line[m.curCol+1:]...)
+		end := nextClusterBoundary(line, m.curCol)
+		m.lines[m.curRow] = append(line[:m.curCol], line[end:]...)
 		m.notifyChange()
 		return
 	}
@@ -648,6 +782,10 @@ func (m *MultiLineEdit) handleNav(shift bool) {
 }
 
 func (m *MultiLineEdit) isSelected(row, col int) bool {
+	return m.isSelectedRange(row, col, col+1)
+}
+
+func (m *MultiLineEdit) isSelectedRange(row, start, end int) bool {
 	if !m.selActive {
 		return false
 	}
@@ -662,13 +800,52 @@ func (m *MultiLineEdit) isSelected(row, col int) bool {
 	if row < r1 || row > r2 {
 		return false
 	}
-	if row == r1 && col < c1 {
+	if row == r1 && end <= c1 {
 		return false
 	}
-	if row == r2 && col >= c2 {
+	if row == r2 && start >= c2 {
 		return false
 	}
 	return true
+}
+
+func previousClusterBoundary(line []rune, pos int) int {
+	if pos <= 0 {
+		return 0
+	}
+	previous := 0
+	ForEachClusterAt(string(line), func(_ string, _, _ int, runeIndex int) {
+		if runeIndex < pos {
+			previous = runeIndex
+		}
+	})
+	return previous
+}
+
+func nextClusterBoundary(line []rune, pos int) int {
+	next := len(line)
+	found := false
+	ForEachClusterAt(string(line), func(_ string, _, _ int, runeIndex int) {
+		if !found && runeIndex > pos {
+			next = runeIndex
+			found = true
+		}
+	})
+	return next
+}
+
+func (m *MultiLineEdit) removeRange(start, end int) {
+	line := m.lines[m.curRow]
+	if start < 0 {
+		start = 0
+	}
+	if end > len(line) {
+		end = len(line)
+	}
+	if start >= end {
+		return
+	}
+	m.lines[m.curRow] = append(line[:start], line[end:]...)
 }
 
 func (m *MultiLineEdit) SelectAll() {

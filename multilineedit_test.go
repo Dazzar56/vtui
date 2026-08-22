@@ -240,3 +240,34 @@ func TestMultiLineEdit_CtrlEnterLeavesEvent(t *testing.T) {
 		t.Errorf("buffer unexpectedly changed: %q", got)
 	}
 }
+
+func TestMultiLineEdit_CombiningClustersMoveAndDeleteTogether(t *testing.T) {
+	m := NewMultiLineEdit(0, 0, 20, 2, "e\u0301x")
+	m.SetCursorPos(0, 3)
+
+	m.ProcessKey(mleKey(vtinput.VK_LEFT, 0, 0))
+	if _, col := m.CursorPos(); col != 2 {
+		t.Fatalf("left moved into a grapheme cluster: col=%d, want 2", col)
+	}
+	m.ProcessKey(mleKey(vtinput.VK_BACK, 0, 0))
+	if got := m.GetText(); got != "x" {
+		t.Fatalf("backspace split the combining cluster: %q, want %q", got, "x")
+	}
+}
+
+func TestMultiLineEdit_BidiFullUsesVisualCaretOrder(t *testing.T) {
+	oldMode := DefaultBidiMode
+	DefaultBidiMode = BidiFull
+	defer func() { DefaultBidiMode = oldMode }()
+
+	m := NewMultiLineEdit(0, 0, 20, 2, "שלום")
+	m.SetCursorPos(0, 4)
+	m.ProcessKey(mleKey(vtinput.VK_RIGHT, 0, 0))
+	if _, col := m.CursorPos(); col != 3 {
+		t.Fatalf("visual right used logical order: col=%d, want 3", col)
+	}
+	m.ProcessKey(mleKey(vtinput.VK_LEFT, 0, 0))
+	if _, col := m.CursorPos(); col != 4 {
+		t.Fatalf("visual left did not return to the original caret: col=%d, want 4", col)
+	}
+}
