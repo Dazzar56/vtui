@@ -1,4 +1,4 @@
-//go:build (linux || windows || darwin) && !arm
+//go:build (linux || windows || darwin) && !arm && !mips && !mipsle && !mips64 && !mips64le && !riscv64 && !loong64 && !ppc64 && !ppc64le
 
 package vtui
 
