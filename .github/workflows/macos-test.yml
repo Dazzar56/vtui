@@ -19,6 +19,13 @@ jobs:
       - name: Build
         run: go build ./...
 
+      # A 32-bit target as well. Nothing else here builds one, and the class of
+      # bug this guards against — a constant that does not fit a 32-bit int —
+      # is a compile error rather than a test failure, so only a build of such
+      # a target catches it. f4 ships linux/arm, mips and mipsle.
+      - name: Build for a 32-bit target
+        run: GOOS=linux GOARCH=arm go build ./...
+
       - name: Vet
         run: go vet ./...
 
