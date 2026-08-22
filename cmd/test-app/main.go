@@ -516,7 +516,9 @@ func main() {
 		opMenu.AddItem(vtui.MenuItem{Text: "&Attributes"})
 		dlg.AddItem(opMenu)
 
-		dlg.AddItem(vtui.NewSeparator(x1, y1+13, 76, true, true))
+		separator := vtui.NewSeparator(x1, y1+13, 76, true, true)
+		separator.SetGrowMode(vtui.GrowHiX)
+		dlg.AddItem(separator)
 
 		table := vtui.NewTable(x1+2, y1+14, 72, 5, []vtui.TableColumn{{Title: "Filename", Width: 48}, {Title: "Size", Width: 12, Alignment: vtui.AlignRight}})
 		table.SetRows([]vtui.TableRow{
