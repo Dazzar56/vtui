@@ -1152,6 +1152,29 @@ func TestTable_QuickSearchBottomUp(t *testing.T) {
 	checkCell(t, scr, 0, 1, ' ', base)
 }
 
+func TestTable_QuickSearchCursorFollowsFilteredPosition(t *testing.T) {
+	SetDefaultPalette()
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(11, 5)
+
+	cols := []TableColumn{{Title: "C1", Width: 10}}
+	tbl := NewTable(0, 0, 11, 5, cols)
+	tbl.QuickSearch = true
+	tbl.SetFocus(true)
+	tbl.SetRows([]TableRow{
+		mockRow{"xab", ""}, // underlying row 0, second match
+		mockRow{"abx", ""}, // underlying row 1, best match at display position 0
+	})
+
+	typeSearch(tbl, "ab")
+	tbl.Show(scr)
+
+	// Search results are drawn bottom-up. The selected display position 0 is
+	// the underlying row 1, so the cursor must be on the bottom "abx" row.
+	checkCell(t, scr, 2, 3, 'x', Palette[ColTableSelectedText])
+	checkCell(t, scr, 0, 2, 'x', Palette[ColTableText])
+}
+
 func TestTable_QuickSearchBottomUpKeys(t *testing.T) {
 	SetDefaultPalette()
 
