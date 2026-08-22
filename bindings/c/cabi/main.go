@@ -3,6 +3,7 @@ package main
 /*
 #include <stddef.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 typedef struct vtui_session vtui_session;
@@ -34,12 +35,10 @@ type cSession struct {
 }
 
 var (
-	sessMu     sync.Mutex
-	sessions           = make(map[uintptr]*cSession)
-	nextSessID uintptr = 1
-
-	errMu   sync.RWMutex
-	lastErr string
+	sessMu   sync.Mutex
+	sessions = make(map[uintptr]*cSession)
+	errMu    sync.RWMutex
+	lastErr  string
 )
 
 func setLastError(err string) {
@@ -97,9 +96,15 @@ func vtui_open(configJSON *C.char) *C.vtui_session {
 		_ = sess.Serve()
 	}()
 
+	// Keep the opaque handle in C-owned memory. Returning a fabricated pointer
+	// from an integer handle triggers go vet and is not a valid C pointer.
+	token := C.malloc(1)
+	if token == nil {
+		setLastError("failed to allocate session token")
+		return nil
+	}
+	id := uintptr(token)
 	sessMu.Lock()
-	id := nextSessID
-	nextSessID++
 	cs := &cSession{
 		id:       id,
 		fm:       fm,
@@ -116,7 +121,7 @@ func vtui_open(configJSON *C.char) *C.vtui_session {
 	sessions[id] = cs
 	sessMu.Unlock()
 
-	return (*C.vtui_session)(unsafe.Pointer(id))
+	return (*C.vtui_session)(token)
 }
 
 //export vtui_send
@@ -200,6 +205,7 @@ func vtui_close(s *C.vtui_session) {
 		if cs.eventW != nil {
 			_ = cs.eventW.Close()
 		}
+		C.free(unsafe.Pointer(s))
 	}
 }
 
