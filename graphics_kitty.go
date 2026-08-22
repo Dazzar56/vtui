@@ -239,8 +239,12 @@ func (r *AnsiRenderer) RenderGraphics(layer *GraphicsLayer, buf, shadow []CharIn
 
 	proto := layer.Protocol()
 	if proto != r.gfxProto {
+		if r.gfxFar2l != nil {
+			r.gfxFar2l.Reset(&r.frameOut)
+		}
 		r.gfxKitty = nil
 		r.gfxSixel = nil
+		r.gfxFar2l = nil
 		r.gfxProto = proto
 		force = true
 	}
@@ -271,10 +275,18 @@ func (r *AnsiRenderer) RenderGraphics(layer *GraphicsLayer, buf, shadow []CharIn
 		cw, ch := layer.CellSize()
 		r.gfxList, _ = layer.Snapshot(r.gfxList)
 		r.gfxSixel.Render(&r.frameOut, r.gfxList, cw, ch)
+	case GraphicsFar2l:
+		if r.gfxFar2l == nil {
+			r.gfxFar2l = newFar2lEncoder()
+		}
+		r.gfxList, _ = layer.Snapshot(r.gfxList)
+		r.gfxFar2l.Render(&r.frameOut, r.gfxList)
 	}
 
 	// Both protocols move the text cursor (kitty places relative to it, sixel
 	// leaves it below the image), so PrepareFlush must re-emit the cursor
 	// report this frame.
-	r.termCursorInvalid = true
+	if proto == GraphicsKitty || proto == GraphicsSixel {
+		r.termCursorInvalid = true
+	}
 }

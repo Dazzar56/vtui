@@ -31,22 +31,41 @@ func Far2lInteractTimeout(stk *vtinput.Far2lStack, wait bool, timeout time.Durat
 	far2lInteractMu.Lock()
 	defer far2lInteractMu.Unlock()
 
-	far2lIDCounter++
-	if far2lIDCounter == 0 {
-		far2lIDCounter = 1
-	}
-	id := far2lIDCounter
-	stk.PushU8(id)
-
-	b64 := base64.StdEncoding.EncodeToString(*stk)
-	DebugLog("VTUI_FAR2L_INTERACT: Sending ID=%d, payload_len=%d, wait=%v", id, len(b64), wait)
-	os.Stdout.WriteString("\x1b_far2l:" + b64 + "\x07")
+	id, payload := far2lInteractionPayloadLocked(stk)
+	DebugLog("VTUI_FAR2L_INTERACT: Sending ID=%d, payload_len=%d, wait=%v", id, len(payload), wait)
+	_, _ = os.Stdout.Write(payload)
 
 	if wait && FrameManager != nil {
 		return FrameManager.WaitFar2lResponse(id, timeout)
 	}
 	DebugLog("VTUI_FAR2L: Processed without waiting for ID=%d", id)
 	return nil
+}
+
+// far2lInteractionPayload returns a complete APC request and allocates its
+// response ID. Renderers use it to put asynchronous requests into the frame
+// being composed, keeping far2l bytes ordered with the text they accompany.
+// The caller must not wait for the response while composing a frame.
+func far2lInteractionPayload(stk *vtinput.Far2lStack) []byte {
+	far2lInteractMu.Lock()
+	defer far2lInteractMu.Unlock()
+	_, payload := far2lInteractionPayloadLocked(stk)
+	return payload
+}
+
+func far2lInteractionPayloadLocked(stk *vtinput.Far2lStack) (uint8, []byte) {
+	far2lIDCounter++
+	if far2lIDCounter == 0 {
+		far2lIDCounter = 1
+	}
+	id := far2lIDCounter
+	stk.PushU8(id)
+	b64 := base64.StdEncoding.EncodeToString(*stk)
+	payload := make([]byte, 0, len(b64)+10)
+	payload = append(payload, "\x1b_far2l:"...)
+	payload = append(payload, b64...)
+	payload = append(payload, '\x07')
+	return id, payload
 }
 
 // SetFar2lClipboard attempts to set the clipboard using far2l extensions.

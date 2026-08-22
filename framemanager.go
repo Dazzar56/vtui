@@ -2602,6 +2602,12 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 		if ev.Far2lCommand == "ok" {
 			DebugLog("FM_DISPATCH: Far2l extensions successfully negotiated with host. Setting Far2lEnabled = true")
 			Far2lEnabled = true
+			// A screen may have asked for its graphics protocol before the
+			// asynchronous far2l acknowledgement arrived. Switch it now so
+			// image viewers do not retain the initial GraphicsNone/kitty choice.
+			if fm.scr != nil {
+				fm.scr.Graphics().SetProtocol(GraphicsFar2l)
+			}
 			return
 		}
 		if ev.Far2lCommand == "reply" {
