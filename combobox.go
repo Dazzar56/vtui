@@ -59,13 +59,15 @@ func (cb *ComboBox) MoveRelative(dx, dy int) {
 }
 
 func (cb *ComboBox) applyLayout() {
-	hbox := NewHBoxLayout(cb.X1, cb.Y1, cb.X2-cb.X1+1, 1)
-	hbox.Spacing = 0
-	hbox.Add(cb.Edit, Margins{}, AlignFill)
-	// Add a dummy text element for the arrow to participate in the layout math
-	arrow := NewText(0, 0, "↓", 0)
-	hbox.Add(arrow, Margins{}, AlignTop)
-	hbox.Apply()
+	// The arrow is painted by ComboBox.DisplayObject at X2. Keep the edit
+	// portion adjacent to it whenever the outer control is resized by a
+	// layout. A generic HBox cannot express this one-cell trailing affordance
+	// because its AlignFill mode only stretches the cross-axis.
+	editX2 := cb.X2
+	if cb.X2 > cb.X1 {
+		editX2--
+	}
+	cb.Edit.SetPosition(cb.X1, cb.Y1, editX2, cb.Y1)
 }
 
 func (cb *ComboBox) Show(scr *ScreenBuf) {
@@ -89,13 +91,16 @@ func (cb *ComboBox) DisplayObject(scr *ScreenBuf) {
 			bgIdx = cb.Edit.ColorSelectedIdx
 			fgIdx = ColDialogComboSelectedHighlight
 
+			oldTextIdx := cb.Edit.ColorTextIdx
 			oldStart, oldEnd := cb.Edit.selStart, cb.Edit.selEnd
 
+			cb.Edit.ColorTextIdx = cb.Edit.ColorSelectedIdx
 			cb.Edit.selStart = 0
 			cb.Edit.selEnd = len(cb.Edit.text)
 
 			cb.Edit.Show(scr)
 
+			cb.Edit.ColorTextIdx = oldTextIdx
 			cb.Edit.selStart, cb.Edit.selEnd = oldStart, oldEnd
 		} else {
 			cb.Edit.Show(scr)
