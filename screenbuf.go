@@ -792,6 +792,7 @@ type AnsiRenderer struct {
 	gfxGen   uint64
 	gfxKitty *kittyEncoder
 	gfxSixel *sixelEncoder
+	gfxFar2l *far2lEncoder
 	gfxList  []ImagePlacement
 }
 

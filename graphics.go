@@ -18,6 +18,7 @@ const (
 	GraphicsKitty
 	GraphicsITerm2
 	GraphicsSixel
+	GraphicsFar2l
 	GraphicsNative
 )
 
@@ -29,6 +30,8 @@ func (p GraphicsProtocol) String() string {
 		return "iterm2"
 	case GraphicsSixel:
 		return "sixel"
+	case GraphicsFar2l:
+		return "far2l"
 	case GraphicsNative:
 		return "native"
 	}
@@ -44,6 +47,8 @@ func ParseGraphicsProtocol(s string) (GraphicsProtocol, bool) {
 		return GraphicsITerm2, true
 	case "sixel":
 		return GraphicsSixel, true
+	case "far2l":
+		return GraphicsFar2l, true
 	case "native":
 		return GraphicsNative, true
 	case "none", "off", "no", "0":
@@ -388,7 +393,13 @@ func (g *GraphicsLayer) Protocol() GraphicsProtocol {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if !g.protocolValid {
-		g.protocol = DetectGraphicsProtocol()
+		// far2l explicitly acknowledges the extension negotiation. Prefer its
+		// native image channel over inherited kitty/sixel environment markers.
+		if Far2lEnabled {
+			g.protocol = GraphicsFar2l
+		} else {
+			g.protocol = DetectGraphicsProtocol()
+		}
 		g.protocolValid = true
 	}
 	return g.protocol
