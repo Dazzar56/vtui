@@ -1,6 +1,8 @@
 package vtui
 
 import (
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -97,5 +99,47 @@ func TestDebugLog_Rotation(t *testing.T) {
 	c2, _ := os.ReadFile(log2)
 	if !strings.Contains(string(c2), "Session 1") {
 		t.Error("Rotated log.2 has wrong content")
+	}
+}
+
+func TestDebugLog_StderrMode(t *testing.T) {
+	oldStderr := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("create stderr pipe: %v", err)
+	}
+	os.Stderr = w
+	t.Cleanup(func() {
+		os.Stderr = oldStderr
+		_ = r.Close()
+		_ = w.Close()
+	})
+	t.Setenv("VTUI_DEBUG", "stderr")
+
+	DebugLog("stderr message %d", 42)
+	_ = w.Close()
+	os.Stderr = oldStderr
+
+	data, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("read stderr capture: %v", err)
+	}
+	if !strings.Contains(string(data), "stderr message 42") {
+		t.Fatalf("stderr output = %q, want debug message", data)
+	}
+}
+
+func TestDebugLog_TestLogger(t *testing.T) {
+	var messages []string
+	restore := SetTestLogger(func(format string, args ...any) {
+		messages = append(messages, fmt.Sprintf(format, args...))
+	})
+	defer restore()
+	t.Setenv("VTUI_DEBUG", "test")
+
+	DebugLog("test message %d", 7)
+
+	if len(messages) != 1 || !strings.Contains(messages[0], "test message 7") {
+		t.Fatalf("test logger messages = %#v, want one formatted message", messages)
 	}
 }
