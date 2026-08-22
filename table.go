@@ -498,7 +498,7 @@ func (t *Table) DisplayObject(scr *ScreenBuf) {
 	// 1. Draw Header
 	widths := t.resolvedWidths()
 	if t.ShowHeader {
-		t.drawRow(scr, t.Y1, -1, Palette[t.ColorTitleIdx], widths)
+		t.drawRow(scr, t.Y1, -1, -1, Palette[t.ColorTitleIdx], widths)
 		yOffset++
 	}
 
@@ -523,7 +523,7 @@ func (t *Table) DisplayObject(scr *ScreenBuf) {
 			//isSelected := false
 			// Calculate standard attribute as a fallback (passed into drawRow)
 			attr := Palette[t.ColorTextIdx]
-			t.drawRow(scr, currY, rowIdx, attr, widths)
+			t.drawRow(scr, currY, rowIdx, displayPos, attr, widths)
 		} else {
 			// Fill empty space with background color
 			scr.FillRect(t.X1, currY, t.X2, currY, ' ', Palette[t.ColorTextIdx])
@@ -552,7 +552,7 @@ func (t *Table) DisplayObject(scr *ScreenBuf) {
 	}
 }
 
-func (t *Table) drawRow(scr *ScreenBuf, y int, rowIdx int, attr uint64, widths []int) {
+func (t *Table) drawRow(scr *ScreenBuf, y int, rowIdx int, displayPos int, attr uint64, widths []int) {
 	endX := t.X1 + t.GetContentWidth() - 1
 
 	currX := t.X1
@@ -588,7 +588,7 @@ func (t *Table) drawRow(scr *ScreenBuf, y int, rowIdx int, attr uint64, widths [
 			}
 		}
 
-		isCursorHere := rowIdx == t.SelectPos && (!t.CellSelection || colIdx == t.SelectCol)
+		isCursorHere := displayPos == t.SelectPos && (!t.CellSelection || colIdx == t.SelectCol)
 
 		stateAttr := attr
 		if rowIdx != -1 {
