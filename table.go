@@ -104,6 +104,9 @@ type Table struct {
 	QuickSearch bool
 	// SearchCaseSensitive makes QuickSearch case-sensitive (default false).
 	SearchCaseSensitive bool
+	// SearchExactOnHit keeps only exact matches when at least one exact match
+	// exists. Fuzzy matches remain available while no exact result is present.
+	SearchExactOnHit bool
 	// OnSearchChange is called whenever the search string changes.
 	OnSearchChange func(text string)
 
@@ -410,6 +413,25 @@ func (t *Table) applySearchFilter() {
 		if bestScore >= 0 {
 			t.matchBuf = append(t.matchBuf, searchMatch{i, bestScore, bestStart})
 			t.matchSpans[i] = cellHighlight{bestCol, bestStart, bestEnd}
+		}
+	}
+	if t.SearchExactOnHit {
+		hasExact := false
+		for _, m := range t.matchBuf {
+			if m.score == 0 {
+				hasExact = true
+				break
+			}
+		}
+		if hasExact {
+			write := 0
+			for _, m := range t.matchBuf {
+				if m.score == 0 {
+					t.matchBuf[write] = m
+					write++
+				}
+			}
+			t.matchBuf = t.matchBuf[:write]
 		}
 	}
 	sort.Slice(t.matchBuf, func(a, b int) bool {
