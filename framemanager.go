@@ -1839,6 +1839,49 @@ func SetWindowTitle(title string) {
 	}
 }
 
+// GetWindowPosition returns the native GUI window's top-left screen position.
+// It reports ok=false for terminal renderers and GUI backends that do not
+// expose a desktop position.
+func (fm *frameManager) GetWindowPosition() (x, y int, ok bool) {
+	if fm.scr == nil || fm.scr.Renderer == nil {
+		return 0, 0, false
+	}
+	if r, ok := fm.scr.Renderer.(interface {
+		WindowPosition() (int, int, bool)
+	}); ok {
+		return r.WindowPosition()
+	}
+	return 0, 0, false
+}
+
+// SetWindowPosition moves the native GUI window when the active backend
+// supports desktop positioning. Terminal renderers simply ignore the call.
+func (fm *frameManager) SetWindowPosition(x, y int) {
+	if fm.scr == nil || fm.scr.Renderer == nil {
+		return
+	}
+	if r, ok := fm.scr.Renderer.(interface {
+		SetWindowPosition(int, int)
+	}); ok {
+		r.SetWindowPosition(x, y)
+	}
+}
+
+// GetWindowPosition returns the active GUI window's top-left screen position.
+func GetWindowPosition() (x, y int, ok bool) {
+	if FrameManager == nil {
+		return 0, 0, false
+	}
+	return FrameManager.GetWindowPosition()
+}
+
+// SetWindowPosition moves the active GUI window when its backend supports it.
+func SetWindowPosition(x, y int) {
+	if FrameManager != nil {
+		FrameManager.SetWindowPosition(x, y)
+	}
+}
+
 // SetEventSink registers a unified callback receiving all semantic UI events.
 func (fm *frameManager) SetEventSink(fn func(UIEvent)) {
 	fm.eventSinkMu.Lock()

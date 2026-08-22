@@ -74,6 +74,14 @@ const (
 	wmPerformDragDrop = 0x0400 + 101
 )
 
+// SetWindowPos flags used when moving the GUI window without changing its
+// size, z-order, or activation state.
+const (
+	swpNoSize     = 0x0001
+	swpNoZOrder   = 0x0004
+	swpNoActivate = 0x0010
+)
+
 // Win32 DIB and GDI Constants
 const (
 	biRGB        = 0
