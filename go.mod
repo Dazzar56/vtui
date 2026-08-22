@@ -12,7 +12,7 @@ require (
 	github.com/neurlang/wayland v0.4.2
 	github.com/rivo/uniseg v0.2.0
 	github.com/soniakeys/quant v1.0.0
-	github.com/unxed/keytrans v0.1.31
+	github.com/unxed/keytrans v0.1.32
 	github.com/unxed/kiwi-go v0.1.0
 	github.com/unxed/vtinput v0.1.4
 	golang.org/x/image v0.44.0
