@@ -1795,14 +1795,58 @@ func TestFrameManager_OnCtrlInsetTracksCtrlState(t *testing.T) {
 	fm.ConfigureWorkspaceTabs(WorkspaceTabsOnCtrl, WorkspaceCtrlTabDirect)
 
 	// The overlay strip is drawn while Ctrl is held, so that row must be
-	// reserved then; otherwise a full-screen image paints over the tabs.
+	// reserved after the first Ctrl+Tab; otherwise a full-screen image paints
+	// over the tabs.
 	fm.ctrlPressed = true
+	if got := fm.WorkspaceTopInset(); got != 0 {
+		t.Fatalf("on-ctrl mode before Ctrl+Tab inset = %d, want 0", got)
+	}
+	fm.workspaceTabPreview = true
 	if got := fm.WorkspaceTopInset(); got != 1 {
-		t.Fatalf("on-ctrl mode while ctrl is held inset = %d, want 1", got)
+		t.Fatalf("on-ctrl mode after Ctrl+Tab inset = %d, want 1", got)
 	}
 	fm.ctrlPressed = false
 	if got := fm.WorkspaceTopInset(); got != 0 {
 		t.Fatalf("on-ctrl mode without ctrl inset = %d, want 0", got)
+	}
+}
+
+func TestFrameManager_OnCtrlTabsArmAfterFirstCtrlTab(t *testing.T) {
+	scr := NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	fm := &frameManager{}
+	fm.Init(scr)
+	fm.Push(newMockFrame(0, 0, 80, 25, false))
+	fm.AddScreenBackground(newMockFrame(0, 0, 80, 25, false))
+	fm.ConfigureWorkspaceTabs(WorkspaceTabsOnCtrl, WorkspaceCtrlTabDirect)
+
+	fm.dispatchEvent(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_CONTROL,
+		ControlKeyState: vtinput.LeftCtrlPressed,
+	}, false)
+	if fm.workspaceTabsVisible() || fm.WorkspaceTopInset() != 0 {
+		t.Fatal("pressing Ctrl alone should not reveal workspace tabs")
+	}
+
+	fm.dispatchEvent(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_TAB,
+		ControlKeyState: vtinput.LeftCtrlPressed,
+	}, false)
+	if !fm.workspaceTabsVisible() || fm.WorkspaceTopInset() != 1 {
+		t.Fatal("the first Ctrl+Tab should reveal workspace tabs")
+	}
+
+	fm.dispatchEvent(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        false,
+		VirtualKeyCode: vtinput.VK_CONTROL,
+	}, false)
+	if fm.workspaceTabsVisible() || fm.WorkspaceTopInset() != 0 {
+		t.Fatal("releasing Ctrl should hide workspace tabs again")
 	}
 }
 

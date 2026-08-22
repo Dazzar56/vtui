@@ -244,6 +244,7 @@ type frameManager struct {
 
 	// Switcher State
 	ctrlPressed              bool
+	workspaceTabPreview      bool
 	switcherMenu             *VMenu
 	WorkspaceTabMode         WorkspaceTabMode
 	WorkspaceCtrlTabMode     WorkspaceCtrlTabMode
@@ -394,7 +395,7 @@ func (fm *frameManager) tickAnimations() {
 func (fm *frameManager) WorkspaceTopInset() int {
 	if fm.WorkspaceTabMode == WorkspaceTabsAlways ||
 		(fm.WorkspaceTabMode == WorkspaceTabsMultiple && len(fm.Screens) > 1) ||
-		(fm.WorkspaceTabMode == WorkspaceTabsOnCtrl && fm.ctrlPressed) {
+		(fm.WorkspaceTabMode == WorkspaceTabsOnCtrl && fm.ctrlPressed && fm.workspaceTabPreview) {
 		return 1
 	}
 	return 0
@@ -1418,7 +1419,7 @@ func (fm *frameManager) workspaceTabsVisible() bool {
 	case WorkspaceTabsMultiple:
 		return len(fm.Screens) > 1
 	case WorkspaceTabsOnCtrl:
-		return fm.ctrlPressed
+		return fm.ctrlPressed && fm.workspaceTabPreview
 	default:
 		return false
 	}
@@ -2682,9 +2683,13 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 		}
 		fm.ctrlPressed = ctrl
 		if wasCtrlPressed != fm.ctrlPressed && fm.WorkspaceTabMode == WorkspaceTabsOnCtrl {
+			if !fm.ctrlPressed {
+				fm.workspaceTabPreview = false
+			}
 			// The overlay tab strip takes and releases the top row as Ctrl is
-			// held, so frames must relayout; a plain redraw would leave the
-			// image where it was and let it paint over the tabs.
+			// held after the first Ctrl+Tab, so frames must relayout; a plain
+			// redraw would leave the image where it was and let it paint over
+			// the tabs.
 			fm.ResizeAllScreens()
 			fm.Redraw()
 		}
@@ -2919,6 +2924,11 @@ func (fm *frameManager) dispatchEvent(ev *vtinput.InputEvent, is_injected bool) 
 
 		// Workspace cycling (Ctrl+Tab / Ctrl+Shift+Tab).
 		if ev.VirtualKeyCode == vtinput.VK_TAB && (fm.ctrlPressed || fm.switcherMenu != nil) {
+			if fm.WorkspaceTabMode == WorkspaceTabsOnCtrl && !fm.workspaceTabPreview {
+				fm.workspaceTabPreview = true
+				fm.ResizeAllScreens()
+				fm.Redraw()
+			}
 			shift := (ev.ControlKeyState & vtinput.ShiftPressed) != 0
 			cycled := false
 			if fm.WorkspaceCtrlTabMode == WorkspaceCtrlTabMenu || fm.WorkspaceTabMode == WorkspaceTabsNever {
