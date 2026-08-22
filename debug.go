@@ -14,6 +14,7 @@ var (
 	logRotated         bool
 	logFile            *os.File
 	currentLogFilename string
+	testLogger         func(string, ...any)
 )
 
 func rotateLogs(basePath string) {
@@ -49,6 +50,26 @@ func ConfigDiskLogging(enabled bool) {
 	logMu.Unlock()
 }
 
+// SetTestLogger installs the callback used by DebugLog when VTUI_DEBUG=test.
+// It returns a restore function so a test can scope the global logger safely:
+//
+//	restore := SetTestLogger(t.Logf)
+//	defer restore()
+//
+// The callback may be called from any goroutine, just like DebugLog itself.
+func SetTestLogger(logger func(string, ...any)) func() {
+	logMu.Lock()
+	previous := testLogger
+	testLogger = logger
+	logMu.Unlock()
+
+	return func() {
+		logMu.Lock()
+		testLogger = previous
+		logMu.Unlock()
+	}
+}
+
 // DebugLog writes a timestamped message to debug.log file.
 // If the file exists at the start of the session, it is rotated
 // (up to 3 files: debug.log, debug.1.log, debug.2.log).
@@ -61,6 +82,29 @@ func DebugLog(format string, a ...any) {
 
 	env := os.Getenv("VTUI_DEBUG")
 	if env == "" {
+		return
+	}
+
+	if env == "stderr" {
+		logMu.Lock()
+		_, _ = fmt.Fprintln(os.Stderr, fullMsg)
+		logMu.Unlock()
+		return
+	}
+
+	if env == "test" {
+		logMu.Lock()
+		logger := testLogger
+		logMu.Unlock()
+		if logger != nil {
+			logger("%s", fullMsg)
+			return
+		}
+		// Keep VTUI_DEBUG=test useful for ad-hoc test commands even when the
+		// caller did not install a testing.T logger.
+		logMu.Lock()
+		_, _ = fmt.Fprintln(os.Stderr, fullMsg)
+		logMu.Unlock()
 		return
 	}
 
