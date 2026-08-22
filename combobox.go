@@ -12,6 +12,7 @@ type ComboBox struct {
 	Menu              *VMenu
 	DropdownOnly      bool // If true, manual text entry is not allowed
 	editMouseCaptured bool
+	editMouseMoved    bool
 }
 
 func NewComboBox(x, y, width int, items []string) *ComboBox {
@@ -162,21 +163,33 @@ func (cb *ComboBox) ProcessMouse(e *vtinput.InputEvent) bool {
 	}
 	if cb.editMouseCaptured {
 		cb.Edit.ProcessMouse(e)
+		if e.MouseEventFlags&vtinput.MouseMoved != 0 && e.ButtonState != 0 {
+			cb.editMouseMoved = true
+		}
 		if e.ButtonState == 0 {
+			openMenu := !cb.editMouseMoved
 			cb.editMouseCaptured = false
+			cb.editMouseMoved = false
+			if openMenu {
+				cb.Open()
+			}
 			return true
 		}
 		return true
 	}
 	if e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown && e.MouseEventFlags&vtinput.MouseMoved == 0 {
 		mx := int(e.MouseX)
-		// If arrow clicked or DropdownOnly is true and clicked anywhere within the bounds
+		// The arrow and DropdownOnly controls open on press. For an editable
+		// control, defer opening until release so a drag can still select text.
 		if mx == cb.X2 || cb.DropdownOnly {
 			cb.Open()
 			return true
 		}
 		if cb.Edit.HitTest(mx, int(e.MouseY)) {
+			cb.Edit.ProcessMouse(e)
 			cb.editMouseCaptured = true
+			cb.editMouseMoved = false
+			return true
 		}
 	}
 	return cb.Edit.ProcessMouse(e)
@@ -228,6 +241,7 @@ func (cb *ComboBox) SetFocus(f bool) {
 	cb.Edit.SetFocus(f)
 	if !f {
 		cb.editMouseCaptured = false
+		cb.editMouseMoved = false
 	}
 }
 
@@ -236,6 +250,7 @@ func (cb *ComboBox) SetDisabled(d bool) {
 	cb.Edit.SetDisabled(d)
 	if d {
 		cb.editMouseCaptured = false
+		cb.editMouseMoved = false
 	}
 }
 func (cb *ComboBox) WantsChars() bool {
