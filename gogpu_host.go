@@ -1019,6 +1019,12 @@ func gogpuKeyToVK(k gpucontext.Key, mods vtinput.ControlKeyState) uint16 {
 		return vtinput.VK_CAPITAL
 	case gpucontext.KeyScrollLock:
 		return vtinput.VK_SCROLL
+	case gpucontext.KeyPause:
+		return vtinput.VK_PAUSE
+	case gpucontext.KeyCancel:
+		// Win32 reports Ctrl+Break as VK_CANCEL. Keep it distinct from
+		// the plain Pause key so f4 can translate the chord to ETX.
+		return vtinput.VK_CANCEL
 
 	// Where Super acts as Ctrl (macOS Command), the modifiers arrive on two
 	// channels, the way far2l separates them: both Cmd keys as VK_LCONTROL
