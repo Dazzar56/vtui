@@ -888,6 +888,33 @@ func TestTable_QuickSearchFuzzyRanking(t *testing.T) {
 	}
 }
 
+func TestTable_QuickSearchExactOnHit(t *testing.T) {
+	SetDefaultPalette()
+
+	cols := []TableColumn{{Title: "Key", Width: 10}}
+	tbl := NewTable(0, 0, 11, 5, cols)
+	tbl.QuickSearch = true
+	tbl.SearchExactOnHit = true
+	tbl.SetRows([]TableRow{
+		mockRow{"CtrlUp", ""},
+		mockRow{"CtrlA", ""},
+		mockRow{"CtrlPgUp", ""},
+	})
+
+	typeSearch(tbl, "ctrla")
+	if tbl.ItemCount != 1 {
+		t.Fatalf("expected only the exact key match, got %d rows", tbl.ItemCount)
+	}
+	if got := tbl.Rows[tbl.RowAt(0)].(mockRow).col1; got != "CtrlA" {
+		t.Fatalf("exact match = %q, want CtrlA", got)
+	}
+
+	tbl.SetSearchText("ctrlx")
+	if tbl.ItemCount == 0 {
+		t.Fatal("fuzzy matches should remain available when no exact result exists")
+	}
+}
+
 func TestTable_QuickSearchCaseInsensitive(t *testing.T) {
 	SetDefaultPalette()
 
