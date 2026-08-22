@@ -1,4 +1,4 @@
-//go:build !freebsd && !dragonfly && !openbsd && !netbsd && !illumos && !solaris && !arm
+//go:build !freebsd && !dragonfly && !openbsd && !netbsd && !illumos && !solaris && !arm && !mips && !mipsle && !mips64 && !mips64le && !riscv64 && !loong64 && !ppc64 && !ppc64le
 
 package vtui
 

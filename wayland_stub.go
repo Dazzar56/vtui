@@ -1,4 +1,4 @@
-//go:build darwin || freebsd || dragonfly || openbsd || netbsd || arm
+//go:build darwin || freebsd || dragonfly || openbsd || netbsd || arm || mips || mipsle || mips64 || mips64le || riscv64 || loong64 || ppc64 || ppc64le
 
 package vtui
 

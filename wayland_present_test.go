@@ -1,4 +1,4 @@
-//go:build linux && !arm
+//go:build linux && !arm && !mips && !mipsle && !mips64 && !mips64le && !riscv64 && !loong64 && !ppc64 && !ppc64le
 
 package vtui
 
