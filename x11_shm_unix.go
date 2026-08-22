@@ -19,6 +19,18 @@ var (
 
 var shmSetupDone bool
 
+// bytesAtAddress turns the address returned by shmat(2) into a Go slice. The
+// address is outside the Go heap, so it cannot be expressed as a Go pointer at
+// the syscall boundary; materialize it in a pointer-sized slot here and keep
+// the conversion isolated from the rest of the renderer.
+//
+//go:nocheckptr
+func bytesAtAddress(addr uintptr, size int) []byte {
+	var p unsafe.Pointer
+	*(*uintptr)(unsafe.Pointer(&p)) = addr
+	return unsafe.Slice((*byte)(p), size)
+}
+
 func setupX11SHM() {
 	if shmSetupDone {
 		return
@@ -45,7 +57,7 @@ func setupX11SHM() {
 
 	shmId = id
 	shmAddr = addr
-	shmData = unsafe.Slice((*byte)(unsafe.Pointer(shmAddr)), size)
+	shmData = bytesAtAddress(shmAddr, size)
 	DebugLog("X11: Allocated shared memory segment (ID: %d)", shmId)
 }
 func x11shmInit(conn *xgb.Conn, id int) uint32 {
