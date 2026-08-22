@@ -1805,6 +1805,13 @@ func TestFrameManager_OnCtrlInsetTracksCtrlState(t *testing.T) {
 	if got := fm.WorkspaceTopInset(); got != 1 {
 		t.Fatalf("on-ctrl mode after Ctrl+Tab inset = %d, want 1", got)
 	}
+	fm.ConfigureWorkspaceTabOverlay(true)
+	if !fm.workspaceTabsVisible() {
+		t.Fatal("overlay mode must keep the transient tabs visible")
+	}
+	if got := fm.WorkspaceTopInset(); got != 0 {
+		t.Fatalf("on-ctrl overlay mode inset = %d, want 0", got)
+	}
 	fm.ctrlPressed = false
 	if got := fm.WorkspaceTopInset(); got != 0 {
 		t.Fatalf("on-ctrl mode without ctrl inset = %d, want 0", got)
