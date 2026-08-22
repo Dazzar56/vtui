@@ -255,12 +255,60 @@ func ClusterWidth(cluster string) int {
 		return 2
 	}
 
+	// Terminal emulators shape Indic, Arabic, Hebrew, Thai, and related
+	// scripts inside a cell cluster. Spacing marks and virama sequences are
+	// therefore not additional terminal columns even though their Unicode
+	// categories can make the wcwidth sum look wider. Keep wide base glyphs
+	// wide, but count a shaped narrow cluster as one cell.
+	if isShapedCluster(cluster) {
+		for _, r := range cluster {
+			if runeCellWidth(r) >= 2 {
+				return 2
+			}
+		}
+		return 1
+	}
+
 	if sum <= 0 {
 		// A cluster of nothing but combining marks: no base to hang them on,
 		// so give it a column of its own rather than dropping it.
 		return 1
 	}
 	return sum
+}
+
+// isShapedCluster reports whether a grapheme cluster belongs to a script
+// whose combining marks and consonant sequences are laid out as one terminal
+// glyph cell. This is a cell-width policy, not a font shaper: the complete
+// cluster is retained in CharInfo so the terminal can perform its own glyph
+// shaping when the frame is flushed.
+func isShapedCluster(cluster string) bool {
+	runeCount := 0
+	shapedScript := false
+	for _, r := range cluster {
+		runeCount++
+		if unicode.In(r,
+			unicode.Arabic,
+			unicode.Bengali,
+			unicode.Devanagari,
+			unicode.Gujarati,
+			unicode.Gurmukhi,
+			unicode.Hebrew,
+			unicode.Kannada,
+			unicode.Khmer,
+			unicode.Lao,
+			unicode.Malayalam,
+			unicode.Myanmar,
+			unicode.Oriya,
+			unicode.Sinhala,
+			unicode.Tamil,
+			unicode.Telugu,
+			unicode.Thai,
+		) {
+			shapedScript = true
+		}
+	}
+	return shapedScript && runeCount > 1
 }
 
 // NextCluster splits off the first grapheme cluster of s. It returns the
