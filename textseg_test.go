@@ -15,7 +15,7 @@ func TestClusterWidth_Combining(t *testing.T) {
 		{"cjk", "世", 2},
 		{"latin with acute", "e\u0301", 1},
 		{"devanagari base", "क", 1},
-		{"devanagari with spacing matra", "का", 2},
+		{"devanagari with spacing matra", "का", 1},
 		{"devanagari with virama", "स\u094D", 1},
 		{"emoji", "😀", 2},
 		{"emoji with presentation selector", "❤\uFE0F", 2},
@@ -129,6 +129,7 @@ func TestStringWidth_MatchesWcwidth(t *testing.T) {
 		{"", 0},
 		{"hello", 5},
 		{"नमस्ते", 4},
+		{"বাংলা", 2},
 		{"مرحبا", 5},
 		{"A世B", 4},
 		{"👨\u200D👩\u200D👦!", 3},
@@ -211,6 +212,18 @@ func TestStringToCharInfo_Devanagari(t *testing.T) {
 	for i, c := range ci {
 		if c.Char == WideCharFiller {
 			t.Errorf("cell %d: no cell of this word is wide", i)
+		}
+	}
+}
+
+func TestStringToCharInfo_BengaliShaping(t *testing.T) {
+	ci := StringToCharInfo("বাংলা", 0)
+	if len(ci) != 2 {
+		t.Fatalf("expected 2 cells for বাংলা, got %d", len(ci))
+	}
+	for i, c := range ci {
+		if c.Char == WideCharFiller {
+			t.Errorf("cell %d: shaped Bengali cluster should not be wide", i)
 		}
 	}
 }
