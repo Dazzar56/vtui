@@ -39,6 +39,18 @@ func TestReactiveDemoDialog_Layout(t *testing.T) {
 	vtui.AssertLayout(t, dlg)
 }
 
+func TestDemoSeparatorGrowsWithWindow(t *testing.T) {
+	dlg := vtui.NewWindow(0, 0, 79, 21, "demo")
+	separator := vtui.NewSeparator(2, 13, 76, true, true)
+	separator.SetGrowMode(vtui.GrowHiX)
+	dlg.AddItem(separator)
+
+	dlg.ChangeSize(100, 22)
+	if x1, _, x2, _ := separator.GetPosition(); x1 != 2 || x2 != 97 {
+		t.Fatalf("separator position after resize = (%d, %d), want (2, 97)", x1, x2)
+	}
+}
+
 func TestWorkspaceTabControlDemo(t *testing.T) {
 	vtui.SetDefaultPalette()
 
