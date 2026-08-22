@@ -243,11 +243,14 @@ type frameManager struct {
 	capturedFrame Frame // Points to the active screen's captured frame
 
 	// Switcher State
-	ctrlPressed              bool
-	workspaceTabPreview      bool
-	switcherMenu             *VMenu
-	WorkspaceTabMode         WorkspaceTabMode
-	WorkspaceCtrlTabMode     WorkspaceCtrlTabMode
+	ctrlPressed          bool
+	workspaceTabPreview  bool
+	switcherMenu         *VMenu
+	WorkspaceTabMode     WorkspaceTabMode
+	WorkspaceCtrlTabMode WorkspaceCtrlTabMode
+	// WorkspaceTabOverlay keeps the transient WorkspaceTabsOnCtrl strip on
+	// top of the first frame row instead of reserving a row for it.
+	WorkspaceTabOverlay      bool
 	WorkspaceAltNumberSwitch bool
 	WorkspaceTabBarAttr      uint64
 	WorkspaceActiveAttr      uint64
@@ -395,7 +398,7 @@ func (fm *frameManager) tickAnimations() {
 func (fm *frameManager) WorkspaceTopInset() int {
 	if fm.WorkspaceTabMode == WorkspaceTabsAlways ||
 		(fm.WorkspaceTabMode == WorkspaceTabsMultiple && len(fm.Screens) > 1) ||
-		(fm.WorkspaceTabMode == WorkspaceTabsOnCtrl && fm.ctrlPressed && fm.workspaceTabPreview) {
+		(fm.WorkspaceTabMode == WorkspaceTabsOnCtrl && fm.ctrlPressed && fm.workspaceTabPreview && !fm.WorkspaceTabOverlay) {
 		return 1
 	}
 	return 0
@@ -413,6 +416,19 @@ func (fm *frameManager) ConfigureWorkspaceTabs(tabMode WorkspaceTabMode, ctrlTab
 	oldInset := fm.WorkspaceTopInset()
 	fm.WorkspaceTabMode = tabMode
 	fm.WorkspaceCtrlTabMode = ctrlTabMode
+	if oldInset != fm.WorkspaceTopInset() {
+		fm.ResizeAllScreens()
+	}
+	fm.Redraw()
+}
+
+// ConfigureWorkspaceTabOverlay controls whether the transient
+// WorkspaceTabsOnCtrl strip overlays the first frame row. When disabled, the
+// strip reserves its own row after the first Ctrl+Tab, preserving the default
+// layout-safe behavior for full-screen frame content.
+func (fm *frameManager) ConfigureWorkspaceTabOverlay(enabled bool) {
+	oldInset := fm.WorkspaceTopInset()
+	fm.WorkspaceTabOverlay = enabled
 	if oldInset != fm.WorkspaceTopInset() {
 		fm.ResizeAllScreens()
 	}
